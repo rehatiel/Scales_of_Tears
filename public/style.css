@@ -1,0 +1,435 @@
+/* LORD Web — Retro terminal styling */
+
+:root {
+  --bg: #0a0a0a;
+  --term-bg: #000;
+  --border: #004444;
+  --c1:  #0000AA; --c2:  #00AA00; --c3:  #00AAAA;
+  --c4:  #AA0000; --c5:  #AA00AA; --c6:  #AA5500;
+  --c7:  #AAAAAA; --c8:  #555555; --c9:  #5555FF;
+  --c0:  #55FF55; --c!:  #55FFFF; --c@:  #FF5555;
+  --c#:  #FF55FF; --c$:  #FFFF55; --c%:  #FFFFFF;
+  --default: #AAAAAA;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  width: 100%; height: 100%;
+  background: var(--bg);
+  font-family: 'Courier New', 'Lucida Console', monospace;
+  font-size: 15px;
+  color: var(--default);
+}
+
+.screen { width: 100%; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+.hidden { display: none !important; }
+
+/* ── Auth Screen ─────────────────────────────────────────── */
+.auth-box {
+  width: 480px;
+  background: #050505;
+  border: 1px solid var(--border);
+  padding: 32px;
+  text-align: center;
+}
+
+.logo {
+  font-size: 10px;
+  line-height: 1.2;
+  color: #FFFF55;
+  margin-bottom: 12px;
+  text-align: left;
+}
+
+.auth-title {
+  color: #FFFF55;
+  font-size: 18px;
+  font-weight: bold;
+  letter-spacing: 2px;
+  margin-bottom: 4px;
+}
+
+.auth-subtitle {
+  color: #555555;
+  font-size: 12px;
+  margin-bottom: 24px;
+}
+
+#auth-tabs {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.tab-btn {
+  background: none;
+  border: none;
+  color: #555;
+  font-family: inherit;
+  font-size: 13px;
+  padding: 8px 20px;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: color 0.15s;
+}
+
+.tab-btn:hover { color: #AAAAAA; }
+.tab-btn.active { color: #FFFF55; border-bottom-color: #FFFF55; }
+
+.auth-form { display: flex; flex-direction: column; gap: 12px; }
+.auth-form input {
+  background: #111;
+  border: 1px solid #333;
+  color: #FFFFFF;
+  font-family: inherit;
+  font-size: 14px;
+  padding: 10px 14px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.auth-form input:focus { border-color: #FFFF55; }
+.auth-form input::placeholder { color: #444; }
+
+.auth-submit {
+  background: #003300;
+  border: 1px solid #005500;
+  color: #55FF55;
+  font-family: inherit;
+  font-size: 14px;
+  padding: 10px;
+  cursor: pointer;
+  letter-spacing: 1px;
+  transition: background 0.15s;
+  margin-top: 4px;
+}
+.auth-submit:hover { background: #004400; }
+
+.error-msg { color: #FF5555; font-size: 13px; min-height: 18px; }
+
+/* ── Game Terminal ────────────────────────────────────────── */
+#game-screen {
+  align-items: flex-start;
+  padding: 16px;
+}
+
+#terminal {
+  width: 100%;
+  max-width: 780px;
+  margin: 0 auto;
+  background: var(--term-bg);
+  border: 1px solid var(--border);
+  padding: 16px;
+  min-height: 100vh;
+}
+
+#terminal-output {
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+#terminal-output .tline {
+  display: block;
+  min-height: 1.5em;
+}
+
+/* ── Pending Messages ─────────────────────────────────────── */
+#pending-messages {
+  margin-top: 12px;
+  padding: 8px 0;
+}
+
+#pending-messages .pmsg {
+  display: block;
+  padding: 3px 0;
+  border-left: 3px solid #333;
+  padding-left: 10px;
+  margin-bottom: 4px;
+}
+
+/* ── Choices bar ──────────────────────────────────────────── */
+#choices-bar {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid #1a1a1a;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.choice-btn {
+  background: #001100;
+  border: 1px solid #003300;
+  color: #55FF55;
+  font-family: inherit;
+  font-size: 13px;
+  padding: 6px 14px;
+  cursor: pointer;
+  transition: background 0.1s, border-color 0.1s;
+  white-space: nowrap;
+}
+
+.choice-btn:hover:not(:disabled) {
+  background: #002200;
+  border-color: #55FF55;
+  color: #FFFF55;
+}
+
+.choice-btn:disabled {
+  color: #333;
+  border-color: #1a1a1a;
+  background: #060606;
+  cursor: not-allowed;
+}
+
+.choice-btn .key-hint {
+  color: #FFFF55;
+  font-weight: bold;
+  margin-right: 4px;
+}
+
+.choice-btn:disabled .key-hint { color: #333; }
+
+/* ── Input area ──────────────────────────────────────────── */
+#input-area {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid #1a1a1a;
+}
+
+#input-label {
+  display: block;
+  color: #FFFF55;
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+
+.input-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+#game-input {
+  flex: 1;
+  background: #111;
+  border: 1px solid #333;
+  color: #FFFFFF;
+  font-family: inherit;
+  font-size: 14px;
+  padding: 8px 12px;
+  outline: none;
+  max-width: 300px;
+}
+#game-input:focus { border-color: #FFFF55; }
+
+#input-submit {
+  background: #003300;
+  border: 1px solid #005500;
+  color: #55FF55;
+  font-family: inherit;
+  font-size: 13px;
+  padding: 8px 16px;
+  cursor: pointer;
+}
+#input-submit:hover { background: #004400; }
+
+#input-cancel {
+  background: none;
+  border: 1px solid #333;
+  color: #555;
+  font-family: inherit;
+  font-size: 13px;
+  padding: 8px 16px;
+  cursor: pointer;
+}
+#input-cancel:hover { color: #AAAAAA; border-color: #555; }
+
+/* ── Color classes (LORD codes) ──────────────────────────── */
+.c1 { color: var(--c1); } .c2 { color: var(--c2); } .c3 { color: var(--c3); }
+.c4 { color: var(--c4); } .c5 { color: var(--c5); } .c6 { color: var(--c6); }
+.c7 { color: var(--c7); } .c8 { color: var(--c8); } .c9 { color: var(--c9); }
+.c0 { color: var(--c0); } .ce { color: var(--c!); } .ca { color: var(--c@); }
+.ch { color: var(--c#); } .cd { color: var(--c$); } .cp { color: var(--c%); }
+
+/* ── Setup Wizard ────────────────────────────────────────── */
+.setup-box {
+  width: min(660px, calc(100vw - 32px));
+  background: #050505;
+  border: 1px solid var(--border);
+  padding: 36px;
+}
+
+.setup-header { text-align: center; margin-bottom: 32px; }
+
+.setup-title {
+  color: #FFFF55;
+  font-size: 18px;
+  font-weight: bold;
+  letter-spacing: 2px;
+  margin-bottom: 16px;
+}
+
+.step-indicator {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.step-pip {
+  color: #333;
+  padding: 4px 10px;
+  border: 1px solid #222;
+  transition: color 0.2s, border-color 0.2s;
+}
+.step-pip.active { color: #FFFF55; border-color: #FFFF55; }
+.step-pip.done   { color: #55FF55; border-color: #55FF55; }
+.step-sep        { color: #333; }
+
+.setup-step { animation: fadeSlide 0.2s ease; }
+
+@keyframes fadeSlide {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.step-heading {
+  color: #55FFFF;
+  font-size: 15px;
+  letter-spacing: 1px;
+  margin-bottom: 24px;
+}
+
+/* Name */
+.setup-input {
+  width: 100%;
+  background: #111;
+  border: 1px solid #333;
+  color: #fff;
+  font-family: inherit;
+  font-size: 18px;
+  padding: 14px 16px;
+  outline: none;
+  margin-bottom: 8px;
+  transition: border-color 0.15s;
+}
+.setup-input:focus { border-color: #FFFF55; }
+
+.setup-hint { color: #555; font-size: 12px; margin-bottom: 20px; }
+
+/* Sex */
+.sex-options { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 28px; }
+
+.sex-btn {
+  background: #0a0a0a;
+  border: 1px solid #333;
+  color: #AAAAAA;
+  font-family: inherit;
+  font-size: 17px;
+  padding: 22px;
+  cursor: pointer;
+  transition: all 0.15s;
+  letter-spacing: 2px;
+}
+.sex-btn:hover    { border-color: #55FF55; color: #55FF55; background: #001100; }
+.sex-btn.selected { border-color: #FFFF55; color: #FFFF55; background: #0d0d00; }
+
+/* Class cards */
+.class-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 24px; }
+
+.class-card {
+  background: #0a0a0a;
+  border: 2px solid #1a1a1a;
+  padding: 20px 14px;
+  cursor: pointer;
+  transition: all 0.15s;
+  text-align: center;
+  outline: none;
+}
+.class-card:hover { border-color: #444; background: #111; }
+.class-card:focus-visible { border-color: #666; }
+
+.class-card.dk.selected { border-color: #FF5555; background: #0d0000; }
+.class-card.ms.selected { border-color: #55FFFF; background: #000d0d; }
+.class-card.th.selected { border-color: #FFFF55; background: #0d0d00; }
+
+.class-icon { font-size: 26px; margin-bottom: 10px; }
+
+.class-name { font-size: 13px; font-weight: bold; letter-spacing: 1px; margin-bottom: 10px; }
+.class-card.dk .class-name { color: #FF7777; }
+.class-card.ms .class-name { color: #55FFFF; }
+.class-card.th .class-name { color: #FFFF55; }
+
+.class-desc { color: #666; font-size: 11px; line-height: 1.6; margin-bottom: 14px; }
+
+.class-stats { display: flex; justify-content: space-around; font-size: 12px; color: #55FF55; margin-bottom: 12px; }
+
+.class-power {
+  color: #55FFFF;
+  font-size: 11px;
+  border-top: 1px solid #1a1a1a;
+  padding-top: 10px;
+}
+
+/* Confirm */
+.char-summary { background: #0a0a0a; border: 1px solid #1a1a1a; padding: 20px; margin-bottom: 24px; }
+
+.char-summary-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 9px 0;
+  border-bottom: 1px solid #111;
+  font-size: 14px;
+}
+.char-summary-row:last-child { border-bottom: none; }
+.char-summary-row .label { color: #666; }
+.char-summary-row .value { color: #FFFF55; }
+
+/* Shared nav / buttons */
+.setup-nav { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; }
+
+.btn-primary {
+  background: #003300;
+  border: 1px solid #005500;
+  color: #55FF55;
+  font-family: inherit;
+  font-size: 14px;
+  padding: 12px 28px;
+  cursor: pointer;
+  letter-spacing: 1px;
+  transition: background 0.15s;
+}
+.btn-primary:hover:not(:disabled) { background: #004400; border-color: #55FF55; }
+.btn-primary:disabled { opacity: 0.35; cursor: not-allowed; }
+
+.btn-back {
+  background: none;
+  border: 1px solid #2a2a2a;
+  color: #555;
+  font-family: inherit;
+  font-size: 13px;
+  padding: 10px 20px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.btn-back:hover { color: #AAAAAA; border-color: #555; }
+
+/* ── Responsive ──────────────────────────────────────────── */
+@media (max-width: 640px) {
+  html, body { font-size: 13px; }
+  .auth-box, .setup-box { width: 100%; padding: 20px; }
+  #terminal { padding: 10px; }
+  .class-cards { grid-template-columns: 1fr; }
+  .sex-options { grid-template-columns: 1fr 1fr; }
+}
+
+/* ── Scrollbar ───────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: #050505; }
+::-webkit-scrollbar-thumb { background: #1a3a1a; }
+::-webkit-scrollbar-thumb:hover { background: #2a5a2a; }

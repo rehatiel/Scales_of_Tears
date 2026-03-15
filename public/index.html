@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Legend of the Red Dragon</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Auth screen -->
+    <div id="auth-screen" class="screen">
+      <div class="auth-box">
+        <pre class="logo">
+  `$██╗      ██████╗ ██████╗ ██████╗
+  `$██║     ██╔═══██╗██╔══██╗██╔══██╗
+  `$██║     ██║   ██║██████╔╝██║  ██║
+  `$██║     ██║   ██║██╔══██╗██║  ██║
+  `$███████╗╚██████╔╝██║  ██║██████╔╝
+  `$╚══════╝ ╚═════╝ ╚═╝  ╚═╝╚═════╝</pre>
+        <div class="auth-title">Legend of the Red Dragon</div>
+        <div class="auth-subtitle">A classic BBS door game — now on the web!</div>
+
+        <div id="auth-tabs">
+          <button class="tab-btn active" data-tab="login">Login</button>
+          <button class="tab-btn" data-tab="register">Register</button>
+        </div>
+
+        <div id="login-form" class="auth-form">
+          <input type="text" id="login-username" placeholder="Username" autocomplete="username">
+          <input type="password" id="login-password" placeholder="Password" autocomplete="current-password">
+          <button id="login-btn" class="auth-submit">Enter the Realm</button>
+          <div id="login-error" class="error-msg"></div>
+        </div>
+
+        <div id="register-form" class="auth-form hidden">
+          <input type="text" id="reg-username" placeholder="Username (2–20 chars)" autocomplete="username">
+          <input type="password" id="reg-password" placeholder="Password (4+ chars)" autocomplete="new-password">
+          <button id="register-btn" class="auth-submit">Create Account</button>
+          <div id="register-error" class="error-msg"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Character creation wizard -->
+    <div id="setup-screen" class="screen hidden">
+      <div class="setup-box">
+        <div class="setup-header">
+          <div class="setup-title">Create Your Character</div>
+          <div class="step-indicator">
+            <span class="step-pip" id="pip-1">1 · Name</span>
+            <span class="step-sep">›</span>
+            <span class="step-pip" id="pip-2">2 · Sex</span>
+            <span class="step-sep">›</span>
+            <span class="step-pip" id="pip-3">3 · Class</span>
+            <span class="step-sep">›</span>
+            <span class="step-pip" id="pip-4">4 · Confirm</span>
+          </div>
+        </div>
+
+        <!-- Step 1: Name -->
+        <div class="setup-step" id="step-name">
+          <div class="step-heading">What is your warrior's name?</div>
+          <input type="text" id="char-name" class="setup-input" maxlength="20"
+                 placeholder="Enter a name..." autocomplete="off" spellcheck="false">
+          <div class="setup-hint" id="name-hint">2–20 characters</div>
+          <div id="name-error" class="error-msg"></div>
+          <div class="setup-nav">
+            <span></span>
+            <button class="btn-primary" id="name-next" disabled>Continue →</button>
+          </div>
+        </div>
+
+        <!-- Step 2: Sex -->
+        <div class="setup-step hidden" id="step-sex">
+          <div class="step-heading">Your character's sex</div>
+          <div class="sex-options">
+            <button class="sex-btn" data-value="0">♂&ensp;Male</button>
+            <button class="sex-btn" data-value="5">♀&ensp;Female</button>
+          </div>
+          <div class="setup-nav">
+            <button class="btn-back" id="sex-back">← Back</button>
+            <button class="btn-primary" id="sex-next" disabled>Continue →</button>
+          </div>
+        </div>
+
+        <!-- Step 3: Class -->
+        <div class="setup-step hidden" id="step-class">
+          <div class="step-heading">Choose your class</div>
+          <div class="class-cards">
+            <div class="class-card dk" data-class="1" tabindex="0">
+              <div class="class-icon">⚔</div>
+              <div class="class-name">Death Knight</div>
+              <div class="class-desc">Masters of brute force and dark power. The strongest starting warrior.</div>
+              <div class="class-stats"><span>❤ 20 HP</span><span>⚔ 18 STR</span></div>
+              <div class="class-power">Fatal Strike — 3× damage</div>
+            </div>
+            <div class="class-card ms" data-class="2" tabindex="0">
+              <div class="class-icon">⚡</div>
+              <div class="class-name">Mystic</div>
+              <div class="class-desc">Wielders of arcane energy. Balanced stats with powerful elemental attacks.</div>
+              <div class="class-stats"><span>❤ 17 HP</span><span>⚔ 15 STR</span></div>
+              <div class="class-power">Lightning Bolt — 2.5× damage</div>
+            </div>
+            <div class="class-card th" data-class="3" tabindex="0">
+              <div class="class-icon">🗡</div>
+              <div class="class-name">Thief</div>
+              <div class="class-desc">Quick and cunning rogues who strike from the shadows with deadly precision.</div>
+              <div class="class-stats"><span>❤ 15 HP</span><span>⚔ 15 STR</span></div>
+              <div class="class-power">Backstab — 2× guaranteed hit</div>
+            </div>
+          </div>
+          <div class="setup-nav">
+            <button class="btn-back" id="class-back">← Back</button>
+            <button class="btn-primary" id="class-next" disabled>Continue →</button>
+          </div>
+        </div>
+
+        <!-- Step 4: Confirm -->
+        <div class="setup-step hidden" id="step-confirm">
+          <div class="step-heading">Ready to enter the realm?</div>
+          <div class="char-summary">
+            <div class="char-summary-row"><span class="label">Name</span><span class="value" id="confirm-name"></span></div>
+            <div class="char-summary-row"><span class="label">Sex</span><span class="value" id="confirm-sex"></span></div>
+            <div class="char-summary-row"><span class="label">Class</span><span class="value" id="confirm-class"></span></div>
+            <div class="char-summary-row"><span class="label">Starting HP</span><span class="value" id="confirm-hp"></span></div>
+            <div class="char-summary-row"><span class="label">Starting Strength</span><span class="value" id="confirm-str"></span></div>
+            <div class="char-summary-row"><span class="label">Power Move</span><span class="value" id="confirm-power"></span></div>
+          </div>
+          <div id="setup-error" class="error-msg" style="margin-bottom:12px"></div>
+          <div class="setup-nav">
+            <button class="btn-back" id="confirm-back">← Back</button>
+            <button class="btn-primary" id="confirm-submit">⚔ Enter the Realm!</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Game screen -->
+    <div id="game-screen" class="screen hidden">
+      <div id="terminal">
+        <div id="terminal-output"></div>
+        <div id="pending-messages"></div>
+        <div id="choices-bar"></div>
+        <div id="input-area" class="hidden">
+          <label id="input-label" for="game-input"></label>
+          <div class="input-row">
+            <input type="text" id="game-input" autocomplete="off">
+            <button id="input-submit">OK</button>
+            <button id="input-cancel">Cancel</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="game.js"></script>
+</body>
+</html>

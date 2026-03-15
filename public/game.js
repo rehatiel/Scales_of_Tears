@@ -1,0 +1,361 @@
+// LORD Web — Client
+
+// ── Color parser ──────────────────────────────────────────────────────────────
+const COLOR_MAP = {
+  '1':'c1','2':'c2','3':'c3','4':'c4','5':'c5','6':'c6',
+  '7':'c7','8':'c8','9':'c9','0':'c0','!':'ce','@':'ca',
+  '#':'ch','$':'cd','%':'cp',
+};
+
+function parseLine(text) {
+  if (!text) return '<span class="c7"> </span>';
+  const segs = [];
+  let cls = 'c7', buf = '', i = 0;
+  while (i < text.length) {
+    if (text[i] === '`' && COLOR_MAP[text[i+1]]) {
+      if (buf) segs.push({ cls, buf });
+      cls = COLOR_MAP[text[i+1]]; buf = ''; i += 2;
+    } else { buf += text[i++]; }
+  }
+  if (buf) segs.push({ cls, buf });
+  if (!segs.length) return '<span class="c7"> </span>';
+  return segs.map(s => `<span class="${s.cls}">${escHtml(s.buf)}</span>`).join('');
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── DOM refs ──────────────────────────────────────────────────────────────────
+const authScreen   = document.getElementById('auth-screen');
+const setupScreen  = document.getElementById('setup-screen');
+const gameScreen   = document.getElementById('game-screen');
+const termOutput   = document.getElementById('terminal-output');
+const pendingMsgs  = document.getElementById('pending-messages');
+const choicesBar   = document.getElementById('choices-bar');
+const inputArea    = document.getElementById('input-area');
+const inputLabel   = document.getElementById('input-label');
+const gameInput    = document.getElementById('game-input');
+const inputSubmit  = document.getElementById('input-submit');
+const inputCancel  = document.getElementById('input-cancel');
+
+// ── Screen switchers ──────────────────────────────────────────────────────────
+function showAuth()  { authScreen.classList.remove('hidden');  setupScreen.classList.add('hidden'); gameScreen.classList.add('hidden'); }
+function showSetup() { authScreen.classList.add('hidden');     setupScreen.classList.remove('hidden'); gameScreen.classList.add('hidden'); wizardGoTo(1); }
+function showGame()  { authScreen.classList.add('hidden');     setupScreen.classList.add('hidden'); gameScreen.classList.remove('hidden'); }
+
+// ── Game render ───────────────────────────────────────────────────────────────
+let currentScreen = null;
+let pendingInputAction = null, pendingInputParam = null;
+
+function renderScreen(data) {
+  if (!data) return;
+  if (data.screen === 'login') { showAuth(); return; }
+
+  currentScreen = data;
+  hideInput();
+
+  termOutput.innerHTML = (data.lines || []).map(l =>
+    `<span class="tline">${parseLine(l)}</span>`
+  ).join('');
+
+  const msgs = data.pendingMessages || [];
+  pendingMsgs.innerHTML = msgs.length
+    ? msgs.map(m => `<span class="pmsg">${parseLine(m)}</span>`).join('')
+    : '';
+
+  choicesBar.innerHTML = '';
+  (data.choices || []).forEach(choice => {
+    const btn = document.createElement('button');
+    btn.className = 'choice-btn';
+    btn.disabled = !!choice.disabled;
+    btn.dataset.action = choice.action;
+    btn.innerHTML = `<span class="key-hint">[${choice.key}]</span> ${escHtml(choice.label)}`;
+    btn.addEventListener('click', () => {
+      if (choice.needsInput) {
+        showInput(choice.inputLabel || 'Enter:', choice.action, choice.param || '', choice.inputType || 'text', choice.inputParam || '');
+      } else {
+        sendAction(choice.action, choice.param || '');
+      }
+    });
+    choicesBar.appendChild(btn);
+  });
+
+  if (data.needsInput) {
+    showInput(data.inputLabel || 'Enter:', data.inputAction, '', data.inputType || 'text', data.inputParam || '');
+  }
+
+  window.scrollTo(0, 0);
+}
+
+function showInput(label, action, param, type = 'text', inputParam = '') {
+  pendingInputAction = action; pendingInputParam = inputParam;
+  inputLabel.textContent = label;
+  gameInput.type = type === 'number' ? 'number' : 'text';
+  gameInput.value = '';
+  inputArea.classList.remove('hidden');
+  gameInput.focus();
+}
+
+function hideInput() {
+  inputArea.classList.add('hidden');
+  pendingInputAction = null; pendingInputParam = null;
+  gameInput.value = '';
+}
+
+// ── API ───────────────────────────────────────────────────────────────────────
+async function sendAction(action, param = '') {
+  try {
+    const body = { action };
+    if (param !== '') body.param = param;
+    const res = await fetch('/api/game/action', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (res.status === 401) { showAuth(); return; }
+    renderScreen(await res.json());
+  } catch { showMessage('Connection error. Please try again.'); }
+}
+
+async function sendMasterTrain(stat, points) {
+  try {
+    const res = await fetch('/api/game/action', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'master_train', inputParam: stat, inputValue: points }),
+    });
+    if (res.status === 401) { showAuth(); return; }
+    renderScreen(await res.json());
+  } catch { showMessage('Connection error.'); }
+}
+
+function showMessage(msg) {
+  pendingMsgs.innerHTML = `<span class="pmsg"><span class="ca">${escHtml(msg)}</span></span>`;
+}
+
+async function loadGameState() {
+  try {
+    const res = await fetch('/api/game/state');
+    if (res.status === 401) { showAuth(); return; }
+    const data = await res.json();
+    const ndMsgs = sessionStorage.getItem('newDayMessages');
+    if (ndMsgs) {
+      try { data.pendingMessages = [...JSON.parse(ndMsgs), ...(data.pendingMessages || [])]; } catch {}
+      sessionStorage.removeItem('newDayMessages');
+    }
+    showGame();
+    renderScreen(data);
+  } catch { showAuth(); }
+}
+
+// ── Keyboard shortcuts ────────────────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || !currentScreen || !gameScreen.classList.contains('hidden') === false) return;
+  // Only handle when game screen is visible
+  if (!gameScreen || gameScreen.classList.contains('hidden')) return;
+  const match = (currentScreen.choices || []).find(c => c.key.toUpperCase() === e.key.toUpperCase() && !c.disabled);
+  if (!match) return;
+  e.preventDefault();
+  if (match.needsInput) {
+    showInput(match.inputLabel || 'Enter:', match.action, match.param || '', match.inputType || 'text', match.inputParam || '');
+  } else {
+    sendAction(match.action, match.param || '');
+  }
+});
+
+// Input bar submit
+function submitInput() {
+  const value = gameInput.value.trim();
+  if (!value) return;
+  const action = pendingInputAction, iParam = pendingInputParam;
+  hideInput();
+  if (!action) return;
+  if (action === 'master_train') { sendMasterTrain(iParam, value); return; }
+  sendAction(action, value);
+}
+inputSubmit.addEventListener('click', submitInput);
+gameInput.addEventListener('keydown', e => { if (e.key === 'Enter') submitInput(); });
+inputCancel.addEventListener('click', () => { hideInput(); sendAction('town'); });
+
+// ── Auth forms ────────────────────────────────────────────────────────────────
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.auth-form').forEach(f => f.classList.add('hidden'));
+    document.getElementById(`${btn.dataset.tab}-form`).classList.remove('hidden');
+  });
+});
+
+document.getElementById('login-btn').addEventListener('click', async () => {
+  const username = document.getElementById('login-username').value.trim();
+  const password = document.getElementById('login-password').value;
+  const errEl = document.getElementById('login-error');
+  errEl.textContent = '';
+  if (!username || !password) { errEl.textContent = 'Please enter username and password.'; return; }
+  try {
+    const res = await fetch('/api/auth/login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+    const data = await res.json();
+    if (!res.ok) { errEl.textContent = data.error || 'Login failed.'; return; }
+    if (data.newDayMessages?.length) sessionStorage.setItem('newDayMessages', JSON.stringify(data.newDayMessages));
+    if (!data.setup_complete) { showSetup(); } else { loadGameState(); }
+  } catch { errEl.textContent = 'Connection error.'; }
+});
+
+document.getElementById('login-password').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('login-btn').click();
+});
+
+document.getElementById('register-btn').addEventListener('click', async () => {
+  const username = document.getElementById('reg-username').value.trim();
+  const password = document.getElementById('reg-password').value;
+  const errEl = document.getElementById('register-error');
+  errEl.textContent = '';
+  if (!username || !password) { errEl.textContent = 'Please fill in all fields.'; return; }
+  try {
+    const res = await fetch('/api/auth/register', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+    const data = await res.json();
+    if (!res.ok) { errEl.textContent = data.error || 'Registration failed.'; return; }
+    const btn = document.getElementById('register-btn');
+    btn.textContent = 'Account created!';
+    btn.disabled = true;
+    await new Promise(r => setTimeout(r, 600));
+    showSetup();
+  } catch { errEl.textContent = 'Connection error.'; }
+});
+
+document.getElementById('reg-password').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('register-btn').click();
+});
+
+// ── Character creation wizard ─────────────────────────────────────────────────
+const CLASS_DATA = {
+  1: { name: 'Death Knight', hp: 20, str: 18, power: 'Fatal Strike — 3× damage' },
+  2: { name: 'Mystic',       hp: 17, str: 15, power: 'Lightning Bolt — 2.5× damage' },
+  3: { name: 'Thief',        hp: 15, str: 15, power: 'Backstab — 2× guaranteed hit' },
+};
+
+const wizard = { name: '', sex: null, classNum: null };
+
+function wizardGoTo(step) {
+  [1,2,3,4].forEach(i => {
+    const pip = document.getElementById(`pip-${i}`);
+    pip.classList.toggle('active', i === step);
+    pip.classList.toggle('done', i < step);
+  });
+  const stepIds = ['name','sex','class','confirm'];
+  stepIds.forEach((id, i) => {
+    document.getElementById(`step-${id}`).classList.toggle('hidden', i + 1 !== step);
+  });
+  if (step === 1) document.getElementById('char-name').focus();
+  if (step === 2) {
+    // Restore sex selection state visually
+    document.querySelectorAll('.sex-btn').forEach(b => {
+      b.classList.toggle('selected', parseInt(b.dataset.value) === wizard.sex);
+    });
+    document.getElementById('sex-next').disabled = wizard.sex === null;
+  }
+  if (step === 3) {
+    document.querySelectorAll('.class-card').forEach(c => {
+      c.classList.toggle('selected', parseInt(c.dataset.class) === wizard.classNum);
+    });
+    document.getElementById('class-next').disabled = wizard.classNum === null;
+  }
+  if (step === 4) {
+    const cls = CLASS_DATA[wizard.classNum];
+    document.getElementById('confirm-name').textContent  = wizard.name;
+    document.getElementById('confirm-sex').textContent   = wizard.sex === 5 ? 'Female' : 'Male';
+    document.getElementById('confirm-class').textContent = cls.name;
+    document.getElementById('confirm-hp').textContent    = cls.hp;
+    document.getElementById('confirm-str').textContent   = cls.str;
+    document.getElementById('confirm-power').textContent = cls.power;
+  }
+}
+
+// Step 1: Name
+const charNameInput = document.getElementById('char-name');
+const nameNext = document.getElementById('name-next');
+
+charNameInput.addEventListener('input', () => {
+  const v = charNameInput.value.trim();
+  nameNext.disabled = v.length < 2;
+  const hint = document.getElementById('name-hint');
+  hint.textContent = `${v.length}/20 characters`;
+  hint.style.color = v.length >= 2 ? '#55FF55' : '#555';
+});
+charNameInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !nameNext.disabled) nameNext.click();
+});
+nameNext.addEventListener('click', () => {
+  wizard.name = charNameInput.value.trim();
+  wizardGoTo(2);
+});
+
+// Step 2: Sex
+document.getElementById('sex-back').addEventListener('click', () => wizardGoTo(1));
+document.querySelectorAll('.sex-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.sex-btn').forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+    wizard.sex = parseInt(btn.dataset.value);
+    document.getElementById('sex-next').disabled = false;
+  });
+});
+document.getElementById('sex-next').addEventListener('click', () => wizardGoTo(3));
+
+// Step 3: Class
+document.getElementById('class-back').addEventListener('click', () => wizardGoTo(2));
+document.querySelectorAll('.class-card').forEach(card => {
+  const select = () => {
+    document.querySelectorAll('.class-card').forEach(c => c.classList.remove('selected'));
+    card.classList.add('selected');
+    wizard.classNum = parseInt(card.dataset.class);
+    document.getElementById('class-next').disabled = false;
+  };
+  card.addEventListener('click', select);
+  card.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); select(); } });
+});
+document.getElementById('class-next').addEventListener('click', () => wizardGoTo(4));
+
+// Step 4: Confirm
+document.getElementById('confirm-back').addEventListener('click', () => wizardGoTo(3));
+document.getElementById('confirm-submit').addEventListener('click', async () => {
+  const btn = document.getElementById('confirm-submit');
+  const errEl = document.getElementById('setup-error');
+  btn.disabled = true;
+  btn.textContent = 'Entering the realm...';
+  errEl.textContent = '';
+  try {
+    const res = await fetch('/api/game/setup', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'setup_all', name: wizard.name, sex: wizard.sex, classNum: wizard.classNum }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      errEl.textContent = data.error || 'Setup failed. Please try again.';
+      btn.disabled = false; btn.textContent = '⚔ Enter the Realm!';
+      return;
+    }
+    showGame();
+    renderScreen(data);
+  } catch {
+    errEl.textContent = 'Connection error.';
+    btn.disabled = false; btn.textContent = '⚔ Enter the Realm!';
+  }
+});
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+(async function init() {
+  try {
+    const res = await fetch('/api/auth/me');
+    if (res.ok) {
+      const data = await res.json();
+      if (data.setup_complete) { loadGameState(); } else { showSetup(); }
+    } else { showAuth(); }
+  } catch { showAuth(); }
+})();

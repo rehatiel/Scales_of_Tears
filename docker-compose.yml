@@ -1,0 +1,32 @@
+services:
+  app:
+    build: .
+    ports:
+      - "3001:3000"
+    environment:
+      DATABASE_URL: postgresql://lord:lordpass@db:5432/lorddb
+      SESSION_SECRET: ${SESSION_SECRET:-change-me-in-production}
+      NODE_ENV: production
+      PORT: 3000
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: lorddb
+      POSTGRES_USER: lord
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-lordpass}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lord -d lorddb"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  pgdata:
