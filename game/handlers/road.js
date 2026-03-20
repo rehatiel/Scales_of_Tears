@@ -390,15 +390,23 @@ async function _roadCombat(player, action, req, res, pendingMessages) {
   const fight = req.session.roadFight;
   if (!fight) return walk_continue({ player, param: null, req, res, pendingMessages });
 
-  const { playerDamage, monsterDamage, poisonDamage, fled, log } = resolveRound(player, fight.enemy, action);
+  // Guard power move against skill uses
+  if (action === 'power' && player.skill_uses_left <= 0)
+    return res.json({ ...getRoadFightScreen(player, fight.enemy, []), pendingMessages: ['`@No skill uses left!'] });
+  if (action === 'power') {
+    await updatePlayer(player.id, { skill_uses_left: player.skill_uses_left - 1 });
+    player = await getPlayer(player.id);
+  }
+
+  const { playerDamage, monsterDamage, poisonDamage, fled, appliedPoison, log } = resolveRound(player, fight.enemy, action);
 
   const newEnemyHp = Math.max(0, fight.enemy.currentHp - playerDamage);
   fight.enemy.currentHp = newEnemyHp;
 
-  const newHp = Math.max(0, player.hit_points - monsterDamage - poisonDamage);
+  const newHp = Math.max(0, player.hit_points - monsterDamage - (poisonDamage || 0));
   await updatePlayer(player.id, {
     hit_points: newHp,
-    poisoned: poisonDamage > 0 && !player.poisoned ? 3 : (player.poisoned || 0),
+    poisoned: appliedPoison ? Math.max(3, player.poisoned || 0) : (player.poisoned || 0),
   });
   player = await getPlayer(player.id);
 

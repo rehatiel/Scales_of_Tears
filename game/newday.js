@@ -2,7 +2,8 @@
 const { addNews, getAllPlayers } = require('../db');
 const { expForNextLevel, LEVEL_UP_GAINS, CLASS_NAMES } = require('./data');
 
-async function runNewDay(player) {
+async function runNewDay(player, dryRun = false) {
+  const news = dryRun ? async () => {} : addNews;
   const updates = {};
   const messages = [];
 
@@ -27,7 +28,7 @@ async function runNewDay(player) {
     updates.dead = 1;
     updates.hit_points = 0;
     messages.push(`\`@No one came to rescue you. You have perished in the forest...`);
-    await addNews(`\`@${player.handle}\`% perished in the forest, never to be found.`);
+    await news(`\`@${player.handle}\`% perished in the forest, never to be found.`);
   }
 
   // Captive: 15% chance of passive rescue overnight
@@ -41,7 +42,7 @@ async function runNewDay(player) {
       updates.camping = 0;
       messages.push(`\`0In the dead of night, a hooded figure cuts your bonds.`);
       messages.push(`\`0"Don't ask questions. Go." You run.`);
-      await addNews(`\`0${player.handle}\`% escaped captivity in the night!`);
+      await news(`\`0${player.handle}\`% escaped captivity in the night!`);
     } else {
       messages.push(`\`#Another day passes in captivity. Your bonds hold.`);
     }
@@ -74,7 +75,7 @@ async function runNewDay(player) {
       updates.strength = Math.max(15, player.strength - gains.strength);
       messages.push(`\`@You lost a level!\`% You are now level \`$${updates.level}\`%.`);
     }
-    if (!player.near_death) await addNews(`\`@${player.handle}\`% was reincarnated from the dead.`);
+    if (!player.near_death) await news(`\`@${player.handle}\`% was reincarnated from the dead.`);
   } else if (!player.near_death) {
     const healAmount = Math.floor(player.hit_max * 0.25);
     updates.hit_points = Math.min(player.hit_max, player.hit_points + healAmount);
@@ -130,7 +131,7 @@ async function runNewDay(player) {
       updates.skill_points = (player.skill_points || 0) + 1;
       updates.skill_uses_left = Math.min(updates.skill_points, 10);
       messages.push(`\`$You have gained a level!\`% You are now a level \`$${newLevel}\`% \`!${CLASS_NAMES[player.class]}\`%!`);
-      await addNews(`\`$${player.handle}\`% has reached level \`$${newLevel}\`%!`);
+      await news(`\`$${player.handle}\`% has reached level \`$${newLevel}\`%!`);
     }
   }
 

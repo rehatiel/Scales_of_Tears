@@ -3,682 +3,1116 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>LORD Admin</title>
+  <title>LORD Admin Panel</title>
+  <link rel="stylesheet" href="/style.css">
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { display: block; }
 
-    body {
-      background: #0a0a0a;
-      color: #aaaaaa;
-      font-family: 'Courier New', Courier, monospace;
-      font-size: 14px;
-      line-height: 1.5;
-      padding: 20px;
-    }
+    /* ── Auth ── */
+    #auth-panel { display:flex; align-items:center; justify-content:center; min-height:100vh; }
+    #auth-box { background:#050505; border:1px solid #004444; padding:40px; width:360px; text-align:center; }
+    #auth-box h1 { color:#FF5555; font-size:18px; margin-bottom:6px; }
+    #auth-box p  { color:#555555; font-size:12px; margin-bottom:24px; }
+    #auth-box input { width:100%; padding:10px; margin-bottom:12px; background:#0a0a0a; border:1px solid #004444; color:#AAAAAA; font-family:inherit; font-size:14px; }
+    #auth-box button { width:100%; padding:10px; background:#002200; border:1px solid #004400; color:#55FF55; font-family:inherit; font-size:14px; cursor:pointer; }
+    #auth-box button:hover { background:#003300; }
+    #auth-error { color:#FF5555; font-size:13px; margin-top:10px; min-height:18px; }
 
-    h1 {
-      color: #ffff55;
-      font-size: 20px;
-      margin-bottom: 4px;
-      letter-spacing: 2px;
-      text-transform: uppercase;
-    }
+    /* ── App shell ── */
+    #app { display:none; flex-direction:column; height:100vh; overflow:hidden; }
+    #app.visible { display:flex; }
 
-    h2 {
-      color: #ffff55;
-      font-size: 14px;
-      letter-spacing: 1px;
-      text-transform: uppercase;
-      margin-bottom: 10px;
-      border-bottom: 1px solid #333;
-      padding-bottom: 4px;
-    }
+    /* ── Top nav ── */
+    #topnav { display:flex; align-items:center; background:#050505; border-bottom:1px solid #003333; padding:0 16px; flex-shrink:0; }
+    #topnav .brand { color:#FF5555; font-size:14px; font-weight:bold; margin-right:24px; padding:12px 0; }
+    .tab-btn { background:none; border:none; border-bottom:2px solid transparent; color:#555555; font-family:inherit; font-size:13px; padding:14px 16px; cursor:pointer; }
+    .tab-btn:hover { color:#AAAAAA; }
+    .tab-btn.active { color:#FFFF55; border-bottom-color:#FFFF55; }
+    #topnav .spacer { flex:1; }
+    #topnav .user-label { color:#333333; font-size:12px; }
 
-    #gate {
-      max-width: 400px;
-      margin: 80px auto;
-      background: #111;
-      border: 1px solid #333;
-      padding: 30px;
-    }
+    /* ── Tab panels ── */
+    .tab-panel { display:none; flex:1; overflow:hidden; }
+    .tab-panel.active { display:flex; flex-direction:column; }
 
-    #gate h1 {
-      text-align: center;
-      margin-bottom: 20px;
-    }
+    /* ── Shared layout ── */
+    .panel-content { flex:1; overflow-y:auto; padding:16px 20px; }
+    .section-title { font-size:11px; color:#555555; letter-spacing:2px; text-transform:uppercase; margin-bottom:12px; }
+    .divider { border:none; border-top:1px solid #002222; margin:16px 0; }
+    .btn { padding:6px 14px; font-family:inherit; font-size:12px; cursor:pointer; border:1px solid; }
+    .btn-green { background:#002200; border-color:#004400; color:#55FF55; }
+    .btn-green:hover { background:#003300; }
+    .btn-red { background:#1a0000; border-color:#440000; color:#FF5555; }
+    .btn-red:hover { background:#220000; }
+    .btn-yellow { background:#1a1a00; border-color:#444400; color:#FFFF55; }
+    .btn-yellow:hover { background:#222200; }
+    .btn-gray { background:#0a0a0a; border-color:#333333; color:#777777; }
+    .btn-gray:hover { background:#111111; color:#AAAAAA; }
+    .status-msg { font-size:12px; margin-left:10px; }
 
-    #gate label {
-      display: block;
-      margin-bottom: 6px;
-      color: #aaa;
-    }
+    /* ── Players tab ── */
+    #players-panel { display:flex; flex-direction:row; flex:1; overflow:hidden; }
+    #players-list-col { width:55%; border-right:1px solid #002222; display:flex; flex-direction:column; overflow:hidden; }
+    #players-edit-col { flex:1; display:flex; flex-direction:column; overflow:hidden; min-height:0; }
 
-    #gate input[type="password"] {
-      width: 100%;
-      background: #0a0a0a;
-      border: 1px solid #444;
-      color: #ffff55;
-      font-family: inherit;
-      font-size: 14px;
-      padding: 8px 10px;
-      margin-bottom: 14px;
-      outline: none;
-    }
+    #players-toolbar { padding:10px 16px; background:#050505; border-bottom:1px solid #002222; display:flex; align-items:center; gap:8px; }
+    #player-search { background:#080808; border:1px solid #003333; color:#AAAAAA; font-family:inherit; font-size:13px; padding:5px 10px; width:180px; }
+    #player-search:focus { outline:none; border-color:#005555; }
+    #player-count { font-size:12px; color:#555555; margin-left:auto; }
 
-    #gate input[type="password"]:focus {
-      border-color: #ffff55;
-    }
+    #player-table-wrap { flex:1; overflow-y:auto; }
+    table { width:100%; border-collapse:collapse; font-size:12px; }
+    thead th { padding:6px 10px; text-align:left; color:#555555; font-weight:normal; border-bottom:1px solid #002222; position:sticky; top:0; background:#050505; font-size:11px; letter-spacing:1px; text-transform:uppercase; }
+    tbody tr { border-bottom:1px solid #0a1010; cursor:pointer; }
+    tbody tr:hover { background:#051010; }
+    tbody tr.selected { background:#001a00; }
+    td { padding:6px 10px; color:#AAAAAA; }
+    td.handle { color:#FFFF55; }
+    td.level { color:#55FFFF; }
+    td.gold { color:#FFFF55; }
 
-    #gate-error {
-      color: #ff5555;
-      font-size: 13px;
-      margin-bottom: 10px;
-      min-height: 18px;
-    }
+    .badge { display:inline-block; font-size:10px; padding:1px 5px; border:1px solid; margin-left:3px; }
+    .badge-dead      { color:#FF5555; border-color:#550000; background:#1a0000; }
+    .badge-neardeath { color:#FF5555; border-color:#882200; background:#220a00; }
+    .badge-captive   { color:#FF55FF; border-color:#550055; background:#1a001a; }
+    .badge-camping   { color:#AA5500; border-color:#443300; background:#110d00; }
+    .badge-road      { color:#55FFFF; border-color:#005555; background:#001a1a; }
+    .badge-new       { color:#555555; border-color:#222222; background:#050505; }
 
-    button {
-      background: #1a1a1a;
-      border: 1px solid #555;
-      color: #ffff55;
-      font-family: inherit;
-      font-size: 13px;
-      padding: 6px 14px;
-      cursor: pointer;
-      transition: background 0.15s, border-color 0.15s;
-    }
+    /* ── Player editor ── */
+    #edit-placeholder { display:flex; align-items:center; justify-content:center; height:100%; color:#333333; font-size:13px; }
+    #edit-form { display:none; flex-direction:column; flex:1; min-height:0; }
+    #edit-form.visible { display:flex; }
+    #edit-header { padding:10px 16px; background:#050505; border-bottom:1px solid #002222; display:flex; align-items:center; gap:10px; }
+    #edit-header h3 { color:#FFFF55; font-size:14px; flex:1; }
+    #edit-body { flex:1; overflow-y:auto; padding:16px; }
+    .field-group { margin-bottom:16px; }
+    .field-group-title { font-size:11px; color:#555555; letter-spacing:2px; text-transform:uppercase; margin-bottom:8px; padding-bottom:4px; border-bottom:1px solid #001a1a; }
+    .fields-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+    .field { display:flex; flex-direction:column; gap:3px; }
+    .field label { font-size:11px; color:#555555; }
+    .field input, .field select { background:#080808; border:1px solid #003333; color:#AAAAAA; font-family:inherit; font-size:13px; padding:5px 8px; }
+    .field input:focus, .field select:focus { outline:none; border-color:#005555; }
+    .field input[type=number] { width:100%; }
+    .field-readonly { background:#030303 !important; color:#444444 !important; cursor:default; }
+    #edit-actions { padding:12px 16px; background:#050505; border-top:1px solid #002222; display:flex; gap:8px; flex-wrap:wrap; align-items:center; flex-shrink:0; }
+    #edit-status { font-size:12px; flex:1; text-align:right; }
 
-    button:hover:not(:disabled) {
-      background: #252525;
-      border-color: #ffff55;
-    }
+    /* ── Banners tab ── */
+    #banners-panel { display:flex; flex-direction:row; flex:1; overflow:hidden; }
+    #banner-sidebar { width:200px; min-width:200px; background:#050505; border-right:1px solid #003333; display:flex; flex-direction:column; overflow:hidden; }
+    #banner-sidebar h2 { padding:12px 14px; font-size:11px; color:#555555; border-bottom:1px solid #003333; letter-spacing:2px; text-transform:uppercase; }
+    #key-list { flex:1; overflow-y:auto; }
+    #key-list button { display:block; width:100%; text-align:left; padding:7px 14px; background:none; border:none; border-left:3px solid transparent; color:#AAAAAA; font-family:inherit; font-size:13px; cursor:pointer; }
+    #key-list button:hover { background:#0a1a0a; color:#FFFFFF; }
+    #key-list button.active { background:#001a00; border-left-color:#55FF55; color:#FFFF55; }
+    .dot   { color:#55FF55; margin-right:5px; }
+    .nodot { color:#333333; margin-right:5px; }
+    #banner-main { flex:1; display:flex; flex-direction:column; overflow:hidden; background:#000; }
+    #banner-header { padding:10px 16px; background:#050505; border-bottom:1px solid #003333; display:flex; align-items:center; gap:12px; }
+    #banner-header h2 { font-size:14px; color:#FFFF55; flex:1; }
+    #override-badge { font-size:11px; padding:2px 8px; border:1px solid #004400; color:#55FF55; background:#001a00; }
+    #override-badge.none { border-color:#333333; color:#555555; background:none; }
+    #banner-work { flex:1; display:flex; flex-direction:column; overflow:hidden; padding:16px; gap:12px; }
+    .panel-label { font-size:11px; color:#555555; letter-spacing:2px; text-transform:uppercase; margin-bottom:4px; }
+    #preview { background:#000; border:1px solid #003333; padding:10px 14px; font-family:'Consolas','Lucida Console',monospace; font-size:14px; line-height:1.5; white-space:pre; max-height:160px; overflow-y:auto; flex-shrink:0; }
+    #banner-editor-wrap { flex:1; display:flex; flex-direction:column; min-height:0; }
+    #banner-editor { flex:1; width:100%; background:#080808; border:1px solid #003333; color:#AAAAAA; font-family:'Consolas','Lucida Console',monospace; font-size:13px; padding:10px 14px; resize:none; line-height:1.6; }
+    #banner-editor:focus { outline:none; border-color:#005555; }
+    #banner-actions { flex:0 0 auto; display:flex; gap:10px; align-items:center; }
+    #banner-status { font-size:13px; color:#555555; margin-left:6px; }
+    #cheatsheet { flex:0 0 auto; border-top:1px solid #002222; padding:8px 0 0; display:flex; flex-wrap:wrap; gap:4px 14px; }
+    #cheatsheet .panel-label { width:100%; margin-bottom:2px; }
+    #cheatsheet span { font-size:12px; }
 
-    button:disabled {
-      opacity: 0.4;
-      cursor: not-allowed;
-    }
+    /* ── News tab ── */
+    #news-compose { padding:12px 16px; background:#050505; border-bottom:1px solid #002222; display:flex; gap:8px; align-items:center; }
+    #news-compose input { flex:1; background:#080808; border:1px solid #003333; color:#AAAAAA; font-family:inherit; font-size:13px; padding:7px 10px; }
+    #news-compose input:focus { outline:none; border-color:#005555; }
+    .news-row { display:flex; align-items:flex-start; gap:10px; padding:8px 16px; border-bottom:1px solid #0a1010; }
+    .news-row:hover { background:#050a0a; }
+    .news-day { color:#555555; font-size:11px; min-width:50px; padding-top:2px; }
+    .news-msg { flex:1; font-size:13px; color:#AAAAAA; word-break:break-word; }
+    .news-time { color:#333333; font-size:11px; min-width:120px; text-align:right; padding-top:2px; }
+    .news-del { background:none; border:none; color:#440000; font-size:13px; cursor:pointer; padding:0 4px; }
+    .news-del:hover { color:#FF5555; }
 
-    button.danger {
-      border-color: #aa3333;
-      color: #ff5555;
-    }
+    /* ── System tab ── */
+    .system-section { margin-bottom:28px; }
+    .system-section p { font-size:13px; color:#555555; margin-bottom:10px; }
+    .mig-row { display:flex; gap:16px; padding:6px 0; border-bottom:1px solid #0a1010; font-size:12px; }
+    .mig-name { color:#55FFFF; flex:1; }
+    .mig-date { color:#555555; }
+    .hok-row { display:flex; gap:12px; padding:6px 0; border-bottom:1px solid #0a1010; font-size:12px; }
+    .hok-name { color:#FFFF55; width:140px; }
+    .hok-level { color:#55FFFF; width:50px; }
+    .hok-class { color:#AAAAAA; width:100px; }
+    .hok-kills { color:#FF5555; width:60px; }
+    .hok-won { color:#55FF55; }
 
-    button.danger:hover:not(:disabled) {
-      background: #1f0f0f;
-      border-color: #ff5555;
-    }
+    /* ── Dashboard tab ── */
+    #tab-dashboard .panel-content { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:16px; align-content:start; }
+    .stat-card { background:#050505; border:1px solid #003333; padding:16px 18px; }
+    .stat-card .stat-label { font-size:11px; color:#555555; letter-spacing:1px; text-transform:uppercase; margin-bottom:6px; }
+    .stat-card .stat-value { font-size:26px; color:#FFFF55; font-weight:bold; }
+    .stat-card .stat-sub { font-size:11px; color:#555555; margin-top:4px; }
+    .stat-card.green  .stat-value { color:#55FF55; }
+    .stat-card.red    .stat-value { color:#FF5555; }
+    .stat-card.cyan   .stat-value { color:#55FFFF; }
+    .stat-card.wide   { grid-column: span 2; }
+    .level-bar { display:flex; gap:2px; align-items:flex-end; height:48px; margin-top:8px; }
+    .level-bar-col { display:flex; flex-direction:column; align-items:center; gap:2px; flex:1; }
+    .level-bar-fill { background:#55FFFF; min-height:2px; width:100%; }
+    .level-bar-label { font-size:9px; color:#555555; }
 
-    button.primary {
-      border-color: #55aa55;
-      color: #55ff55;
-    }
+    /* ── new-day preview ── */
+    .preview-row { display:flex; gap:10px; padding:5px 0; border-bottom:1px solid #0a1010; font-size:12px; align-items:center; }
+    .preview-handle { color:#FFFF55; width:130px; flex-shrink:0; }
+    .preview-changes { color:#AAAAAA; flex:1; display:flex; flex-wrap:wrap; gap:6px; }
+    .preview-change { background:#0a1010; border:1px solid #002222; padding:1px 7px; border-radius:2px; }
+    .preview-change.level { color:#55FF55; border-color:#004400; }
+    .preview-change.death { color:#FF5555; border-color:#440000; }
+    .preview-change.rein  { color:#FFFF55; border-color:#444400; }
+    .preview-change.bank  { color:#55FFFF; border-color:#004444; }
+    .preview-change.escape{ color:#FF55FF; border-color:#440044; }
 
-    button.primary:hover:not(:disabled) {
-      background: #0f1f0f;
-      border-color: #55ff55;
-    }
+    /* ── badge-banned ── */
+    .badge-banned { color:#FF55FF; border-color:#550055; background:#1a001a; }
 
-    #login-btn {
-      width: 100%;
-    }
-
-    #dash {
-      max-width: 1100px;
-      margin: 0 auto;
-    }
-
-    .dash-header {
-      display: flex;
-      align-items: baseline;
-      justify-content: space-between;
-      margin-bottom: 24px;
-      border-bottom: 1px solid #333;
-      padding-bottom: 10px;
-    }
-
-    .dash-header span {
-      color: #555;
-      font-size: 12px;
-    }
-
-    #logout-btn {
-      font-size: 12px;
-      padding: 4px 10px;
-      border-color: #444;
-      color: #888;
-    }
-
-    .section {
-      background: #0f0f0f;
-      border: 1px solid #252525;
-      padding: 18px 20px;
-      margin-bottom: 24px;
-    }
-
-    .section-toolbar {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      margin-bottom: 14px;
-    }
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 13px;
-    }
-
-    thead th {
-      text-align: left;
-      color: #ffff55;
-      border-bottom: 1px solid #333;
-      padding: 5px 8px;
-      font-weight: normal;
-      letter-spacing: 0.5px;
-      white-space: nowrap;
-    }
-
-    tbody tr:hover {
-      background: #141414;
-    }
-
-    tbody td {
-      padding: 5px 8px;
-      border-bottom: 1px solid #1a1a1a;
-      vertical-align: middle;
-    }
-
-    .badge-dead {
-      color: #ff5555;
-      font-weight: bold;
-    }
-
-    .badge-alive {
-      color: #55aa55;
-    }
-
-    .badge-incomplete {
-      color: #888;
-      font-style: italic;
-    }
-
-    .revive-btn {
-      font-size: 11px;
-      padding: 2px 8px;
-    }
-
-    .announce-row {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-    }
-
-    #announce-input {
-      flex: 1;
-      background: #0a0a0a;
-      border: 1px solid #444;
-      color: #aaa;
-      font-family: inherit;
-      font-size: 13px;
-      padding: 6px 10px;
-      outline: none;
-    }
-
-    #announce-input:focus {
-      border-color: #ffff55;
-    }
-
-    .news-list {
-      list-style: none;
-      font-size: 13px;
-      max-height: 300px;
-      overflow-y: auto;
-    }
-
-    .news-list li {
-      padding: 3px 0;
-      border-bottom: 1px solid #161616;
-      display: flex;
-      gap: 10px;
-    }
-
-    .news-list .news-day {
-      color: #555;
-      min-width: 50px;
-      flex-shrink: 0;
-    }
-
-    .news-list .news-msg {
-      color: #aaa;
-      word-break: break-word;
-    }
-
-    .mig-list {
-      list-style: none;
-      font-size: 13px;
-      max-height: 200px;
-      overflow-y: auto;
-    }
-
-    .mig-list li {
-      padding: 3px 0;
-      border-bottom: 1px solid #161616;
-      display: flex;
-      gap: 14px;
-    }
-
-    .mig-list .mig-name {
-      color: #55ff55;
-      min-width: 240px;
-    }
-
-    .mig-list .mig-date {
-      color: #555;
-    }
-
-    .status-bar {
-      font-size: 12px;
-      color: #55ff55;
-      min-height: 18px;
-      margin-top: 8px;
-    }
-
-    .status-bar.error {
-      color: #ff5555;
-    }
-
-    .loading {
-      color: #555;
-      font-style: italic;
-    }
-
-    ::-webkit-scrollbar { width: 6px; height: 6px; }
-    ::-webkit-scrollbar-track { background: #0a0a0a; }
-    ::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
-    ::-webkit-scrollbar-thumb:hover { background: #555; }
+    /* Scrollbars */
+    ::-webkit-scrollbar { width:5px; height:5px; }
+    ::-webkit-scrollbar-track { background:#050505; }
+    ::-webkit-scrollbar-thumb { background:#003333; }
   </style>
 </head>
 <body>
 
-<!-- Password gate -->
-<div id="gate">
-  <h1>LORD Admin</h1>
-  <label for="pw-input">Admin Password</label>
-  <input type="password" id="pw-input" placeholder="Enter password..." autocomplete="current-password">
-  <div id="gate-error"></div>
-  <button id="login-btn">Login</button>
+<!-- Auth -->
+<div id="auth-panel">
+  <div id="auth-box">
+    <h1>LORD Admin</h1>
+    <p>Enter your admin password to continue</p>
+    <input type="password" id="pw-input" placeholder="Admin password" autofocus>
+    <button id="login-btn">Enter</button>
+    <div id="auth-error"></div>
+  </div>
 </div>
 
-<!-- Dashboard (hidden until authed) -->
-<div id="dash" style="display:none">
-  <div class="dash-header">
-    <h1>LORD Admin Panel</h1>
-    <div style="display:flex;align-items:center;gap:14px;">
-      <span id="dash-subtitle">Legend of the Red Dragon</span>
-      <button id="logout-btn">Logout</button>
+<!-- App -->
+<div id="app">
+  <div id="topnav">
+    <span class="brand">LORD Admin</span>
+    <button class="tab-btn" data-tab="dashboard">Dashboard</button>
+    <button class="tab-btn active" data-tab="players">Players</button>
+    <button class="tab-btn" data-tab="banners">Banners</button>
+    <button class="tab-btn" data-tab="news">News</button>
+    <button class="tab-btn" data-tab="system">System</button>
+    <span class="spacer"></span>
+    <span class="user-label" id="user-label"></span>
+  </div>
+
+  <!-- ── Dashboard ── -->
+  <div class="tab-panel" id="tab-dashboard">
+    <div class="panel-content" id="dashboard-content">
+      <div class="stat-card"><div class="stat-label">Loading…</div><div class="stat-value">—</div></div>
     </div>
   </div>
 
-  <!-- Players -->
-  <div class="section">
-    <h2>Players</h2>
-    <div class="section-toolbar">
-      <button id="refresh-players-btn">Refresh</button>
-    </div>
-    <div id="players-wrap">
-      <span class="loading">Loading...</span>
-    </div>
-  </div>
-
-  <!-- Actions -->
-  <div class="section">
-    <h2>Actions</h2>
-    <div style="display:flex;flex-direction:column;gap:12px;">
-      <div>
-        <button id="newday-btn" class="primary">Trigger New Day</button>
-        <div class="status-bar" id="newday-status"></div>
-      </div>
-      <div>
-        <div class="announce-row">
-          <input type="text" id="announce-input" maxlength="80" placeholder="System announcement (max 80 chars)...">
-          <button id="announce-btn">Post Announcement</button>
+  <!-- ── Players ── -->
+  <div class="tab-panel active" id="tab-players">
+    <div id="players-panel">
+      <div id="players-list-col">
+        <div id="players-toolbar">
+          <input type="text" id="player-search" placeholder="Search name…">
+          <button class="btn btn-gray" id="refresh-players-btn">↺ Refresh</button>
+          <span id="player-count"></span>
         </div>
-        <div class="status-bar" id="announce-status"></div>
+        <div id="player-table-wrap">
+          <table id="player-table">
+            <thead>
+              <tr>
+                <th>Name</th><th>Lv / Class</th><th>HP</th><th>Gold</th><th>Location</th><th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="player-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div id="players-edit-col">
+        <div id="edit-placeholder">← Select a player to edit</div>
+        <div id="edit-form">
+          <div id="edit-header">
+            <h3 id="edit-title">Player</h3>
+            <button class="btn btn-gray" id="edit-close-btn">✕</button>
+          </div>
+          <div id="edit-body">
+            <!-- Identity -->
+            <div class="field-group">
+              <div class="field-group-title">Identity</div>
+              <div class="fields-grid">
+                <div class="field"><label>ID</label><input id="ef-id" class="field-readonly" readonly></div>
+                <div class="field"><label>Username</label><input id="ef-username" class="field-readonly" readonly></div>
+                <div class="field"><label>Handle (name)</label><input id="ef-handle"></div>
+                <div class="field"><label>Sex</label>
+                  <select id="ef-sex"><option value="0">Male</option><option value="5">Female</option></select>
+                </div>
+                <div class="field"><label>Class</label>
+                  <select id="ef-class">
+                    <option value="1">Death Knight</option>
+                    <option value="2">Mystic</option>
+                    <option value="3">Thief</option>
+                  </select>
+                </div>
+                <div class="field"><label>Town</label>
+                  <select id="ef-current_town">
+                    <option value="harood">Town of Harood</option>
+                    <option value="bracken_hollow">Bracken Hollow</option>
+                    <option value="thornreach">Thornreach</option>
+                    <option value="silverkeep">Silverkeep</option>
+                    <option value="stormwatch">Stormwatch</option>
+                    <option value="frostmere">Frostmere</option>
+                    <option value="ironhold">Ironhold Bastion</option>
+                    <option value="velmora">Velmora</option>
+                    <option value="duskveil">Duskveil</option>
+                    <option value="graveport">Graveport</option>
+                    <option value="mirefen">Mirefen</option>
+                    <option value="ashenfall">Ashenfall</option>
+                    <option value="old_karth">Old Karth</option>
+                  </select>
+                </div>
+                <div class="field"><label>Setup complete</label>
+                  <select id="ef-setup_complete"><option value="0">No</option><option value="1">Yes</option></select>
+                </div>
+              </div>
+            </div>
+            <!-- Stats -->
+            <div class="field-group">
+              <div class="field-group-title">Combat Stats</div>
+              <div class="fields-grid">
+                <div class="field"><label>Level</label><input type="number" id="ef-level" min="1" max="12"></div>
+                <div class="field"><label>Experience</label><input type="number" id="ef-exp" min="0"></div>
+                <div class="field"><label>HP (current)</label><input type="number" id="ef-hit_points" min="0"></div>
+                <div class="field"><label>HP (max)</label><input type="number" id="ef-hit_max" min="1"></div>
+                <div class="field"><label>Strength</label><input type="number" id="ef-strength" min="0"></div>
+                <div class="field"><label>Defense</label><input type="number" id="ef-defense" min="0"></div>
+                <div class="field"><label>Charm</label><input type="number" id="ef-charm" min="0"></div>
+                <div class="field"><label>Stamina</label><input type="number" id="ef-stamina" min="0" max="10"></div>
+              </div>
+            </div>
+            <!-- Resources -->
+            <div class="field-group">
+              <div class="field-group-title">Resources</div>
+              <div class="fields-grid">
+                <div class="field"><label>Gold (on hand)</label><input type="number" id="ef-gold" min="0"></div>
+                <div class="field"><label>Gold (bank)</label><input type="number" id="ef-bank" min="0"></div>
+                <div class="field"><label>Gems</label><input type="number" id="ef-gems" min="0"></div>
+                <div class="field"><label>Kills</label><input type="number" id="ef-kills" min="0"></div>
+                <div class="field"><label>Fights left today</label><input type="number" id="ef-fights_left" min="0" max="10"></div>
+                <div class="field"><label>PvP fights left</label><input type="number" id="ef-human_fights_left" min="0" max="5"></div>
+                <div class="field"><label>Skill points</label><input type="number" id="ef-skill_points" min="0"></div>
+                <div class="field"><label>Skill uses left</label><input type="number" id="ef-skill_uses_left" min="0"></div>
+              </div>
+            </div>
+            <!-- Equipment -->
+            <div class="field-group">
+              <div class="field-group-title">Equipment</div>
+              <div class="fields-grid">
+                <div class="field"><label>Weapon #</label><input type="number" id="ef-weapon_num" min="0" max="15"></div>
+                <div class="field"><label>Weapon name</label><input id="ef-weapon_name"></div>
+                <div class="field"><label>Armor #</label><input type="number" id="ef-arm_num" min="0" max="15"></div>
+                <div class="field"><label>Armor name</label><input id="ef-arm_name"></div>
+              </div>
+            </div>
+            <!-- Flags -->
+            <div class="field-group">
+              <div class="field-group-title">Flags &amp; State</div>
+              <div class="fields-grid">
+                <div class="field"><label>Dead</label>
+                  <select id="ef-dead"><option value="0">No</option><option value="1">Yes</option></select>
+                </div>
+                <div class="field"><label>Near Death</label>
+                  <select id="ef-near_death"><option value="0">No</option><option value="1">Yes</option></select>
+                </div>
+                <div class="field"><label>Poisoned (rounds)</label><input type="number" id="ef-poisoned" min="0" max="5"></div>
+                <div class="field"><label>Captive</label>
+                  <select id="ef-captive"><option value="0">No</option><option value="1">Yes</option></select>
+                </div>
+                <div class="field"><label>Camping</label>
+                  <select id="ef-camping"><option value="0">No</option><option value="1">Yes</option></select>
+                </div>
+                <div class="field"><label>Travelling to</label><input id="ef-travel_to" placeholder="town id or blank"></div>
+                <div class="field"><label>Antidote owned</label>
+                  <select id="ef-antidote_owned"><option value="0">No</option><option value="1">Yes</option></select>
+                </div>
+              </div>
+            </div>
+            <!-- Account -->
+            <div class="field-group">
+              <div class="field-group-title">Account Actions</div>
+              <div class="fields-grid">
+                <div class="field">
+                  <label>New Password</label>
+                  <input type="password" id="ef-new-password" placeholder="Leave blank to keep" autocomplete="new-password">
+                </div>
+                <div class="field" style="justify-content:flex-end;">
+                  <label>&nbsp;</label>
+                  <button class="btn btn-yellow" id="set-password-btn" style="width:100%">Set Password</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div id="edit-actions">
+            <button class="btn btn-green" id="save-player-btn">Save Changes</button>
+            <button class="btn btn-yellow" id="fullheal-btn">Full Heal</button>
+            <button class="btn btn-red" id="clearflags-btn">Clear Flags</button>
+            <button class="btn btn-gray" id="resettravel-btn">Reset Travel</button>
+            <button class="btn btn-gray" id="impersonate-btn" title="Open a new tab logged in as this player (token expires in 5 min)">⇒ Impersonate</button>
+            <button class="btn btn-yellow" id="ban-btn">Ban</button>
+            <button class="btn btn-red" id="delete-player-btn">Delete</button>
+            <span id="edit-status"></span>
+          </div>
+        </div>
       </div>
     </div>
   </div>
 
-  <!-- Recent News -->
-  <div class="section">
-    <h2>Recent News</h2>
-    <div class="section-toolbar">
-      <button id="refresh-news-btn">Refresh</button>
-    </div>
-    <div id="news-wrap">
-      <span class="loading">Loading...</span>
+  <!-- ── Banners ── -->
+  <div class="tab-panel" id="tab-banners">
+    <div id="banners-panel">
+      <div id="banner-sidebar">
+        <h2>Banners</h2>
+        <div id="key-list"></div>
+      </div>
+      <div id="banner-main">
+        <div id="banner-header">
+          <h2 id="current-key">Select a banner</h2>
+          <span id="override-badge" class="none">no override</span>
+        </div>
+        <div id="banner-work">
+          <div>
+            <div class="panel-label">Preview</div>
+            <div id="preview"><span class="c8">  — select a key to begin —</span></div>
+          </div>
+          <div id="banner-editor-wrap">
+            <div class="panel-label">Lines — one per row</div>
+            <textarea id="banner-editor" spellcheck="false" placeholder="Select a banner from the sidebar…"></textarea>
+          </div>
+          <div id="banner-actions">
+            <button class="btn btn-green" id="banner-save-btn">Save Override</button>
+            <button class="btn btn-red" id="banner-reset-btn">Reset to Default</button>
+            <span id="banner-status"></span>
+          </div>
+          <div id="cheatsheet">
+            <div class="panel-label">Color codes</div>
+            <span><span class="c1">`1</span> dk blue</span>
+            <span><span class="c2">`2</span> dk green</span>
+            <span><span class="c3">`3</span> cyan</span>
+            <span><span class="c4">`4</span> dk red</span>
+            <span><span class="c5">`5</span> magenta</span>
+            <span><span class="c6">`6</span> brown</span>
+            <span><span class="c7">`7</span> gray</span>
+            <span><span class="c8">`8</span> dk gray</span>
+            <span><span class="c9">`9</span> br blue</span>
+            <span><span class="c0">`0</span> br green</span>
+            <span><span class="ce">`!</span> br cyan</span>
+            <span><span class="ca">`@</span> br red</span>
+            <span><span class="ch">`#</span> magenta</span>
+            <span><span class="cd">`$</span> yellow</span>
+            <span><span class="cp">`%</span> white</span>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
-  <!-- Migrations -->
-  <div class="section">
-    <h2>Migrations</h2>
-    <div class="section-toolbar">
-      <button id="refresh-mig-btn">Refresh</button>
+  <!-- ── News ── -->
+  <div class="tab-panel" id="tab-news">
+    <div id="news-compose">
+      <input type="text" id="announce-input" placeholder="Post system announcement… (max 80 chars)">
+      <button class="btn btn-green" id="announce-btn">Post</button>
+      <button class="btn btn-gray" id="refresh-news-btn">↺ Refresh</button>
     </div>
-    <div id="mig-wrap">
-      <span class="loading">Loading...</span>
+    <div class="panel-content" id="news-list"></div>
+  </div>
+
+  <!-- ── System ── -->
+  <div class="tab-panel" id="tab-system">
+    <div class="panel-content">
+
+      <div class="system-section">
+        <div class="section-title">Backup &amp; Restore</div>
+        <p>Backup exports all players, news, banners, and hall of kings records. Restore replaces all matching rows — existing data will be overwritten.</p>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+          <button class="btn btn-green" id="backup-btn">⬇ Download Backup</button>
+          <label class="btn btn-yellow" style="cursor:pointer;">
+            ⬆ Restore from File
+            <input type="file" id="restore-file" accept=".json" style="display:none">
+          </label>
+          <span class="status-msg" id="backup-status"></span>
+        </div>
+      </div>
+
+      <hr class="divider">
+
+      <div class="system-section">
+        <div class="section-title">Danger Zone</div>
+        <p>Triggers a new day for all active players. Stamina restores, daily limits reset, bank interest applies.</p>
+        <button class="btn btn-red" id="newday-btn">Trigger New Day for All Players</button>
+        <span class="status-msg" id="newday-status"></span>
+      </div>
+
+      <hr class="divider">
+
+      <div class="system-section">
+        <div class="section-title">New Day Preview</div>
+        <p>See what would change if a new day ran right now — does not affect any data.</p>
+        <button class="btn btn-gray" id="preview-newday-btn">Preview New Day</button>
+        <span class="status-msg" id="preview-status"></span>
+        <div id="newday-preview-table" style="margin-top:12px"></div>
+      </div>
+
+      <hr class="divider">
+
+      <div class="system-section">
+        <div class="section-title">Hall of Kings</div>
+        <div id="hok-table"></div>
+      </div>
+
+      <hr class="divider">
+
+      <div class="system-section">
+        <div class="section-title">Applied Migrations</div>
+        <div id="migrations-table"></div>
+      </div>
+
     </div>
   </div>
 </div>
 
 <script>
-  'use strict';
-
-  const CLASS_NAMES = { 1: 'Death Knight', 2: 'Mystic', 3: 'Thief' };
-
-  // ── Auth ──────────────────────────────────────────────────────────────────
-
-  function getToken() {
-    return sessionStorage.getItem('lord_admin_token') || '';
+// ── Color parser ──────────────────────────────────────────────────────────────
+const COLOR_MAP = {
+  '1':'c1','2':'c2','3':'c3','4':'c4','5':'c5','6':'c6',
+  '7':'c7','8':'c8','9':'c9','0':'c0','!':'ce','@':'ca',
+  '#':'ch','$':'cd','%':'cp',
+  'a':'b0','b':'b1','c':'b2','d':'b3','e':'b4','f':'b5','g':'b6','h':'b7',
+};
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function parseLine(text) {
+  if (!text) return '<span class="c7"> </span>';
+  const segs = []; let fg='c7', bg='', buf='', i=0;
+  while (i < text.length) {
+    if (text[i]==='`' && COLOR_MAP[text[i+1]]!==undefined) {
+      if (buf) segs.push({fg,bg,buf});
+      const m=COLOR_MAP[text[i+1]]; if(m[0]==='b') bg=m; else fg=m;
+      buf=''; i+=2;
+    } else { buf+=text[i++]; }
   }
+  if (buf) segs.push({fg,bg,buf});
+  if (!segs.length) return '<span class="c7"> </span>';
+  return segs.map(s=>`<span class="${s.bg?s.fg+' '+s.bg:s.fg}">${escHtml(s.buf)}</span>`).join('');
+}
+function stripColor(text) { return (text||'').replace(/`./g,''); }
 
-  function setToken(t) {
-    sessionStorage.setItem('lord_admin_token', t);
-  }
+// ── State ─────────────────────────────────────────────────────────────────────
+let adminPw = '';
+let allPlayers = [];
+let editingId = null;
+let currentBannerKey = null;
 
-  function clearToken() {
-    sessionStorage.removeItem('lord_admin_token');
-  }
+// ── DOM refs ──────────────────────────────────────────────────────────────────
+const authPanel  = document.getElementById('auth-panel');
+const appEl      = document.getElementById('app');
+const pwInput    = document.getElementById('pw-input');
+const loginBtn   = document.getElementById('login-btn');
+const authError  = document.getElementById('auth-error');
 
-  // ── API helpers ───────────────────────────────────────────────────────────
-
-  async function api(method, path, body) {
-    const opts = {
-      method,
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + getToken(),
-      },
-    };
-    if (body !== undefined) opts.body = JSON.stringify(body);
-    const res = await fetch('/api/admin' + path, opts);
-    if (res.status === 401) {
-      clearToken();
-      showGate('Wrong password or session expired.');
-      throw new Error('Unauthorized');
-    }
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Request failed');
-    return data;
-  }
-
-  // ── Gate / Dashboard ──────────────────────────────────────────────────────
-
-  const gateEl   = document.getElementById('gate');
-  const dashEl   = document.getElementById('dash');
-  const pwInput  = document.getElementById('pw-input');
-  const loginBtn = document.getElementById('login-btn');
-  const gateErr  = document.getElementById('gate-error');
-
-  function showGate(errMsg) {
-    gateEl.style.display = '';
-    dashEl.style.display = 'none';
-    gateErr.textContent = errMsg || '';
-    pwInput.value = '';
-    pwInput.focus();
-  }
-
-  function showDash() {
-    gateEl.style.display = 'none';
-    dashEl.style.display = '';
-    loadPlayers();
-    loadNews();
-    loadMigrations();
-  }
-
-  async function tryLogin() {
-    const pw = pwInput.value.trim();
-    if (!pw) return;
-    setToken(pw);
-    try {
-      await api('GET', '/players'); // probe
-      showDash();
-    } catch (e) {
-      if (e.message === 'Unauthorized') {
-        // showGate already called
-      } else {
-        gateErr.textContent = 'Connection error: ' + e.message;
-        clearToken();
-      }
-    }
-  }
-
-  loginBtn.addEventListener('click', tryLogin);
-  pwInput.addEventListener('keydown', e => { if (e.key === 'Enter') tryLogin(); });
-
-  document.getElementById('logout-btn').addEventListener('click', () => {
-    clearToken();
-    showGate();
+// ── API ───────────────────────────────────────────────────────────────────────
+function api(method, path, body) {
+  return fetch('/api/admin' + path, {
+    method,
+    headers: { 'Authorization':'Bearer '+adminPw, 'Content-Type':'application/json' },
+    body: body ? JSON.stringify(body) : undefined,
   });
+}
 
-  // ── Players ───────────────────────────────────────────────────────────────
+// ── Auth ──────────────────────────────────────────────────────────────────────
+async function tryLogin() {
+  authError.textContent = '';
+  adminPw = pwInput.value;
+  const res = await api('GET', '/players');
+  if (res.status === 401) { authError.textContent='Wrong password.'; adminPw=''; return; }
+  if (!res.ok) { authError.textContent='Server error.'; return; }
+  allPlayers = await res.json();
+  authPanel.style.display = 'none';
+  appEl.classList.add('visible');
+  document.getElementById('user-label').textContent = 'Admin';
+  renderPlayerTable();
+  loadBannerList();
+  loadDashboard();
+}
+loginBtn.addEventListener('click', tryLogin);
+pwInput.addEventListener('keydown', e => { if(e.key==='Enter') tryLogin(); });
 
-  async function loadPlayers() {
-    const wrap = document.getElementById('players-wrap');
-    wrap.innerHTML = '<span class="loading">Loading...</span>';
-    try {
-      const rows = await api('GET', '/players');
-      if (!rows.length) {
-        wrap.innerHTML = '<span class="loading">No players found.</span>';
-        return;
-      }
-      const table = document.createElement('table');
-      table.innerHTML = `
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>Username</th>
-            <th>Handle</th>
-            <th>Level</th>
-            <th>Class</th>
-            <th>EXP</th>
-            <th>Gold</th>
-            <th>Status</th>
-            <th>Last Seen</th>
-            <th>Action</th>
-          </tr>
-        </thead>
-        <tbody id="players-tbody"></tbody>
-      `;
-      const tbody = table.querySelector('#players-tbody');
-      for (const p of rows) {
-        const tr = document.createElement('tr');
-        const statusLabel = !p.setup_complete
-          ? '<span class="badge-incomplete">Setup</span>'
-          : p.dead
-          ? '<span class="badge-dead">DEAD</span>'
-          : '<span class="badge-alive">Alive</span>';
-        const lastSeen = p.last_seen
-          ? new Date(p.last_seen).toLocaleString()
-          : '—';
-        const cls = CLASS_NAMES[p.class] || ('Class ' + (p.class || '?'));
-        const exp = p.exp != null ? Number(p.exp).toLocaleString() : '—';
-        const gold = p.gold != null ? Number(p.gold).toLocaleString() : '—';
-        tr.innerHTML = `
-          <td>${p.id}</td>
-          <td>${esc(p.username || '')}</td>
-          <td>${esc(p.handle || '—')}</td>
-          <td>${p.level || '—'}</td>
-          <td>${esc(cls)}</td>
-          <td>${exp}</td>
-          <td>${gold}</td>
-          <td>${statusLabel}</td>
-          <td>${lastSeen}</td>
-          <td><button class="revive-btn danger" data-id="${p.id}" ${p.dead || p.near_death ? '' : 'disabled'}>Revive</button></td>
-        `;
-        tbody.appendChild(tr);
-      }
-      wrap.innerHTML = '';
-      wrap.appendChild(table);
-      wrap.querySelectorAll('.revive-btn').forEach(btn => {
-        btn.addEventListener('click', async () => {
-          const id = btn.dataset.id;
-          btn.disabled = true;
-          btn.textContent = '...';
-          try {
-            await api('POST', '/reset-player', { id: Number(id) });
-            await loadPlayers();
-          } catch (e) {
-            btn.disabled = false;
-            btn.textContent = 'Revive';
-            alert('Error: ' + e.message);
-          }
-        });
-      });
-    } catch (e) {
-      if (e.message !== 'Unauthorized') {
-        wrap.innerHTML = '<span class="loading" style="color:#ff5555">Error: ' + esc(e.message) + '</span>';
-      }
-    }
-  }
+// ── Tab navigation ────────────────────────────────────────────────────────────
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-'+btn.dataset.tab).classList.add('active');
+    if (btn.dataset.tab === 'news') loadNews();
+    if (btn.dataset.tab === 'system') loadSystem();
+    if (btn.dataset.tab === 'dashboard') loadDashboard();
+  });
+});
 
-  document.getElementById('refresh-players-btn').addEventListener('click', loadPlayers);
+// ═══════════════════════════════════════════════════════════
+// PLAYERS TAB
+// ═══════════════════════════════════════════════════════════
+const CLASS_NAMES = { 1:'Death Knight', 2:'Mystic', 3:'Thief' };
+const SEX_NAMES   = { 0:'Male', 5:'Female' };
 
-  // ── Actions ───────────────────────────────────────────────────────────────
+function playerStatus(p) {
+  const badges = [];
+  if (!p.setup_complete) badges.push('<span class="badge badge-new">NEW</span>');
+  if (p.banned)          badges.push('<span class="badge badge-banned">BANNED</span>');
+  if (p.dead)            badges.push('<span class="badge badge-dead">DEAD</span>');
+  if (p.near_death)      badges.push('<span class="badge badge-neardeath">NEAR DEATH</span>');
+  if (p.captive)         badges.push('<span class="badge badge-captive">CAPTIVE</span>');
+  if (p.camping)         badges.push('<span class="badge badge-camping">CAMPING</span>');
+  if (p.travel_to)       badges.push('<span class="badge badge-road">ON ROAD</span>');
+  if (p.poisoned > 0)    badges.push('<span class="badge badge-neardeath">POISONED</span>');
+  return badges.join('');
+}
 
-  document.getElementById('newday-btn').addEventListener('click', async () => {
-    const btn = document.getElementById('newday-btn');
-    const status = document.getElementById('newday-status');
-    if (!confirm('Trigger new day for ALL active players? This will reset daily limits and apply overnight effects.')) return;
-    btn.disabled = true;
-    status.className = 'status-bar';
-    status.textContent = 'Running...';
-    try {
-      const res = await api('POST', '/new-day');
-      status.textContent = 'Done. ' + res.playersUpdated + ' player(s) updated.';
-      loadNews();
-    } catch (e) {
-      status.className = 'status-bar error';
-      status.textContent = 'Error: ' + e.message;
-    } finally {
-      btn.disabled = false;
+function townName(id) {
+  const names = {
+    harood:'Harood', bracken_hollow:'Bracken Hollow', thornreach:'Thornreach',
+    silverkeep:'Silverkeep', stormwatch:'Stormwatch', frostmere:'Frostmere',
+    ironhold:'Ironhold', velmora:'Velmora', duskveil:'Duskveil',
+    graveport:'Graveport', mirefen:'Mirefen', ashenfall:'Ashenfall', old_karth:'Old Karth',
+  };
+  return names[id] || (id || '?');
+}
+
+function renderPlayerTable(filter) {
+  const tbody = document.getElementById('player-tbody');
+  const list = filter
+    ? allPlayers.filter(p => (p.handle||'').toLowerCase().includes(filter.toLowerCase()) || (p.username||'').toLowerCase().includes(filter.toLowerCase()))
+    : allPlayers;
+  document.getElementById('player-count').textContent = `${list.length} players`;
+  tbody.innerHTML = list.map(p => `
+    <tr data-id="${p.id}" class="${p.id===editingId?'selected':''}">
+      <td class="handle">${escHtml(p.handle||p.username)}</td>
+      <td class="level">${p.level} <span style="color:#555">${CLASS_NAMES[p.class]||'?'}</span></td>
+      <td>${p.hit_points}/${p.hit_max}</td>
+      <td class="gold">${Number(p.gold).toLocaleString()}</td>
+      <td style="color:#55FFFF;font-size:11px">${townName(p.current_town)}</td>
+      <td>${playerStatus(p)}</td>
+    </tr>`).join('');
+  tbody.querySelectorAll('tr').forEach(tr => {
+    tr.addEventListener('click', () => openEdit(parseInt(tr.dataset.id)));
+  });
+}
+
+document.getElementById('player-search').addEventListener('input', e => renderPlayerTable(e.target.value));
+document.getElementById('refresh-players-btn').addEventListener('click', async () => {
+  const res = await api('GET', '/players');
+  if (res.ok) { allPlayers = await res.json(); renderPlayerTable(document.getElementById('player-search').value); }
+});
+
+// ── Player editor ─────────────────────────────────────────────────────────────
+const EDIT_FIELDS = [
+  'handle','sex','class','current_town','setup_complete',
+  'level','exp','hit_points','hit_max','strength','defense','charm','stamina',
+  'gold','bank','gems','kills','fights_left','human_fights_left','skill_points','skill_uses_left',
+  'weapon_num','weapon_name','arm_num','arm_name',
+  'dead','near_death','poisoned','captive','camping','travel_to','antidote_owned',
+];
+
+function openEdit(id) {
+  const p = allPlayers.find(x => x.id === id);
+  if (!p) return;
+  editingId = id;
+  document.getElementById('edit-placeholder').style.display = 'none';
+  const form = document.getElementById('edit-form');
+  form.classList.add('visible');
+  document.getElementById('edit-title').textContent = p.handle || p.username;
+  EDIT_FIELDS.forEach(f => {
+    const el = document.getElementById('ef-'+f);
+    if (!el) return;
+    el.value = p[f] ?? '';
+  });
+  document.getElementById('ef-id').value = p.id;
+  document.getElementById('ef-username').value = p.username;
+  document.getElementById('ban-btn').textContent = p.banned ? 'Unban' : 'Ban';
+  document.getElementById('ban-btn').className = p.banned ? 'btn btn-green' : 'btn btn-yellow';
+  document.getElementById('ef-new-password').value = '';
+  setEditStatus('');
+  // Highlight in table
+  document.querySelectorAll('#player-tbody tr').forEach(tr =>
+    tr.classList.toggle('selected', parseInt(tr.dataset.id) === id));
+}
+
+document.getElementById('edit-close-btn').addEventListener('click', () => {
+  document.getElementById('edit-placeholder').style.display = '';
+  document.getElementById('edit-form').classList.remove('visible');
+  document.querySelectorAll('#player-tbody tr').forEach(tr => tr.classList.remove('selected'));
+  editingId = null;
+});
+
+document.getElementById('save-player-btn').addEventListener('click', async () => {
+  if (!editingId) return;
+  const body = {};
+  EDIT_FIELDS.filter(f => !['id','username'].includes(f)).forEach(f => {
+    const el = document.getElementById('ef-'+f);
+    if (!el) return;
+    const v = el.value;
+    // Coerce numbers for number inputs
+    if (el.type === 'number' || el.tagName === 'SELECT' && ['sex','class','setup_complete','dead','near_death','captive','camping','antidote_owned'].includes(f)) {
+      body[f] = v === '' ? null : Number(v);
+    } else {
+      body[f] = v === '' ? null : v;
     }
   });
+  const res = await api('PUT', '/players/'+editingId, body);
+  if (!res.ok) { setEditStatus('Save failed.', true); return; }
+  const updated = await res.json();
+  const idx = allPlayers.findIndex(p => p.id === editingId);
+  if (idx !== -1) allPlayers[idx] = updated;
+  renderPlayerTable(document.getElementById('player-search').value);
+  openEdit(editingId);
+  setEditStatus('Saved.');
+});
 
-  document.getElementById('announce-btn').addEventListener('click', async () => {
-    const input = document.getElementById('announce-input');
-    const btn = document.getElementById('announce-btn');
-    const status = document.getElementById('announce-status');
-    const msg = input.value.trim();
-    if (!msg) {
-      status.className = 'status-bar error';
-      status.textContent = 'Message cannot be empty.';
-      return;
-    }
-    btn.disabled = true;
-    status.className = 'status-bar';
-    status.textContent = 'Posting...';
-    try {
-      await api('POST', '/announce', { message: msg });
-      status.textContent = 'Announcement posted.';
-      input.value = '';
-      loadNews();
-    } catch (e) {
-      status.className = 'status-bar error';
-      status.textContent = 'Error: ' + e.message;
-    } finally {
-      btn.disabled = false;
-    }
+document.getElementById('fullheal-btn').addEventListener('click', async () => {
+  if (!editingId) return;
+  const p = allPlayers.find(x => x.id === editingId);
+  if (!p) return;
+  const res = await api('PUT', '/players/'+editingId, { hit_points: p.hit_max });
+  if (!res.ok) { setEditStatus('Failed.', true); return; }
+  const updated = await res.json();
+  allPlayers[allPlayers.findIndex(x=>x.id===editingId)] = updated;
+  renderPlayerTable(document.getElementById('player-search').value);
+  openEdit(editingId);
+  setEditStatus('Full heal applied.');
+});
+
+document.getElementById('clearflags-btn').addEventListener('click', async () => {
+  if (!editingId) return;
+  if (!confirm('Clear all status flags for this player?')) return;
+  const res = await api('PUT', '/players/'+editingId, {
+    dead:0, near_death:0, near_death_by:'', poisoned:0,
+    captive:0, captive_location:null, camping:0,
+    travel_to:null, travel_segments_done:0, travel_segments_total:0,
   });
+  if (!res.ok) { setEditStatus('Failed.', true); return; }
+  const updated = await res.json();
+  allPlayers[allPlayers.findIndex(x=>x.id===editingId)] = updated;
+  renderPlayerTable(document.getElementById('player-search').value);
+  openEdit(editingId);
+  setEditStatus('Flags cleared.');
+});
 
-  document.getElementById('announce-input').addEventListener('keydown', e => {
-    if (e.key === 'Enter') document.getElementById('announce-btn').click();
+document.getElementById('resettravel-btn').addEventListener('click', async () => {
+  if (!editingId) return;
+  const res = await api('PUT', '/players/'+editingId, {
+    travel_to:null, travel_segments_done:0, travel_segments_total:0, camping:0,
   });
+  if (!res.ok) { setEditStatus('Failed.', true); return; }
+  const updated = await res.json();
+  allPlayers[allPlayers.findIndex(x=>x.id===editingId)] = updated;
+  renderPlayerTable(document.getElementById('player-search').value);
+  openEdit(editingId);
+  setEditStatus('Travel state reset.');
+});
 
-  // ── News ──────────────────────────────────────────────────────────────────
+let editStatusTimer;
+function setEditStatus(msg, isError=false) {
+  const el = document.getElementById('edit-status');
+  el.textContent = msg;
+  el.style.color = isError ? '#FF5555' : '#55FF55';
+  clearTimeout(editStatusTimer);
+  if (msg) editStatusTimer = setTimeout(()=>{ el.textContent=''; }, 3000);
+}
 
-  async function loadNews() {
-    const wrap = document.getElementById('news-wrap');
-    wrap.innerHTML = '<span class="loading">Loading...</span>';
-    try {
-      const rows = await api('GET', '/news');
-      if (!rows.length) {
-        wrap.innerHTML = '<span class="loading">No news entries.</span>';
-        return;
-      }
-      const ul = document.createElement('ul');
-      ul.className = 'news-list';
-      for (const n of rows) {
-        const li = document.createElement('li');
-        const dayStr = n.day != null ? 'Day ' + n.day : '—';
-        li.innerHTML = `<span class="news-day">${esc(dayStr)}</span><span class="news-msg">${esc(stripColorCodes(n.message || ''))}</span>`;
-        ul.appendChild(li);
-      }
-      wrap.innerHTML = '';
-      wrap.appendChild(ul);
-    } catch (e) {
-      if (e.message !== 'Unauthorized') {
-        wrap.innerHTML = '<span class="loading" style="color:#ff5555">Error: ' + esc(e.message) + '</span>';
-      }
+// ═══════════════════════════════════════════════════════════
+// BANNERS TAB
+// ═══════════════════════════════════════════════════════════
+async function loadBannerList() {
+  const res = await api('GET', '/banners');
+  if (!res.ok) return;
+  const keys = await res.json();
+  const list = document.getElementById('key-list');
+  list.innerHTML = '';
+  for (const entry of keys) {
+    const btn = document.createElement('button');
+    btn.dataset.key = entry.key;
+    const dot = document.createElement('span');
+    dot.className = entry.overridden ? 'dot' : 'nodot';
+    dot.textContent = '●';
+    btn.appendChild(dot);
+    btn.appendChild(document.createTextNode(entry.key));
+    btn.addEventListener('click', () => loadBanner(entry.key));
+    list.appendChild(btn);
+  }
+}
+
+async function loadBanner(key) {
+  const res = await api('GET', '/banners/'+key);
+  if (!res.ok) return;
+  const data = await res.json();
+  currentBannerKey = key;
+  document.querySelectorAll('#key-list button').forEach(b => b.classList.toggle('active', b.dataset.key===key));
+  document.getElementById('current-key').textContent = key;
+  const badge = document.getElementById('override-badge');
+  badge.textContent = data.overridden ? 'custom override' : 'hardcoded default';
+  badge.className   = data.overridden ? '' : 'none';
+  document.getElementById('banner-editor').value = data.lines.join('\n');
+  updatePreview();
+  setBannerStatus('');
+}
+
+function updatePreview() {
+  const lines = document.getElementById('banner-editor').value.split('\n');
+  document.getElementById('preview').innerHTML = lines.map(l=>`<div>${parseLine(l)}</div>`).join('');
+}
+document.getElementById('banner-editor').addEventListener('input', updatePreview);
+
+document.getElementById('banner-save-btn').addEventListener('click', async () => {
+  if (!currentBannerKey) return;
+  const lines = document.getElementById('banner-editor').value.split('\n').filter(l=>l.trim().length>0);
+  if (!lines.length) { setBannerStatus('Nothing to save.', true); return; }
+  const res = await api('PUT', '/banners/'+currentBannerKey, {lines});
+  if (!res.ok) { setBannerStatus('Save failed.', true); return; }
+  const badge = document.getElementById('override-badge');
+  badge.textContent = 'custom override'; badge.className = '';
+  updateSidebarDot(currentBannerKey, true);
+  setBannerStatus('Saved — live immediately.');
+});
+
+document.getElementById('banner-reset-btn').addEventListener('click', async () => {
+  if (!currentBannerKey) return;
+  if (!confirm(`Reset "${currentBannerKey}" to hardcoded default?`)) return;
+  const res = await api('DELETE', '/banners/'+currentBannerKey);
+  if (!res.ok) { setBannerStatus('Reset failed.', true); return; }
+  const data = await res.json();
+  if (data.revertedTo) document.getElementById('banner-editor').value = data.revertedTo.join('\n');
+  const badge = document.getElementById('override-badge');
+  badge.textContent = 'hardcoded default'; badge.className = 'none';
+  updateSidebarDot(currentBannerKey, false);
+  updatePreview();
+  setBannerStatus('Reset to default.');
+});
+
+function updateSidebarDot(key, overridden) {
+  const btn = document.querySelector(`#key-list button[data-key="${key}"]`);
+  if (btn) btn.querySelector('span').className = overridden ? 'dot' : 'nodot';
+}
+
+let bannerStatusTimer;
+function setBannerStatus(msg, isError=false) {
+  const el = document.getElementById('banner-status');
+  el.textContent = msg; el.style.color = isError ? '#FF5555' : '#55FF55';
+  clearTimeout(bannerStatusTimer);
+  if (msg) bannerStatusTimer = setTimeout(()=>{ el.textContent=''; }, 3000);
+}
+
+// ═══════════════════════════════════════════════════════════
+// NEWS TAB
+// ═══════════════════════════════════════════════════════════
+async function loadNews() {
+  const res = await api('GET', '/news');
+  if (!res.ok) return;
+  const rows = await res.json();
+  const list = document.getElementById('news-list');
+  list.innerHTML = rows.map(r => `
+    <div class="news-row" data-id="${r.id}">
+      <span class="news-day">Day ${r.day}</span>
+      <span class="news-msg">${parseLine(r.message)}</span>
+      <span class="news-time">${new Date(r.created_at).toLocaleString()}</span>
+      <button class="news-del" title="Delete" onclick="deleteNews(${r.id})">✕</button>
+    </div>`).join('');
+}
+
+async function deleteNews(id) {
+  if (!confirm('Delete this news entry?')) return;
+  const res = await api('DELETE', '/news/'+id);
+  if (res.ok) document.querySelector(`.news-row[data-id="${id}"]`)?.remove();
+}
+
+document.getElementById('announce-btn').addEventListener('click', async () => {
+  const msg = document.getElementById('announce-input').value.trim();
+  if (!msg) return;
+  const res = await api('POST', '/announce', {message: msg});
+  if (!res.ok) return;
+  document.getElementById('announce-input').value = '';
+  loadNews();
+});
+document.getElementById('announce-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('announce-btn').click();
+});
+document.getElementById('refresh-news-btn').addEventListener('click', loadNews);
+
+// ═══════════════════════════════════════════════════════════
+// SYSTEM TAB
+// ═══════════════════════════════════════════════════════════
+async function loadSystem() {
+  const [migRes, hokRes] = await Promise.all([
+    api('GET', '/migrations'),
+    api('GET', '/hall-of-kings'),
+  ]);
+  if (migRes.ok) {
+    const migs = await migRes.json();
+    document.getElementById('migrations-table').innerHTML =
+      migs.map(m => `<div class="mig-row"><span class="mig-name">${escHtml(m.name)}</span><span class="mig-date">${new Date(m.applied_at).toLocaleString()}</span></div>`).join('');
+  }
+  const hok = document.getElementById('hok-table');
+  if (hokRes.ok) {
+    const entries = await hokRes.json();
+    if (!entries.length) {
+      hok.innerHTML = '<span style="color:#333;font-size:13px">No dragon slayers yet.</span>';
+    } else {
+      hok.innerHTML = entries.map(e => `
+        <div class="hok-row">
+          <span class="hok-name">${escHtml(e.handle)}</span>
+          <span class="hok-level">Lv ${e.level}</span>
+          <span class="hok-class">${CLASS_NAMES[e.class]||'?'}</span>
+          <span class="hok-kills">${e.kills} kills</span>
+          <span class="hok-won">${e.times_won}× dragon</span>
+          <span style="color:#333;font-size:11px">${new Date(e.defeated_at).toLocaleDateString()}</span>
+        </div>`).join('');
     }
   }
+}
 
-  document.getElementById('refresh-news-btn').addEventListener('click', loadNews);
+// ═══════════════════════════════════════════════════════════
+// BACKUP / RESTORE
+// ═══════════════════════════════════════════════════════════
+document.getElementById('backup-btn').addEventListener('click', async () => {
+  const statusEl = document.getElementById('backup-status');
+  statusEl.style.color = '#AAAAAA';
+  statusEl.textContent = 'Preparing…';
+  const res = await api('GET', '/backup');
+  if (!res.ok) { statusEl.style.color = '#FF5555'; statusEl.textContent = 'Backup failed.'; return; }
+  const blob = await res.blob();
+  const cd = res.headers.get('Content-Disposition') || '';
+  const nameMatch = cd.match(/filename="([^"]+)"/);
+  const filename = nameMatch ? nameMatch[1] : `lord-backup-${Date.now()}.json`;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  statusEl.style.color = '#55FF55';
+  statusEl.textContent = 'Backup downloaded.';
+});
 
-  // ── Migrations ────────────────────────────────────────────────────────────
-
-  async function loadMigrations() {
-    const wrap = document.getElementById('mig-wrap');
-    wrap.innerHTML = '<span class="loading">Loading...</span>';
-    try {
-      const rows = await api('GET', '/migrations');
-      if (!rows.length) {
-        wrap.innerHTML = '<span class="loading">No migrations found.</span>';
-        return;
-      }
-      const ul = document.createElement('ul');
-      ul.className = 'mig-list';
-      for (const m of rows) {
-        const li = document.createElement('li');
-        const appliedAt = m.applied_at
-          ? new Date(m.applied_at).toLocaleString()
-          : '—';
-        li.innerHTML = `<span class="mig-name">${esc(m.name)}</span><span class="mig-date">${appliedAt}</span>`;
-        ul.appendChild(li);
-      }
-      wrap.innerHTML = '';
-      wrap.appendChild(ul);
-    } catch (e) {
-      if (e.message !== 'Unauthorized') {
-        wrap.innerHTML = '<span class="loading" style="color:#ff5555">Error: ' + esc(e.message) + '</span>';
-      }
-    }
+document.getElementById('restore-file').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  e.target.value = '';
+  const statusEl = document.getElementById('backup-status');
+  let payload;
+  try {
+    payload = JSON.parse(await file.text());
+  } catch {
+    statusEl.style.color = '#FF5555';
+    statusEl.textContent = 'Invalid JSON file.';
+    return;
   }
-
-  document.getElementById('refresh-mig-btn').addEventListener('click', loadMigrations);
-
-  // ── Utilities ─────────────────────────────────────────────────────────────
-
-  function esc(str) {
-    return String(str)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
+  if (!payload.tables || payload.version !== 1) {
+    statusEl.style.color = '#FF5555';
+    statusEl.textContent = 'Unrecognised backup format.';
+    return;
   }
-
-  // Strip LORD backtick color codes for plain display
-  function stripColorCodes(str) {
-    return str.replace(/`[$%!0@#826]/g, '');
+  const counts = Object.entries(payload.tables).map(([t,rows]) => `${rows.length} ${t}`).join(', ');
+  if (!confirm(`Restore backup from ${payload.exportedAt}?\n\nThis will replace:\n${counts}\n\nAll current data in these tables will be overwritten. Continue?`)) return;
+  statusEl.style.color = '#AAAAAA';
+  statusEl.textContent = 'Restoring…';
+  const res = await api('POST', '/restore', payload);
+  if (!res.ok) {
+    const err = await res.json().catch(()=>({error:'Unknown error'}));
+    statusEl.style.color = '#FF5555';
+    statusEl.textContent = `Restore failed: ${err.error || res.status}`;
+    return;
   }
+  statusEl.style.color = '#55FF55';
+  statusEl.textContent = 'Restore complete. Reloading…';
+  const pRes = await api('GET', '/players');
+  if (pRes.ok) { allPlayers = await pRes.json(); renderPlayerTable(document.getElementById('player-search').value); }
+  await loadSystem();
+  await loadDashboard();
+});
 
-  // ── Init ──────────────────────────────────────────────────────────────────
+document.getElementById('newday-btn').addEventListener('click', async () => {
+  if (!confirm('Trigger a new day for ALL active players? This cannot be undone.')) return;
+  document.getElementById('newday-btn').disabled = true;
+  const res = await api('POST', '/new-day');
+  document.getElementById('newday-btn').disabled = false;
+  if (!res.ok) { document.getElementById('newday-status').textContent = 'Failed.'; return; }
+  const data = await res.json();
+  document.getElementById('newday-status').textContent = `Done — ${data.playersUpdated} players updated.`;
+  document.getElementById('newday-status').style.color = '#55FF55';
+});
 
-  // Auto-login if a token is already in sessionStorage
-  if (getToken()) {
-    showDash();
-  } else {
-    pwInput.focus();
+// ── New Day Preview ───────────────────────────────────────────────────────────
+document.getElementById('preview-newday-btn').addEventListener('click', async () => {
+  const statusEl = document.getElementById('preview-status');
+  const tableEl  = document.getElementById('newday-preview-table');
+  statusEl.style.color = '#AAAAAA';
+  statusEl.textContent = 'Calculating…';
+  tableEl.innerHTML = '';
+  const res = await api('GET', '/new-day/preview');
+  if (!res.ok) { statusEl.style.color='#FF5555'; statusEl.textContent='Failed.'; return; }
+  const rows = await res.json();
+  statusEl.textContent = `${rows.length} players`;
+  statusEl.style.color = '#555555';
+  const active = rows.filter(r => r.changes.length);
+  if (!active.length) {
+    tableEl.innerHTML = '<span style="color:#333;font-size:13px">No notable changes would occur.</span>';
+    return;
   }
+  const TAG_CLASS = { 'Level':'level', 'Dies':'death', 'Reincarnated':'rein', 'Bank':'bank', 'Escapes':'escape' };
+  tableEl.innerHTML = active.map(r => {
+    const tags = r.changes.map(c => {
+      const cls = TAG_CLASS[c.split(' ')[0]] || '';
+      return `<span class="preview-change ${cls}">${escHtml(c)}</span>`;
+    }).join('');
+    return `<div class="preview-row"><span class="preview-handle">${escHtml(r.handle)}</span><span class="preview-changes">${tags}</span></div>`;
+  }).join('');
+});
+
+// ── Password reset ────────────────────────────────────────────────────────────
+document.getElementById('set-password-btn').addEventListener('click', async () => {
+  if (!editingId) return;
+  const pw = document.getElementById('ef-new-password').value;
+  if (!pw) { setEditStatus('Enter a new password first.', true); return; }
+  if (pw.length < 4) { setEditStatus('Password must be at least 4 characters.', true); return; }
+  if (!confirm(`Reset password for this player?`)) return;
+  const res = await api('POST', `/players/${editingId}/password`, { password: pw });
+  if (!res.ok) { setEditStatus('Password reset failed.', true); return; }
+  document.getElementById('ef-new-password').value = '';
+  setEditStatus('Password updated.');
+});
+
+// ── Ban / Unban ───────────────────────────────────────────────────────────────
+document.getElementById('ban-btn').addEventListener('click', async () => {
+  if (!editingId) return;
+  const p = allPlayers.find(x => x.id === editingId);
+  if (!p) return;
+  const banning = !p.banned;
+  if (!confirm(`${banning ? 'Ban' : 'Unban'} ${escHtml(p.handle || p.username)}?`)) return;
+  const res = await api('POST', `/players/${editingId}/ban`, { banned: banning });
+  if (!res.ok) { setEditStatus('Failed.', true); return; }
+  const updated = { ...p, banned: banning ? 1 : 0 };
+  allPlayers[allPlayers.findIndex(x=>x.id===editingId)] = updated;
+  renderPlayerTable(document.getElementById('player-search').value);
+  openEdit(editingId);
+  setEditStatus(banning ? 'Player banned.' : 'Player unbanned.');
+});
+
+// ── Impersonate ───────────────────────────────────────────────────────────────
+document.getElementById('impersonate-btn').addEventListener('click', async () => {
+  if (!editingId) return;
+  const p = allPlayers.find(x => x.id === editingId);
+  if (!confirm(`Open a new tab logged in as "${p?.handle || p?.username}"?\n\nToken expires in 5 minutes.`)) return;
+  const res = await api('POST', `/players/${editingId}/impersonate`);
+  if (!res.ok) { setEditStatus('Impersonate failed.', true); return; }
+  const { token } = await res.json();
+  window.open(`/api/auth/impersonate/${token}`, '_blank');
+  setEditStatus('Tab opened. Token valid for 5 min.');
+});
+
+// ── Delete player ─────────────────────────────────────────────────────────────
+document.getElementById('delete-player-btn').addEventListener('click', async () => {
+  if (!editingId) return;
+  const p = allPlayers.find(x => x.id === editingId);
+  if (!confirm(`PERMANENTLY DELETE player "${p?.handle || p?.username}"?\n\nThis cannot be undone.`)) return;
+  const res = await api('DELETE', `/players/${editingId}`);
+  if (!res.ok) { setEditStatus('Delete failed.', true); return; }
+  allPlayers = allPlayers.filter(x => x.id !== editingId);
+  editingId = null;
+  document.getElementById('edit-placeholder').style.display = '';
+  document.getElementById('edit-form').classList.remove('visible');
+  renderPlayerTable(document.getElementById('player-search').value);
+});
+
+// ═══════════════════════════════════════════════════════════
+// DASHBOARD TAB
+// ═══════════════════════════════════════════════════════════
+async function loadDashboard() {
+  const res = await api('GET', '/stats');
+  if (!res.ok) return;
+  const s = await res.json();
+
+  const onlineNow = Number(s.online_now) || 0;
+  const active24h = Number(s.active_24h) || 0;
+  const total     = Number(s.total_players) || 0;
+  const totalGold = Number(s.total_gold_all) || 0;
+  const totalKills= Number(s.total_kills) || 0;
+  const banned    = Number(s.banned) || 0;
+  const dead      = Number(s.dead) || 0;
+  const nearDeath = Number(s.near_death) || 0;
+  const captive   = Number(s.captive) || 0;
+  const newToday  = Number(s.new_today) || 0;
+
+  const levels = (s.level_distribution || []);
+  const maxCount = Math.max(1, ...levels.map(l => Number(l.count)));
+  const barHtml = levels.map(l => {
+    const h = Math.round((Number(l.count) / maxCount) * 40);
+    return `<div class="level-bar-col"><div class="level-bar-fill" style="height:${h}px"></div><div class="level-bar-label">${l.level}</div></div>`;
+  }).join('');
+
+  document.getElementById('dashboard-content').innerHTML = `
+    <div class="stat-card green">
+      <div class="stat-label">Online Now</div>
+      <div class="stat-value">${onlineNow}</div>
+      <div class="stat-sub">last 10 minutes</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Active (24h)</div>
+      <div class="stat-value">${active24h}</div>
+      <div class="stat-sub">of ${total} total players</div>
+    </div>
+    <div class="stat-card cyan">
+      <div class="stat-label">Total Gold</div>
+      <div class="stat-value">${totalGold >= 1e6 ? (totalGold/1e6).toFixed(1)+'M' : totalGold.toLocaleString()}</div>
+      <div class="stat-sub">hand + bank combined</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Monster Kills</div>
+      <div class="stat-value">${totalKills.toLocaleString()}</div>
+      <div class="stat-sub">all players combined</div>
+    </div>
+    <div class="stat-card red">
+      <div class="stat-label">Dead / Near Death</div>
+      <div class="stat-value">${dead + nearDeath}</div>
+      <div class="stat-sub">${dead} dead, ${nearDeath} near death</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Captive</div>
+      <div class="stat-value">${captive}</div>
+      <div class="stat-sub">awaiting rescue</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">New Today</div>
+      <div class="stat-value">${newToday}</div>
+      <div class="stat-sub">accounts created</div>
+    </div>
+    <div class="stat-card red">
+      <div class="stat-label">Banned</div>
+      <div class="stat-value">${banned}</div>
+      <div class="stat-sub">accounts</div>
+    </div>
+    <div class="stat-card wide" style="grid-column:span 2">
+      <div class="stat-label">Level Distribution</div>
+      <div class="level-bar">${barHtml || '<span style="color:#333;font-size:12px">No players yet.</span>'}</div>
+    </div>
+  `;
+}
 </script>
 </body>
 </html>

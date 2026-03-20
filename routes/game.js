@@ -140,6 +140,9 @@ router.post('/action', ar(async (req, res) => {
     pendingMessages = messages;
   }
 
+  // Heartbeat — keep last_seen current for "who's online" tracking
+  updatePlayer(player.id, { last_seen: new Date().toISOString() }).catch(() => {});
+
   const { action, param } = req.body;
   const NEAR_DEATH_ALLOWED = ['near_death_wait', 'near_death_accept', 'town', 'logout'];
   const CAPTIVE_ALLOWED    = ['captive_wait', 'captive_buy_freedom', 'captive_escape', 'logout'];

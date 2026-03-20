@@ -16,9 +16,9 @@ async function dragon_fight({ action, player, req, res, pendingMessages }) {
   const dragonHp = req.session.dragonCombat ? req.session.dragonCombat.dragonHp : RED_DRAGON.hp;
   const dr = { ...RED_DRAGON, currentHp: dragonHp, maxHp: RED_DRAGON.hp };
 
-  const { playerDamage, monsterDamage, log } = resolveRound(player, dr, 'attack');
+  const { playerDamage, monsterDamage, poisonDamage, log } = resolveRound(player, dr, 'attack');
   dr.currentHp = Math.max(0, dr.currentHp - playerDamage);
-  const newHp = Math.max(0, player.hit_points - monsterDamage);
+  const newHp = Math.max(0, player.hit_points - monsterDamage - (poisonDamage || 0));
   await updatePlayer(player.id, { hit_points: newHp });
   player = await getPlayer(player.id);
 

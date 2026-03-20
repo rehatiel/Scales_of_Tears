@@ -1671,18 +1671,18 @@ const MAP_LINES = [
   '                     |',
   '                [Stormwatch]',
   '               /             \\',
-  '         [Thornreach]      [Ironhold] ─ [Old Karth]',
-  '          /       \\              |             |',
-  '      [Harood] [Silverkeep] ─ [Velmora]        |',
+  '         [Thornreach]      [Ironhold] - [Old Karth]',
+  '          /       \\       \\       |             |',
+  '      [Harood]-[Silverkeep] - [Velmora]        |',
   '         |           |              |           |',
-  '     [Bracken]   [Duskveil] ─ [Graveport]      |',
+  '     [Bracken]   [Duskveil] - [Graveport]      |',
   '                      \\          /             |',
   '                      [Mirefen]                |',
   '                           \\                   |',
-  '                         [Ashenfall] ────────────',
+  '                         [Ashenfall] -----------',
 ];
 
-function renderWorldMap(currentTownId, connections) {
+function renderWorldMap(currentTownId, connections, playerLevel) {
   return MAP_LINES.map(line => {
     let result = `${c.dgray}  `;
     let lastEnd = 0;
@@ -1691,9 +1691,12 @@ function renderWorldMap(currentTownId, connections) {
     while ((m = re.exec(line)) !== null) {
       result += c.dgray + line.slice(lastEnd, m.index);
       const id = MAP_NAME_TO_ID[m[1]];
-      if (id === currentTownId)        result += `${c.yellow}${m[0]}`;
-      else if (id && connections.includes(id)) result += `${c.green}${m[0]}`;
-      else                             result += `${c.dgray}${m[0]}`;
+      const dest = id ? TOWNS[id] : null;
+      const locked = dest && (dest.minLevel || 1) > playerLevel;
+      if (id === currentTownId)                         result += `${c.yellow}${m[0]}`;
+      else if (id && connections.includes(id) && locked) result += `${c.red}${m[0]}`;
+      else if (id && connections.includes(id))           result += `${c.green}${m[0]}`;
+      else                                               result += `${c.dgray}${m[0]}`;
       lastEnd = m.index + m[0].length;
     }
     result += c.dgray + line.slice(lastEnd);
@@ -1708,10 +1711,10 @@ function getWorldMapScreen(player) {
   const lines = [
     ...renderBanner('title'),
     '',
-    `${c.yellow}  ─── WORLD MAP ───`,
-    `${c.dgray}  ${c.yellow}[You]${c.dgray} = current location   ${c.green}[Green]${c.dgray} = reachable   ${c.dgray}[Gray]${c.dgray} = other`,
+    `${c.yellow}  --- WORLD MAP ---`,
+    `${c.dgray}  ${c.yellow}[You]${c.dgray} = here   ${c.green}[Green]${c.dgray} = reachable   ${c.red}[Red]${c.dgray} = level-locked   ${c.dgray}[Gray]${c.dgray} = farther away`,
     '',
-    ...renderWorldMap(town.id, connections),
+    ...renderWorldMap(town.id, connections, player.level),
     '',
     divider('─', 55),
     `${c.yellow}  You are in: ${c.yellow}${town.name}`,
@@ -1721,8 +1724,9 @@ function getWorldMapScreen(player) {
     ...connections.map(id => {
       const dest = TOWNS[id];
       if (!dest) return null;
-      const gate = (dest.minLevel || 1) > 1 ? `${c.red}  [Lv ${dest.minLevel}+]` : '';
-      return `${c.green}    → ${c.white}${dest.name}${gate}  ${c.dgray}${dest.tagline}`;
+      const locked = (dest.minLevel || 1) > player.level;
+      if (locked) return `${c.red}    → ${c.white}${dest.name}  ${c.red}[Requires level ${dest.minLevel}]`;
+      return `${c.green}    → ${c.white}${dest.name}  ${c.dgray}${dest.tagline}`;
     }).filter(Boolean),
     '',
     `${c.dgray}  A carriage costs ${c.yellow}50 gold${c.dgray} and arrives instantly.`,
@@ -1732,14 +1736,15 @@ function getWorldMapScreen(player) {
 
   const choices = connections.map(id => {
     const dest = TOWNS[id];
-    return dest ? { key: dest.name[0].toUpperCase(), label: `Travel to ${dest.name}`, action: 'travel_options', param: id } : null;
+    if (!dest) return null;
+    const locked = (dest.minLevel || 1) > player.level;
+    return { key: dest.name[0].toUpperCase(), label: `Travel to ${dest.name}`, action: 'travel_options', param: id, disabled: locked };
   }).filter(Boolean);
 
   // Deduplicate keys (e.g. two towns starting with same letter)
   const seen = new Set();
   const deduped = choices.map(ch => {
     if (!seen.has(ch.key)) { seen.add(ch.key); return ch; }
-    // Fall back to next available letter
     for (let i = 0; i < ch.label.length; i++) {
       const k = ch.label[i].toUpperCase();
       if (/[A-Z]/.test(k) && !seen.has(k)) { seen.add(k); return { ...ch, key: k }; }

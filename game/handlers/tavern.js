@@ -1,5 +1,5 @@
 const { getPlayer, updatePlayer, getPlayersInTown, addNews } = require('../../db');
-const { getRandomMonster } = require('../data');
+const { getRandomMonster, TOWNS } = require('../data');
 const { resolvePvP } = require('../combat');
 const { getTownScreen, getTavernScreen, getTavernDrinkScreen, getTavernEncounterScreen } = require('../engine');
 const { pickEncounter, RESOLVERS } = require('../tavern_events');
@@ -181,7 +181,8 @@ async function tavern_buyround({ player, req, res, pendingMessages }) {
 
   const newCharm = Math.min(50, (player.charm || 10) + 1);
   await updatePlayer(player.id, { gold: Number(player.gold) - 50, charm: newCharm });
-  await addNews(`\`6${player.handle}\`% bought the house a round at the Dark Cloak Tavern!`);
+  const tavernTown = (TOWNS[player.current_town || 'harood'] || TOWNS.harood).name;
+  await addNews(`\`6${player.handle}\`% bought the house a round at the tavern in ${tavernTown}!`);
   player = await getPlayer(player.id);
 
   return res.json({ ...getTavernScreen(player, await townPlayers(player)), pendingMessages: [

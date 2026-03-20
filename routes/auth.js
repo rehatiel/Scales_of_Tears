@@ -31,6 +31,8 @@ router.post('/login', async (req, res) => {
   const valid = await bcrypt.compare(password, player.password_hash);
   if (!valid) return res.status(401).json({ error: 'Invalid username or password.' });
 
+  if (player.banned) return res.status(403).json({ error: 'This account has been banned.' });
+
   req.session.playerId = player.id;
 
   let newDayMessages = [];
@@ -56,6 +58,20 @@ router.get('/me', async (req, res) => {
   const player = await getPlayer(req.session.playerId);
   if (!player) return res.status(401).json({ error: 'Player not found.' });
   res.json({ ok: true, username: player.username, setup_complete: !!player.setup_complete });
+});
+
+// GET /api/auth/impersonate/:token — one-time admin impersonation
+router.get('/impersonate/:token', async (req, res) => {
+  const adminRouter = require('./admin');
+  const tokens = adminRouter.impersonateTokens;
+  const entry = tokens && tokens.get(req.params.token);
+  if (!entry || Date.now() > entry.expires) {
+    tokens && tokens.delete(req.params.token);
+    return res.status(400).send('<p>Impersonation token invalid or expired.</p>');
+  }
+  tokens.delete(req.params.token);
+  req.session.playerId = entry.playerId;
+  res.redirect('/');
 });
 
 module.exports = router;

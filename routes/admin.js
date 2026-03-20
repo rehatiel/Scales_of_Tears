@@ -1,5 +1,7 @@
 const express = require('express');
-const { pool, getAllPlayers, getRecentNews, addNews, updatePlayer, TODAY, getBannerOverride, setBanner, deleteBanner, getAllBanners } = require('../db');
+const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
+const { pool, getAllPlayers, getRecentNews, addNews, updatePlayer, TODAY, getBannerOverride, setBanner, deleteBanner, getAllBanners, loadBanners } = require('../db');
 const { runNewDay } = require('../game/newday');
 const { LOCATION_BANNERS } = require('../game/engine');
 
@@ -17,18 +19,153 @@ router.use((req, res, next) => {
 
 const ar = fn => (req, res, next) => fn(req, res, next).catch(next);
 
-// GET /api/admin/players — list all players
+// ── Players ───────────────────────────────────────────────────────────────────
+
+// GET /api/admin/players — list all players (full records)
 router.get('/players', ar(async (req, res) => {
-  const { rows } = await pool.query(
-    'SELECT id, username, handle, level, class, exp, gold, dead, setup_complete, last_seen, created_at FROM players ORDER BY level DESC, exp DESC'
-  );
+  const { rows } = await pool.query('SELECT * FROM players ORDER BY level DESC, exp DESC');
   res.json(rows);
 }));
 
+// GET /api/admin/players/:id — single player full record
+router.get('/players/:id', ar(async (req, res) => {
+  const { rows } = await pool.query('SELECT * FROM players WHERE id = $1', [req.params.id]);
+  if (!rows[0]) return res.status(404).json({ error: 'Player not found' });
+  res.json(rows[0]);
+}));
+
+// PUT /api/admin/players/:id — update player fields (whitelist enforced)
+const EDITABLE_FIELDS = new Set([
+  'handle', 'sex', 'class', 'level', 'exp', 'gold', 'bank', 'gems',
+  'hit_points', 'hit_max', 'strength', 'defense', 'charm', 'stamina',
+  'kills', 'lays', 'kids', 'has_horse', 'married_to',
+  'dead', 'near_death', 'near_death_by', 'poisoned',
+  'captive', 'captive_location', 'camping',
+  'travel_to', 'travel_segments_done', 'travel_segments_total',
+  'current_town', 'weapon_name', 'weapon_num', 'arm_name', 'arm_num',
+  'antidote_owned', 'forge_weapon_upgraded', 'forge_armor_upgraded',
+  'setup_complete', 'skill_points', 'skill_uses_left',
+  'fights_left', 'human_fights_left', 'banned',
+]);
+
+router.put('/players/:id', ar(async (req, res) => {
+  const { id } = req.params;
+  const fields = req.body;
+  const safe = {};
+  for (const [k, v] of Object.entries(fields)) {
+    if (EDITABLE_FIELDS.has(k)) safe[k] = v;
+  }
+  if (!Object.keys(safe).length) return res.status(400).json({ error: 'No valid fields' });
+  await updatePlayer(parseInt(id), safe);
+  const { rows } = await pool.query('SELECT * FROM players WHERE id = $1', [id]);
+  res.json(rows[0]);
+}));
+
+// DELETE /api/admin/players/:id — permanently remove a player
+router.delete('/players/:id', ar(async (req, res) => {
+  const { id } = req.params;
+  const { rows } = await pool.query('SELECT id, handle FROM players WHERE id = $1', [id]);
+  if (!rows[0]) return res.status(404).json({ error: 'Player not found' });
+  await pool.query('DELETE FROM players WHERE id = $1', [id]);
+  await addNews(`\`8[ADMIN] Player "${rows[0].handle}" has been removed.`);
+  res.json({ ok: true });
+}));
+
+// POST /api/admin/players/:id/password — reset a player's password
+router.post('/players/:id/password', ar(async (req, res) => {
+  const { id } = req.params;
+  const { password } = req.body;
+  if (!password || password.length < 4) return res.status(400).json({ error: 'Password must be at least 4 characters' });
+  const hash = await bcrypt.hash(password, 10);
+  await pool.query('UPDATE players SET password_hash = $1 WHERE id = $2', [hash, id]);
+  res.json({ ok: true });
+}));
+
+// POST /api/admin/players/:id/ban — ban or unban a player
+router.post('/players/:id/ban', ar(async (req, res) => {
+  const { id } = req.params;
+  const { banned } = req.body;
+  await pool.query('UPDATE players SET banned = $1 WHERE id = $2', [banned ? 1 : 0, id]);
+  res.json({ ok: true, banned: !!banned });
+}));
+
+// ── Impersonate ────────────────────────────────────────────────────────────────
+
+// In-memory one-time tokens: token -> { playerId, expires }
+const impersonateTokens = new Map();
+
+// POST /api/admin/players/:id/impersonate — generate a one-time login token
+router.post('/players/:id/impersonate', ar(async (req, res) => {
+  const { rows } = await pool.query('SELECT id, handle FROM players WHERE id = $1', [req.params.id]);
+  if (!rows[0]) return res.status(404).json({ error: 'Player not found' });
+  const token = crypto.randomBytes(24).toString('hex');
+  impersonateTokens.set(token, { playerId: rows[0].id, expires: Date.now() + 5 * 60 * 1000 });
+  res.json({ ok: true, token });
+}));
+
+// Export tokens map so auth.js can read it
+router.impersonateTokens = impersonateTokens;
+
+// ── Stats ─────────────────────────────────────────────────────────────────────
+
+// GET /api/admin/stats — dashboard overview
+router.get('/stats', ar(async (req, res) => {
+  const [totals, activity, levels, economy, pvp] = await Promise.all([
+    pool.query(`SELECT
+      COUNT(*) FILTER (WHERE setup_complete = 1)             AS total_players,
+      COUNT(*) FILTER (WHERE setup_complete = 0)             AS incomplete,
+      COUNT(*) FILTER (WHERE banned = 1)                     AS banned,
+      COUNT(*) FILTER (WHERE dead = 1)                       AS dead,
+      COUNT(*) FILTER (WHERE near_death = 1)                 AS near_death,
+      COUNT(*) FILTER (WHERE captive = 1)                    AS captive,
+      COUNT(*) FILTER (WHERE camping = 1)                    AS camping,
+      COUNT(*) FILTER (WHERE travel_to IS NOT NULL AND travel_to != '') AS travelling
+    FROM players`),
+    pool.query(`SELECT
+      COUNT(*) FILTER (WHERE last_seen > NOW() - INTERVAL '10 minutes') AS online_now,
+      COUNT(*) FILTER (WHERE last_seen > NOW() - INTERVAL '24 hours')   AS active_24h,
+      COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '24 hours')  AS new_today
+    FROM players`),
+    pool.query(`SELECT level, COUNT(*) AS count FROM players WHERE setup_complete = 1 GROUP BY level ORDER BY level`),
+    pool.query(`SELECT
+      COALESCE(SUM(gold), 0)        AS total_gold_hand,
+      COALESCE(SUM(bank), 0)        AS total_gold_bank,
+      COALESCE(SUM(gold + bank), 0) AS total_gold_all
+    FROM players WHERE setup_complete = 1`),
+    pool.query(`SELECT
+      COALESCE(SUM(kills), 0)             AS total_kills,
+      COALESCE(SUM(human_fights_left), 0) AS pvp_fights_remaining
+    FROM players WHERE setup_complete = 1`),
+  ]);
+  res.json({
+    ...totals.rows[0],
+    ...activity.rows[0],
+    ...economy.rows[0],
+    ...pvp.rows[0],
+    level_distribution: levels.rows,
+  });
+}));
+
+// ── Hall of Kings ──────────────────────────────────────────────────────────────
+
+// GET /api/admin/hall-of-kings — historical dragon kill records
+router.get('/hall-of-kings', ar(async (req, res) => {
+  const { rows } = await pool.query('SELECT * FROM hall_of_kings ORDER BY id ASC');
+  res.json(rows);
+}));
+
+// ── News ──────────────────────────────────────────────────────────────────────
+
 // GET /api/admin/news — recent news
 router.get('/news', ar(async (req, res) => {
-  const { rows } = await pool.query('SELECT * FROM news ORDER BY id DESC LIMIT 50');
+  const { rows } = await pool.query('SELECT * FROM news ORDER BY id DESC LIMIT 100');
   res.json(rows);
+}));
+
+// DELETE /api/admin/news/:id — remove a news entry
+router.delete('/news/:id', ar(async (req, res) => {
+  await pool.query('DELETE FROM news WHERE id = $1', [req.params.id]);
+  res.json({ ok: true });
 }));
 
 // GET /api/admin/migrations — applied migrations
@@ -56,6 +193,26 @@ router.post('/new-day', ar(async (req, res) => {
   }
   await addNews('`$[ADMIN] A new day has been triggered manually.');
   res.json({ ok: true, playersUpdated: count });
+}));
+
+// GET /api/admin/new-day/preview — show what a new day would change (dry run)
+router.get('/new-day/preview', ar(async (req, res) => {
+  const { rows } = await pool.query('SELECT * FROM players WHERE setup_complete = 1');
+  const preview = [];
+  for (const player of rows) {
+    const { updates, messages } = await runNewDay(player, true);
+    const changes = [];
+    if (updates.level && updates.level !== player.level) changes.push(`Level ${player.level} → ${updates.level}`);
+    if (updates.dead === 1) changes.push('Dies (near-death expired)');
+    if (updates.dead === 0 && player.dead) changes.push('Reincarnated');
+    if (updates.bank && updates.bank !== player.bank) {
+      const interest = updates.bank - player.bank;
+      if (interest > 0) changes.push(`Bank +${interest.toLocaleString()} gold interest`);
+    }
+    if (updates.captive === 0 && player.captive) changes.push('Escapes captivity');
+    preview.push({ id: player.id, handle: player.handle, level: player.level, changes, messageCount: messages.length });
+  }
+  res.json(preview);
 }));
 
 // POST /api/admin/announce — post a system news message
@@ -112,6 +269,95 @@ router.delete('/banners/:key', ar(async (req, res) => {
   await deleteBanner(key);
   const hardcoded = LOCATION_BANNERS[key];
   res.json({ ok: true, key, revertedTo: hardcoded ? hardcoded.lines : null });
+}));
+
+// ── Backup / Restore ──────────────────────────────────────────────────────────
+
+// GET /api/admin/backup — export all game data as JSON
+router.get('/backup', ar(async (req, res) => {
+  const [players, news, banners, hok] = await Promise.all([
+    pool.query('SELECT * FROM players ORDER BY id ASC'),
+    pool.query('SELECT * FROM news ORDER BY id ASC'),
+    pool.query('SELECT * FROM banners ORDER BY key ASC'),
+    pool.query('SELECT * FROM hall_of_kings ORDER BY id ASC'),
+  ]);
+  const payload = {
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    tables: {
+      players:       players.rows,
+      news:          news.rows,
+      banners:       banners.rows,
+      hall_of_kings: hok.rows,
+    },
+  };
+  res.setHeader('Content-Disposition', `attachment; filename="lord-backup-${Date.now()}.json"`);
+  res.setHeader('Content-Type', 'application/json');
+  res.json(payload);
+}));
+
+// POST /api/admin/restore — import a backup JSON (replaces all rows)
+router.post('/restore', ar(async (req, res) => {
+  const { tables, version } = req.body;
+  if (version !== 1 || !tables) return res.status(400).json({ error: 'Invalid backup format' });
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    if (Array.isArray(tables.players) && tables.players.length) {
+      await client.query('DELETE FROM players');
+      for (const p of tables.players) {
+        const cols = Object.keys(p);
+        const vals = cols.map((_, i) => `$${i + 1}`);
+        await client.query(
+          `INSERT INTO players (${cols.join(',')}) VALUES (${vals.join(',')}) ON CONFLICT (id) DO NOTHING`,
+          cols.map(c => p[c])
+        );
+      }
+    }
+
+    if (Array.isArray(tables.news) && tables.news.length) {
+      await client.query('DELETE FROM news');
+      for (const n of tables.news) {
+        await client.query(
+          'INSERT INTO news (id, day, message) VALUES ($1, $2, $3) ON CONFLICT (id) DO NOTHING',
+          [n.id, n.day, n.message]
+        );
+      }
+    }
+
+    if (Array.isArray(tables.banners) && tables.banners.length) {
+      await client.query('DELETE FROM banners');
+      for (const b of tables.banners) {
+        await client.query(
+          'INSERT INTO banners (key, lines, updated_at) VALUES ($1, $2, $3) ON CONFLICT (key) DO NOTHING',
+          [b.key, JSON.stringify(b.lines), b.updated_at]
+        );
+      }
+      await loadBanners();
+    }
+
+    if (Array.isArray(tables.hall_of_kings) && tables.hall_of_kings.length) {
+      await client.query('DELETE FROM hall_of_kings');
+      for (const h of tables.hall_of_kings) {
+        const cols = Object.keys(h);
+        const vals = cols.map((_, i) => `$${i + 1}`);
+        await client.query(
+          `INSERT INTO hall_of_kings (${cols.join(',')}) VALUES (${vals.join(',')}) ON CONFLICT (id) DO NOTHING`,
+          cols.map(c => h[c])
+        );
+      }
+    }
+
+    await client.query('COMMIT');
+    res.json({ ok: true });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 }));
 
 module.exports = router;
