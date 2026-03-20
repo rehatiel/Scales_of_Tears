@@ -175,9 +175,10 @@ async function rescue({ player, req, res, pendingMessages }) {
 
 async function rescue_skip({ player, req, res, pendingMessages }) {
   req.session.rescueTarget = null;
-  if (player.fights_left <= 0)
-    return res.json({ ...getTownScreen(player), pendingMessages: ['`@No forest fights left today.'] });
-  await updatePlayer(player.id, { fights_left: player.fights_left - 1 });
+  const stam = player.stamina ?? player.fights_left ?? 10;
+  if (stam <= 0)
+    return res.json({ ...getTownScreen(player), pendingMessages: ['`@You are too exhausted to enter the forest!'] });
+  await updatePlayer(player.id, { stamina: stam - 1 });
   player = await getPlayer(player.id);
   const monster = getRandomMonster(Number(player.level));
   req.session.combat = { monster, round: 1, history: [] };

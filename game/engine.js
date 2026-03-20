@@ -90,7 +90,7 @@ const LOCATION_BANNERS = {
       '`2 / | \\ / | \\ `0/ | \\ / | \\`2 / | \\ / | \\`0 / | \\ / | \\`2 / | \\ / | \\',
       '`8 | | |  | | |  | | |  | | |  | | |  | | |  | | |  | | |  | | |',
       '`8  \\|/    \\|/    \\|/    \\|/    \\|/    \\|/    \\|/    \\|/    \\|/',
-      '`8·`2·`8· `7Something moves between the trees. It is not alone.`8 ·`2·`8·',
+      '`8   `@°°`8      `@°°`8        `@°°`8     `@°°`8       `@°°`8     `@°°`8        `@°°`8      `@°°`8   ',
       '`2~`8-`2~`8-`2~`8-`2~ `0T H E   D A R K   F O R E S T `2~`8-`2~`8-`2~`8-`2~`8-`2~`8-`2~',
     ],
     colors: ['dblue','dgreen','dgreen','dgray','dgray','gray','dgreen'],
@@ -166,8 +166,8 @@ const LOCATION_BANNERS = {
       '`1`b░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░`a',
       '`7   (o)     (o)    `8┌────────────┐    `6│ │ │ │ │ │ │',
       '`7  \\+/ `8·   \\+/    `8│            │    `6│ │ │ │ │ │ │',
-      '`7  /|\\  `8·  /|\\    `8│ two guards │    `6│ │ │ │ │ │ │',
-      '`7 / | \\   / | \\   `8│  sparring  │    `6│ │ │ │ │ │ │',
+      '`7  /|\\  `8·  /|\\    `8│  (o)  (o) │    `6│ │ │ │ │ │ │',
+      '`7 / | \\   / | \\   `8│   ><-><   │    `6│ │ │ │ │ │ │',
       '`8▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄└────────────┘▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄',
       '`7~`8·`7~ `$T R A I N I N G   Y A R D `7~`8·`7~`8·`7~`8·`7~`8·`7~`8·`7~`8·`7~`8·`7~`8·`7~`8·`7~`8·`7~`8·`7~`8·`7~`8·',
     ],
@@ -177,10 +177,10 @@ const LOCATION_BANNERS = {
   tavern: {
     lines: [
       '`8`a▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓`a',
-      '`8 `6░`8 `6░`8 `6░`8 `6░`8    `6·`8 `7♦ `6·`8 `7♦ `6·`8    `6░`8 `6░`8 `6░`8 `6░`8   `7║ `8·`6·`8·`6·`8·`6·  `7║',
-      '`8 `6▒▒▒▒`8        `6~`7 ·   · `6~`8        `6▒▒▒▒`8   `7║`8  `6figures hunch `7║',
-      '`8 `6▓▓▓▓`8   `7╔═══╗`8   `6·  `$░`6  ·`8   `7╔═══╗`8   `6▓▓▓▓`8   `7║`8  `6in corners  `7║',
-      '`8 `6████`8   `7║ `$▄ `7║`8   `6· `$░░`6 ·`8   `7║ `$▄ `7║`8   `6████`8   `7║`8  `6watching   `7║',
+      '`8 `6░`8 `6░`8 `6░`8 `6░`8    `6·`8 `7♦ `6·`8 `7♦ `6·`8    `6░`8 `6░`8 `6░`8 `6░`8 `6░`8 `6░`8 `6░`8 `6░`8 `6░`8 `6░`8 `6░`8 `6░',
+      '`8 `6▒▒▒▒`8        `6~`7 ·   · `6~`8        `6▒▒▒▒`8        `6▒▒▒▒',
+      '`8 `6▓▓▓▓`8   `7╔═══╗`8   `6·  `$░`6  ·`8   `7╔═══╗`8   `6▓▓▓▓`8   `7╔═══╗',
+      '`8 `6████`8   `7║ `$▄ `7║`8   `6· `$░░`6 ·`8   `7║ `$▄ `7║`8   `6████`8   `7║ `$▄ `7║',
       '`8▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄',
       '`6~`8·`6~`8· `$T H E   D A R K   C L O A K   T A V E R N `6~`8·`6~`8·`6~`8·`6~`8·`6~`8·`6~`8·',
     ],
@@ -647,7 +647,7 @@ function getForestCombatScreen(player, monster, roundLog, won, dead, round = 1, 
     lines.push(`${c.yellow}  [F]${c.white} Enter the Forest Again`);
     const victoryChoices = [
       { key: 'T', label: 'Return to Town', action: 'town' },
-      { key: 'F', label: 'Fight Again', action: 'forest', disabled: player.fights_left === 0 },
+      { key: 'F', label: 'Fight Again', action: 'forest', disabled: (player.stamina ?? player.fights_left ?? 10) === 0 },
       { key: 'D', label: 'Go Deeper', action: 'forest_deeper' },
     ];
     return buildScreen('Victory!', lines, victoryChoices);
@@ -909,7 +909,7 @@ function getTavernScreen(player, otherPlayers) {
     others.slice(0, 15).forEach((p, i) => {
       const col = p.dead ? c.dgray : (p.times_won > 0 ? c.yellow : c.white);
       const status = p.dead ? `${c.red}(dead)` : (p.times_won > 0 ? `${c.yellow}(King x${p.times_won})` : '');
-      lines.push(`${c.yellow}  ${rpad(i + 1, 4)}${col}${pad(p.handle, 22)}${pad(p.level, 8)}${pad(CLASS_NAMES[p.class], 16)}${status}`);
+      lines.push(`${c.yellow}  ${pad(i + 1, 4)}${col}${pad(p.handle, 22)}${pad(p.level, 8)}${pad(CLASS_NAMES[p.class], 16)}${status}`);
     });
   }
 

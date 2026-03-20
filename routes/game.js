@@ -1,11 +1,33 @@
 const express = require('express');
 const { getPlayer, updatePlayer, addNews, TODAY } = require('../db');
-const { LEVEL_UP_GAINS } = require('../game/data');
+const { LEVEL_UP_GAINS, TOWNS } = require('../game/data');
 const { runNewDay } = require('../game/newday');
 const { getTownScreen, getSetupScreen, getNearDeathWaitingScreen } = require('../game/engine');
 
 const router = express.Router();
 const ar = fn => (req, res, next) => fn(req, res, next).catch(next);
+
+const SERVER_START_DAY = Math.floor(Date.now() / 86400000);
+
+function buildPlayerStatus(player) {
+  const gameDay = Math.floor(Date.now() / 86400000);
+  const hour = new Date().getUTCHours();
+  const timeOfDay = hour < 6 ? 'Night' : hour < 12 ? 'Morning' : hour < 18 ? 'Afternoon' : 'Evening';
+  const townName = (TOWNS[player.current_town || 'harood'] || TOWNS.harood).name;
+  return {
+    name:      player.handle,
+    hp:        player.hit_points,
+    hpMax:     player.hit_max,
+    gold:      Number(player.gold),
+    stamina:   player.stamina ?? player.fights_left ?? 10,
+    level:     player.level,
+    location:  townName,
+    poisoned:  player.poisoned || 0,
+    dead:      player.dead || 0,
+    lordDay:   gameDay - SERVER_START_DAY + 1,
+    timeOfDay,
+  };
+}
 
 // All action handlers, keyed by action name
 const HANDLERS = {
@@ -19,6 +41,22 @@ const HANDLERS = {
 // Auth guard
 router.use((req, res, next) => {
   if (!req.session.playerId) return res.status(401).json({ error: 'Not logged in.' });
+  next();
+});
+
+// Inject player status into every JSON response
+router.use((req, res, next) => {
+  const origJson = res.json.bind(res);
+  res.json = function(data) {
+    if (data && typeof data === 'object' && !data.error && req.session?.playerId) {
+      getPlayer(req.session.playerId).then(p => {
+        if (p) data.status = buildPlayerStatus(p);
+        origJson(data);
+      }).catch(() => origJson(data));
+    } else {
+      origJson(data);
+    }
+  };
   next();
 });
 

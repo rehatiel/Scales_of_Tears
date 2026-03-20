@@ -113,7 +113,7 @@ async function tavern_drink_order({ player, param, req, res, pendingMessages }) 
 
   const drinksToday = player.drinks_today || 0;
   if (drinksToday >= 3)
-    return res.json({ ...getTavernDrinkScreen(player), pendingMessages: ["``7You've had enough drinks today. Hrok cuts you off."] });
+    return res.json({ ...getTavernDrinkScreen(player), pendingMessages: [`\`7You've had enough drinks today. Hrok cuts you off.`] });
   if (Number(player.gold) < chosen.cost)
     return res.json({ ...getTavernDrinkScreen(player), pendingMessages: [`\`@Not enough gold! A ${chosen.name} costs ${chosen.cost} gold.`] });
 

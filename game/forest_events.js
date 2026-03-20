@@ -222,7 +222,7 @@ const FOREST_EVENTS = [
       "  /| |\\           ",
       " (_/ \\_)          ",
       "   | |             ",
-      " ~~fire~~          ",
+      "  )~(~)~(          ",
     ],
     artColor: 'brown',
     intro: [
@@ -342,8 +342,8 @@ const FOREST_EVENTS = [
       "  /|\\             ",
       "  / \\             ",
       " /   \\            ",
-      "~ground~           ",
-      "  zzz              ",
+      "~~~~~~~~~~~~~~~~~~~",
+      "  . . .            ",
     ],
     artColor: 'brown',
     intro: [
@@ -397,7 +397,7 @@ const FOREST_EVENTS = [
       "~ *    *      ~    ",
       " ~    *  *   ~     ",
       "  ~~~~~~~~~~~      ",
-      "  (shimmers)       ",
+      "  ~ ~ ~ ~ ~        ",
     ],
     artColor: 'cyan',
     intro: [
@@ -459,7 +459,7 @@ const FOREST_EVENTS = [
       "   | *** |         ",
       "   |_____|         ",
       "  /       \\       ",
-      " ~~~altar~~~       ",
+      " ___________       ",
     ],
     artColor: 'yellow',
     intro: [
@@ -657,9 +657,9 @@ const FOREST_EVENTS = [
       "  /\\    /\\         ",
       " /  \\  /  \\       ",
       "/    \\/    \\      ",
-      "|  [camp]  |       ",
-      "|___fire___|       ",
-      "   (cold)          ",
+      "|  []  []  |       ",
+      "|____::____|       ",
+      "   .  .  .         ",
     ],
     artColor: 'brown',
     intro: [
@@ -726,7 +726,7 @@ const FOREST_EVENTS = [
       " / \\___/           ",
       " \\ /  \\           ",
       "  V    V           ",
-      " (raven)           ",
+      " ~~~~^~~~~~        ",
     ],
     artColor: 'dgray',
     intro: [
@@ -781,11 +781,11 @@ const FOREST_EVENTS = [
     minLevel: 2,
     art: [
       " ---|-----|---      ",
-      "    |TOLL |         ",
-      "    | 100 |         ",
+      "    |>--<-|         ",
+      "    |$$$$$|         ",
       "    |_____|         ",
       "  -/-------\\-      ",
-      "  (road)            ",
+      "  ___________       ",
     ],
     artColor: 'dred',
     intro: [
@@ -866,7 +866,7 @@ const FOREST_EVENTS = [
       " | [] [] []|       ",
       " |_________|       ",
       "  O       O        ",
-      " (forest wares)    ",
+      "  ~~~ ~~~ ~~~      ",
     ],
     artColor: 'brown',
     intro: [
@@ -929,7 +929,7 @@ const FOREST_EVENTS = [
       "* (_) (_) (_) *    ",
       ".  *   *   *  .    ",
       " * . * . * .       ",
-      "  (fae circle)     ",
+      "  * . * . * .      ",
     ],
     artColor: 'magenta',
     intro: [
@@ -1003,7 +1003,7 @@ const FOREST_EVENTS = [
       "   |  ___  |       ",
       "   \\_______/      ",
       "      |||          ",
-      "    (stake)        ",
+      "   __|_|__         ",
     ],
     artColor: 'dgray',
     intro: [
@@ -1074,7 +1074,7 @@ const FOREST_EVENTS = [
     minLevel: 1,
     art: [
       "~~~~~~~~~~~~~~~~~~~~",
-      "~~~  [bridge]  ~~~~~",
+      "~~~~~~~~~~~~~~~~~~~~",
       "~~~~~~~~~~~~~~~~~~~~",
       "   |         |      ",
       "~~~|_________|~~~~~~",
@@ -1148,7 +1148,7 @@ const FOREST_EVENTS = [
       "|  N   [X]   |     ",
       "|   \\ /      |    ",
       " \\___________/    ",
-      "  (scroll case)    ",
+      "  ___________      ",
     ],
     artColor: 'yellow',
     intro: [
@@ -1213,10 +1213,10 @@ const FOREST_EVENTS = [
     art: [
       "  [=] [=] [=]      ",
       " /___________\\    ",
-      " | (hidden)  |     ",
+      " | [#] [#] [#]|    ",
       " |___________|     ",
-      "  ~brushwork~      ",
-      " (chalk mark: >)   ",
+      "  ~~~~~~~~~~~      ",
+      "     >             ",
     ],
     artColor: 'brown',
     intro: [
@@ -1282,8 +1282,8 @@ const FOREST_EVENTS = [
       " |  * *  |         ",
       " | *   * |         ",
       " |_______|         ",
-      " /~sparks~\\       ",
-      "(arcane ruin)      ",
+      " /*~*~*~*~\\       ",
+      "_____________      ",
     ],
     artColor: 'cyan',
     intro: [
@@ -1358,10 +1358,10 @@ const FOREST_EVENTS = [
     art: [
       "  .---------.      ",
       "  |  * * *  |      ",
-      "  | [RUNES] |      ",
+      "  | =-+-=+= |      ",
       "  |_________|      ",
-      " /~~~blood~~~\\    ",
-      "(dark altar)       ",
+      " /~~~~~~~~~~~\\    ",
+      "_______________    ",
     ],
     artColor: 'dred',
     intro: [
@@ -1430,7 +1430,7 @@ const FOREST_EVENTS = [
       " \\____________/   ",
       "   / \\ / \\        ",
       "  *   *   *        ",
-      " (storm coming)    ",
+      " /|\\ /|\\ /|\\     ",
     ],
     artColor: 'dgray',
     intro: [
@@ -1501,7 +1501,7 @@ const FOREST_EVENTS = [
       "  '--[#]--'        ",
       "  |[#####]|        ",
       "  |_/ * \\_|       ",
-      " (Harood sigil)    ",
+      "   \\______/        ",
     ],
     artColor: 'dgray',
     intro: [

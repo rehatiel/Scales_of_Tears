@@ -51,7 +51,7 @@ async function bank_deposit({ player, param, req, res, pendingMessages }) {
   const amount = Math.max(0, parseInt(param) || 0);
   if (!amount) return res.json({ ...getBankScreen(player), pendingMessages: ['`7No amount specified.'] });
   if (amount > Number(player.gold))
-    return res.json({ ...getBankScreen(player), pendingMessages: ["``@You don't have that much gold!"] });
+    return res.json({ ...getBankScreen(player), pendingMessages: [`\`@You don't have that much gold!`] });
   await updatePlayer(player.id, { gold: Number(player.gold) - amount, bank: Number(player.bank) + amount });
   player = await getPlayer(player.id);
   return res.json({ ...getBankScreen(player), pendingMessages: [`\`0Deposited \`$${amount.toLocaleString()}\`0 gold.`] });
@@ -61,7 +61,7 @@ async function bank_withdraw({ player, param, req, res, pendingMessages }) {
   const amount = Math.max(0, parseInt(param) || 0);
   if (!amount) return res.json({ ...getBankScreen(player), pendingMessages: ['`7No amount specified.'] });
   if (amount > Number(player.bank))
-    return res.json({ ...getBankScreen(player), pendingMessages: ["``@You don't have that much in the bank!"] });
+    return res.json({ ...getBankScreen(player), pendingMessages: [`\`@You don't have that much in the bank!`] });
   await updatePlayer(player.id, { gold: Number(player.gold) + amount, bank: Number(player.bank) - amount });
   player = await getPlayer(player.id);
   return res.json({ ...getBankScreen(player), pendingMessages: [`\`0Withdrew \`$${amount.toLocaleString()}\`0 gold.`] });
@@ -106,7 +106,7 @@ async function training_action({ action, player, req, res, pendingMessages }) {
     return res.json({ ...getTrainingScreen(player), pendingMessages: ['`@You are too exhausted to train. Drink at the tavern to recover stamina.'] });
   const trainedToday = player.training_today || 0;
   if (trainedToday >= 5)
-    return res.json({ ...getTrainingScreen(player), pendingMessages: ["``7You've already trained five times today. Come back tomorrow."] });
+    return res.json({ ...getTrainingScreen(player), pendingMessages: [`\`7You've already trained five times today. Come back tomorrow.`] });
 
   const isSpar = action === 'training_spar';
   const expGain = isSpar ? player.level * 20 : player.level * 12;
@@ -149,7 +149,7 @@ async function buy_weapon({ player, param, req, res, pendingMessages }) {
   const weapon = getWeaponByNum(num);
   if (!weapon) return res.json(getWeaponShopScreen(player));
   if (Number(player.gold) < weapon.price)
-    return res.json({ ...getWeaponShopScreen(player), pendingMessages: ["``@You can't afford that!"] });
+    return res.json({ ...getWeaponShopScreen(player), pendingMessages: [`\`@You can't afford that!`] });
   if (player.weapon_num === weapon.num)
     return res.json({ ...getWeaponShopScreen(player), pendingMessages: ['`7You already have that weapon.'] });
 
@@ -170,7 +170,7 @@ async function buy_armor({ player, param, req, res, pendingMessages }) {
   const armor = getArmorByNum(num);
   if (!armor) return res.json(getArmorShopScreen(player));
   if (Number(player.gold) < armor.price)
-    return res.json({ ...getArmorShopScreen(player), pendingMessages: ["``@You can't afford that!"] });
+    return res.json({ ...getArmorShopScreen(player), pendingMessages: [`\`@You can't afford that!`] });
   if (player.arm_num === armor.num)
     return res.json({ ...getArmorShopScreen(player), pendingMessages: ['`7You already have that armour.'] });
 

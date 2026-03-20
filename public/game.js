@@ -46,11 +46,35 @@ const inputLabel   = document.getElementById('input-label');
 const gameInput    = document.getElementById('game-input');
 const inputSubmit  = document.getElementById('input-submit');
 const inputCancel  = document.getElementById('input-cancel');
+const statusBar    = document.getElementById('status-bar');
 
 // ── Screen switchers ──────────────────────────────────────────────────────────
-function showAuth()  { authScreen.classList.remove('hidden');  setupScreen.classList.add('hidden'); gameScreen.classList.add('hidden'); }
-function showSetup() { authScreen.classList.add('hidden');     setupScreen.classList.remove('hidden'); gameScreen.classList.add('hidden'); wizardGoTo(1); }
+function showAuth()  { authScreen.classList.remove('hidden');  setupScreen.classList.add('hidden'); gameScreen.classList.add('hidden'); statusBar.classList.add('hidden'); }
+function showSetup() { authScreen.classList.add('hidden');     setupScreen.classList.remove('hidden'); gameScreen.classList.add('hidden'); statusBar.classList.add('hidden'); wizardGoTo(1); }
 function showGame()  { authScreen.classList.add('hidden');     setupScreen.classList.add('hidden'); gameScreen.classList.remove('hidden'); }
+
+// ── Status bar ────────────────────────────────────────────────────────────────
+function updateStatusBar(status) {
+  if (!status) return;
+  const hpPct = status.hpMax > 0 ? status.hp / status.hpMax : 1;
+  const hpClass = hpPct > 0.5 ? 'c0' : hpPct > 0.25 ? 'cd' : 'ca';
+  document.getElementById('sb-name').innerHTML  = `<span class="cd">${escHtml(status.name)}</span>`;
+  document.getElementById('sb-hp').innerHTML    = `<span class="c8">HP </span><span class="${hpClass}">${status.hp}/${status.hpMax}</span>`;
+  document.getElementById('sb-stamina').innerHTML = `<span class="c8">STM </span><span class="c3">${status.stamina}/10</span>`;
+  document.getElementById('sb-gold').innerHTML  = `<span class="c8">GOLD </span><span class="cd">${status.gold.toLocaleString()}</span>`;
+  document.getElementById('sb-level').innerHTML = `<span class="c8">LV </span><span class="cp">${status.level}</span>`;
+  document.getElementById('sb-location').innerHTML = `<span class="c8">@ </span><span class="ce">${escHtml(status.location)}</span>`;
+  document.getElementById('sb-time').innerHTML  = `<span class="c6">${escHtml(status.timeOfDay)}</span>`;
+  document.getElementById('sb-day').innerHTML   = `<span class="c8">Day of our Lord </span><span class="c6">${status.lordDay}</span>`;
+  const poisonEl = document.getElementById('sb-poison');
+  if (status.poisoned) {
+    poisonEl.innerHTML = `<span class="sb-sep">│</span><span class="c2">POISONED</span>`;
+    poisonEl.classList.remove('hidden');
+  } else {
+    poisonEl.classList.add('hidden');
+  }
+  statusBar.classList.remove('hidden');
+}
 
 // ── Game render ───────────────────────────────────────────────────────────────
 let currentScreen = null;
@@ -93,6 +117,8 @@ function renderScreen(data) {
   if (data.needsInput) {
     showInput(data.inputLabel || 'Enter:', data.inputAction, '', data.inputType || 'text', data.inputParam || '');
   }
+
+  if (data.status) updateStatusBar(data.status);
 
   window.scrollTo(0, 0);
 }

@@ -114,7 +114,7 @@ html, body {
 /* ── Game Terminal ────────────────────────────────────────── */
 #game-screen {
   align-items: flex-start;
-  padding: 16px;
+  padding: 16px 16px 56px;
 }
 
 #terminal {
@@ -472,6 +472,30 @@ html, body {
   .choice-btn { font-size: 14px; padding: 10px 16px; }
   #game-input { font-size: 16px; } /* prevents iOS zoom on focus */
 }
+
+/* ── Status Bar ──────────────────────────────────────────── */
+#status-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: #050505;
+  border-top: 1px solid var(--border);
+  z-index: 100;
+  padding: 7px 16px;
+}
+
+#status-inner {
+  max-width: 780px;
+  margin: 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 2px;
+  font-size: 13px;
+}
+
+.sb-sep { color: #1a3a1a; margin: 0 6px; }
 
 /* ── Scrollbar ───────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 6px; }
