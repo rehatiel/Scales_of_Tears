@@ -1,6 +1,7 @@
 const express = require('express');
-const { pool, getAllPlayers, getRecentNews, addNews, updatePlayer, TODAY } = require('../db');
+const { pool, getAllPlayers, getRecentNews, addNews, updatePlayer, TODAY, getBannerOverride, setBanner, deleteBanner, getAllBanners } = require('../db');
 const { runNewDay } = require('../game/newday');
+const { LOCATION_BANNERS } = require('../game/engine');
 
 const router = express.Router();
 
@@ -63,6 +64,54 @@ router.post('/announce', ar(async (req, res) => {
   if (!message) return res.status(400).json({ error: 'message required' });
   await addNews(`\`$[SYSTEM] ${message.substring(0, 80)}`);
   res.json({ ok: true });
+}));
+
+// ── Banners ───────────────────────────────────────────────────────────────────
+
+// GET /api/admin/banners — list all known keys with override status + first-line preview
+router.get('/banners', ar(async (req, res) => {
+  const dbRows = await getAllBanners();
+  const overrideKeys = new Set(dbRows.map(r => r.key));
+  const known = Object.keys(LOCATION_BANNERS).map(key => ({
+    key,
+    overridden: overrideKeys.has(key),
+    preview: (getBannerOverride(key) || LOCATION_BANNERS[key].lines)[0] || '',
+    updatedAt: dbRows.find(r => r.key === key)?.updated_at || null,
+  }));
+  res.json(known);
+}));
+
+// GET /api/admin/banners/:key — get current lines for a banner (override or hardcoded)
+router.get('/banners/:key', ar(async (req, res) => {
+  const { key } = req.params;
+  const override = getBannerOverride(key);
+  const hardcoded = LOCATION_BANNERS[key];
+  if (!override && !hardcoded) return res.status(404).json({ error: `Unknown banner key: ${key}` });
+  res.json({
+    key,
+    lines: override || hardcoded.lines,
+    overridden: !!override,
+  });
+}));
+
+// PUT /api/admin/banners/:key — set a banner override
+router.put('/banners/:key', ar(async (req, res) => {
+  const { key } = req.params;
+  const { lines } = req.body;
+  if (!Array.isArray(lines) || lines.length === 0 || lines.length > 10)
+    return res.status(400).json({ error: 'lines must be a non-empty array of up to 10 strings' });
+  if (!lines.every(l => typeof l === 'string'))
+    return res.status(400).json({ error: 'every line must be a string' });
+  await setBanner(key, lines);
+  res.json({ ok: true, key, lines });
+}));
+
+// DELETE /api/admin/banners/:key — remove override and revert to hardcoded
+router.delete('/banners/:key', ar(async (req, res) => {
+  const { key } = req.params;
+  await deleteBanner(key);
+  const hardcoded = LOCATION_BANNERS[key];
+  res.json({ ok: true, key, revertedTo: hardcoded ? hardcoded.lines : null });
 }));
 
 module.exports = router;

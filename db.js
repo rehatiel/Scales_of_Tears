@@ -42,6 +42,7 @@ async function initDb() {
   }
 
   console.log('Database schema ready.');
+  await loadBanners();
 }
 
 const TODAY = () => Math.floor(Date.now() / 86400000);
@@ -107,4 +108,56 @@ async function addToHallOfKings(player) {
   );
 }
 
-module.exports = { pool, initDb, getPlayer, getPlayerByUsername, updatePlayer, createPlayer, getAllPlayers, getNearDeathPlayers, getRecentNews, addNews, getHallOfKings, addToHallOfKings, TODAY };
+async function getCaptivePlayers(excludeId) {
+  const { rows } = await pool.query(
+    'SELECT * FROM players WHERE captive = 1 AND id != $1 ORDER BY RANDOM() LIMIT 5',
+    [excludeId]
+  );
+  return rows;
+}
+
+async function getPlayersInTown(townId, excludeId) {
+  const { rows } = await pool.query(
+    `SELECT id, handle, level, class, sex, last_seen, dead, times_won, setup_complete
+     FROM players
+     WHERE current_town = $1 AND setup_complete = 1 AND id != $2
+     ORDER BY level DESC, exp DESC`,
+    [townId, excludeId]
+  );
+  return rows;
+}
+
+// ── Banner cache ──────────────────────────────────────────────────────────────
+
+let bannerCache = {};
+
+async function loadBanners() {
+  const { rows } = await pool.query('SELECT key, lines FROM banners');
+  bannerCache = {};
+  for (const row of rows) bannerCache[row.key] = row.lines;
+}
+
+function getBannerOverride(key) {
+  return bannerCache[key] || null;
+}
+
+async function setBanner(key, lines) {
+  await pool.query(
+    `INSERT INTO banners (key, lines, updated_at) VALUES ($1, $2, NOW())
+     ON CONFLICT (key) DO UPDATE SET lines = $2, updated_at = NOW()`,
+    [key, JSON.stringify(lines)]
+  );
+  bannerCache[key] = lines;
+}
+
+async function deleteBanner(key) {
+  await pool.query('DELETE FROM banners WHERE key = $1', [key]);
+  delete bannerCache[key];
+}
+
+async function getAllBanners() {
+  const { rows } = await pool.query('SELECT key, lines, updated_at FROM banners ORDER BY key');
+  return rows;
+}
+
+module.exports = { pool, initDb, getPlayer, getPlayerByUsername, updatePlayer, createPlayer, getAllPlayers, getPlayersInTown, getNearDeathPlayers, getCaptivePlayers, getRecentNews, addNews, getHallOfKings, addToHallOfKings, TODAY, getBannerOverride, setBanner, deleteBanner, getAllBanners };

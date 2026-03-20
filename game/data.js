@@ -499,74 +499,156 @@ const LEVEL_UP_GAINS = {
 };
 
 // ── World map ─────────────────────────────────────────────────────────────────
-// connections lists direct one-hop travel routes (bidirectional)
+// connections: direct one-hop travel routes (bidirectional)
+// shopMaxTier: highest weapon/armor tier available in this town's shops
+// minLevel:    minimum player level required to enter (0 = no gate)
 const TOWNS = {
   harood: {
     id: 'harood', name: 'Town of Harood',
     tagline: 'The frontier holds no promises — only opportunities.',
     connections: ['thornreach', 'silverkeep', 'bracken_hollow'],
+    shopMaxTier: 7, minLevel: 1,
   },
   stormwatch: {
     id: 'stormwatch', name: 'Stormwatch',
     tagline: 'Reality bends here. The wise tread carefully.',
     connections: ['frostmere', 'thornreach', 'ironhold'],
+    shopMaxTier: 11, minLevel: 4,
   },
   ironhold: {
     id: 'ironhold', name: 'Ironhold Bastion',
     tagline: 'Strength is the only currency that matters.',
     connections: ['stormwatch', 'silverkeep', 'velmora', 'old_karth'],
+    shopMaxTier: 12, minLevel: 3,
   },
   old_karth: {
     id: 'old_karth', name: 'Old Karth',
     tagline: 'What was buried here should have stayed buried.',
     connections: ['ironhold', 'ashenfall'],
+    shopMaxTier: 10, minLevel: 5,
   },
   thornreach: {
     id: 'thornreach', name: 'Thornreach',
     tagline: 'The forest does not forgive those who ignore it.',
     connections: ['stormwatch', 'harood', 'silverkeep'],
+    shopMaxTier: 7, minLevel: 1,
   },
   silverkeep: {
     id: 'silverkeep', name: 'Silverkeep',
     tagline: 'Justice is absolute. So is its price.',
     connections: ['thornreach', 'harood', 'ironhold', 'velmora', 'duskveil'],
+    shopMaxTier: 9, minLevel: 1,
   },
   velmora: {
     id: 'velmora', name: 'Velmora',
     tagline: 'Everything has a price. Most things have several.',
     connections: ['ironhold', 'silverkeep', 'graveport'],
+    shopMaxTier: 13, minLevel: 2,
   },
   bracken_hollow: {
     id: 'bracken_hollow', name: 'Bracken Hollow',
     tagline: 'Small town, big problems.',
     connections: ['harood'],
+    shopMaxTier: 3, minLevel: 1,
   },
   duskveil: {
     id: 'duskveil', name: 'Duskveil',
     tagline: 'In the perpetual twilight, secrets thrive.',
     connections: ['silverkeep', 'graveport', 'mirefen'],
+    shopMaxTier: 10, minLevel: 5,
   },
   graveport: {
     id: 'graveport', name: 'Graveport',
     tagline: 'The dead make good sailors. They never complain.',
     connections: ['velmora', 'duskveil', 'mirefen'],
+    shopMaxTier: 8, minLevel: 3,
   },
   mirefen: {
     id: 'mirefen', name: 'Mirefen',
     tagline: 'The swamp takes what it wants. And it keeps it.',
     connections: ['duskveil', 'graveport', 'ashenfall'],
+    shopMaxTier: 6, minLevel: 4,
   },
   ashenfall: {
     id: 'ashenfall', name: 'Ashenfall',
     tagline: 'Everything here has already burned once.',
     connections: ['mirefen', 'old_karth'],
+    shopMaxTier: 15, minLevel: 7,
   },
   frostmere: {
     id: 'frostmere', name: 'Frostmere',
     tagline: 'Isolation is the oldest survival strategy.',
     connections: ['stormwatch'],
+    shopMaxTier: 5, minLevel: 2,
   },
 };
+
+// ── City social spaces ────────────────────────────────────────────────────────
+// One unique location per town shown as the [G] option on the town screen
+const SOCIAL_SPACES = {
+  harood:         { name: "Violet's Garden",    action: 'garden' },
+  velmora:        { name: 'The Silken Chamber', action: 'social_velmora' },
+  ironhold:       { name: 'The Fighting Pit',   action: 'social_ironhold' },
+  silverkeep:     { name: 'Temple of Valor',    action: 'social_silverkeep' },
+  thornreach:     { name: 'The Ancient Grove',  action: 'social_thornreach' },
+  duskveil:       { name: 'The Shadow Market',  action: 'social_duskveil' },
+  graveport:      { name: 'The Drowned Man',    action: 'social_graveport' },
+  stormwatch:     { name: 'The Arcane Library', action: 'social_stormwatch' },
+  old_karth:      { name: 'The Crypts',         action: 'social_old_karth' },
+  ashenfall:      { name: 'The Forge of Ruin',  action: 'social_ashenfall' },
+  bracken_hollow: { name: 'The Village Well',   action: 'social_bracken_hollow' },
+  mirefen:        { name: "The Bog Witch's Hut", action: 'social_mirefen' },
+  frostmere:      { name: 'The Hearthfire Inn', action: 'social_frostmere' },
+};
+
+// ── Shop owners ────────────────────────────────────────────────────────────────
+// weaponMult/armorMult: price multiplier when buying (0.90 = 10% off)
+// sellMult: fraction of original price returned as trade-in when buying new gear
+// tierCap: if set, only applies discounts on items up to this tier
+// Special flags: charmBonus, dailyDiscount, poisonGearDiscount, fleeDiscount, forgeUpgrade, stocksBonus
+const SHOP_OWNERS = {
+  harood:         { name: 'Silas',        title: 'the Old Soldier',     quote: '"Fought for thirty years. Sells for fifty."',           weaponMult: 0.90, armorMult: 1.00, sellMult: 0.40, tierCap: 5 },
+  silverkeep:     { name: 'Lady Maren',   title: "the Noble's Factor",  quote: '"Quality at a fair price. No haggling."',               weaponMult: 1.00, armorMult: 1.00, sellMult: 0.40, charmBonus: true },
+  velmora:        { name: 'Kess',         title: 'the Sharp Merchant',  quote: '"I buy high. Unusual, I know."',                        weaponMult: 1.00, armorMult: 1.00, sellMult: 0.55 },
+  ironhold:       { name: 'Brennar',      title: 'the Armorer',         quote: '"Armor first. Weapons are for showing off."',            weaponMult: 1.05, armorMult: 0.90, sellMult: 0.40 },
+  thornreach:     { name: 'Aldric',       title: 'the Woodsman',        quote: '"Practical gear for practical work."',                   weaponMult: 0.92, armorMult: 0.92, sellMult: 0.40, tierCap: 7 },
+  stormwatch:     { name: 'Zathis',       title: 'the Arcane Merchant', quote: '"My stock is... eclectic."',                             weaponMult: 1.00, armorMult: 1.00, sellMult: 0.40, stocksBonus: true },
+  duskveil:       { name: 'No Name',      title: 'ask no questions',    quote: '"One item. One day. Discounted. That\'s the deal."',     weaponMult: 1.00, armorMult: 1.00, sellMult: 0.40, dailyDiscount: true },
+  graveport:      { name: 'Marek',        title: 'the Smuggler',        quote: '"Fell off a ship. No questions."',                       weaponMult: 0.88, armorMult: 1.00, sellMult: 0.40 },
+  mirefen:        { name: 'Old Petra',    title: 'the Swamp Trader',    quote: '"I smell gold on you. Good."',                           weaponMult: 1.00, armorMult: 1.00, sellMult: 0.40, poisonGearDiscount: true },
+  old_karth:      { name: 'the Dealer',   title: 'of relics',           quote: '"These have outlived their owners. Maybe you won\'t."',  weaponMult: 1.15, armorMult: 1.15, sellMult: 0.60 },
+  ashenfall:      { name: 'Vorn',         title: 'the Master Forger',   quote: '"I built the weapons that broke the last king."',         weaponMult: 1.00, armorMult: 1.00, sellMult: 0.40 },
+  bracken_hollow: { name: 'Marta',        title: "the Farmer's Wife",   quote: '"It\'s not fancy. But it\'ll hold."',                    weaponMult: 0.80, armorMult: 0.80, sellMult: 0.40, tierCap: 3 },
+  frostmere:      { name: 'Bjarne',       title: 'the Hunter',          quote: '"Built for the cold. Built to last."',                   weaponMult: 1.00, armorMult: 1.00, sellMult: 0.40, fleeDiscount: true },
+};
+
+// ── Road segment map ──────────────────────────────────────────────────────────
+// Key = sorted town ids joined by '-'; value = number of walking segments
+const ROADS = {
+  'bracken_hollow-harood':    2,
+  'harood-thornreach':        3,
+  'harood-silverkeep':        4,
+  'silverkeep-thornreach':    3,
+  'stormwatch-thornreach':    4,
+  'frostmere-stormwatch':     3,
+  'ironhold-stormwatch':      4,
+  'ironhold-silverkeep':      4,
+  'silverkeep-velmora':       4,
+  'duskveil-silverkeep':      3,
+  'ironhold-velmora':         3,
+  'ironhold-old_karth':       5,
+  'graveport-velmora':        4,
+  'duskveil-graveport':       3,
+  'duskveil-mirefen':         3,
+  'graveport-mirefen':        3,
+  'ashenfall-mirefen':        5,
+  'ashenfall-old_karth':      4,
+};
+
+function getRoadSegments(fromId, toId) {
+  const key = [fromId, toId].sort().join('-');
+  return ROADS[key] || 3;
+}
 
 function getWeaponByNum(num) {
   return WEAPONS.find(w => w && w.num === num) || null;
@@ -576,9 +658,11 @@ function getArmorByNum(num) {
 }
 
 module.exports = {
-  WEAPONS, ARMORS, RED_DRAGON, MONSTER_TEMPLATES, TOWNS,
+  WEAPONS, ARMORS, RED_DRAGON, MONSTER_TEMPLATES, TOWNS, ROADS,
+  SOCIAL_SPACES, SHOP_OWNERS,
   getMonster, getRandomMonster,
   getWeaponByNum, getArmorByNum,
+  getRoadSegments,
   expForLevel, expForNextLevel, EXP_TABLE,
   CLASS_NAMES, CLASS_POWER_MOVES, LEVEL_UP_GAINS,
 };

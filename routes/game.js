@@ -2,7 +2,10 @@ const express = require('express');
 const { getPlayer, updatePlayer, addNews, TODAY } = require('../db');
 const { LEVEL_UP_GAINS, TOWNS } = require('../game/data');
 const { runNewDay } = require('../game/newday');
-const { getTownScreen, getSetupScreen, getNearDeathWaitingScreen } = require('../game/engine');
+const {
+  getTownScreen, getSetupScreen, getNearDeathWaitingScreen,
+  getRoadScreen, getCampingScreen, getCaptiveScreen,
+} = require('../game/engine');
 
 const router = express.Router();
 const ar = fn => (req, res, next) => fn(req, res, next).catch(next);
@@ -36,6 +39,8 @@ const HANDLERS = {
   ...require('../game/handlers/town'),
   ...require('../game/handlers/dragon'),
   ...require('../game/handlers/travel'),
+  ...require('../game/handlers/road'),
+  ...require('../game/handlers/social'),
 };
 
 // Auth guard
@@ -114,6 +119,9 @@ router.get('/state', ar(async (req, res) => {
   if (!player) return res.status(401).json({ error: 'Player not found.' });
   if (!player.setup_complete) return res.json(getSetupScreen('name'));
   if (player.near_death) return res.json(getNearDeathWaitingScreen(player));
+  if (player.captive)    return res.json(getCaptiveScreen(player));
+  if (player.camping)    return res.json(getCampingScreen(player));
+  if (player.travel_to)  return res.json(getRoadScreen(player));
   return res.json(getTownScreen(player));
 }));
 
@@ -134,9 +142,17 @@ router.post('/action', ar(async (req, res) => {
 
   const { action, param } = req.body;
   const NEAR_DEATH_ALLOWED = ['near_death_wait', 'near_death_accept', 'town', 'logout'];
+  const CAPTIVE_ALLOWED    = ['captive_wait', 'captive_buy_freedom', 'captive_escape', 'logout'];
+  const CAMPING_ALLOWED    = ['camp_wait', 'road_turn_back', 'road_encounter_fight', 'road_encounter_run', 'road_encounter_power', 'logout'];
 
   if (player.near_death && !NEAR_DEATH_ALLOWED.includes(action))
     return res.json({ ...getNearDeathWaitingScreen(player), pendingMessages });
+
+  if (player.captive && !CAPTIVE_ALLOWED.includes(action))
+    return res.json({ ...getCaptiveScreen(player), pendingMessages });
+
+  if (player.camping && !CAMPING_ALLOWED.includes(action))
+    return res.json({ ...getCampingScreen(player), pendingMessages });
 
   // Inline cases that mutate session directly or need LEVEL_UP_GAINS
   switch (action) {

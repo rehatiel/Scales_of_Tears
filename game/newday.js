@@ -1,5 +1,5 @@
 // Daily reset routine for LORD web port
-const { addNews } = require('../db');
+const { addNews, getAllPlayers } = require('../db');
 const { expForNextLevel, LEVEL_UP_GAINS, CLASS_NAMES } = require('./data');
 
 async function runNewDay(player) {
@@ -15,6 +15,10 @@ async function runNewDay(player) {
   updates.stamina = 10;
   updates.training_today = 0;
   updates.drinks_today = 0;
+  updates.grove_healed_today = 0;
+  updates.well_used_today = 0;
+  updates.guide_hired = 0;
+  updates.road_hint = null;
 
   if (player.near_death) {
     // No one came — the warrior perishes
@@ -24,6 +28,30 @@ async function runNewDay(player) {
     updates.hit_points = 0;
     messages.push(`\`@No one came to rescue you. You have perished in the forest...`);
     await addNews(`\`@${player.handle}\`% perished in the forest, never to be found.`);
+  }
+
+  // Captive: 15% chance of passive rescue overnight
+  if (player.captive) {
+    if (Math.random() < 0.15) {
+      updates.captive = 0;
+      updates.captive_location = null;
+      updates.travel_to = null;
+      updates.travel_segments_done = 0;
+      updates.travel_segments_total = 0;
+      updates.camping = 0;
+      messages.push(`\`0In the dead of night, a hooded figure cuts your bonds.`);
+      messages.push(`\`0"Don't ask questions. Go." You run.`);
+      await addNews(`\`0${player.handle}\`% escaped captivity in the night!`);
+    } else {
+      messages.push(`\`#Another day passes in captivity. Your bonds hold.`);
+    }
+  }
+
+  // Camping: new day restores stamina and prompts them to resume
+  if (player.camping && !player.captive) {
+    // Stamina already restored above via updates.stamina = 10
+    messages.push(`\`6Dawn breaks over your roadside camp.`);
+    messages.push(`\`6You are rested. The road awaits.`);
   }
 
   if (player.dead || updates.dead) {

@@ -20,6 +20,12 @@ async function travel({ player, param, req, res, pendingMessages }) {
       `\`@There is no direct route from ${current.name} to ${dest.name}.`,
     ]});
   }
+  if (dest.minLevel && player.level < dest.minLevel) {
+    return res.json({ ...getWorldMapScreen(player), pendingMessages: [
+      `\`@The road to ${dest.name} is too dangerous for you.`,
+      `\`@You must reach level \`$${dest.minLevel}\`@ before travelling there.`,
+    ]});
+  }
   if (Number(player.gold) < TRAVEL_COST) {
     return res.json({ ...getWorldMapScreen(player), pendingMessages: [
       `\`@You need ${TRAVEL_COST} gold to travel. You have ${Number(player.gold).toLocaleString()}.`,

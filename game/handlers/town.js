@@ -1,5 +1,5 @@
 const { getPlayer, updatePlayer, addNews, getHallOfKings, getRecentNews } = require('../../db');
-const { WEAPONS, ARMORS, getWeaponByNum, getArmorByNum } = require('../data');
+const { WEAPONS, ARMORS, TOWNS, SHOP_OWNERS, getWeaponByNum, getArmorByNum } = require('../data');
 const { checkLevelUp } = require('../newday');
 const {
   getTownScreen, getWeaponShopScreen, getArmorShopScreen, getInnScreen,
@@ -39,6 +39,16 @@ async function inn_gem({ player, req, res, pendingMessages }) {
   await updatePlayer(player.id, { gems: player.gems - 1, hit_points: player.hit_max });
   player = await getPlayer(player.id);
   return res.json({ ...getInnScreen(player), pendingMessages: ['`0The gem glows and you are fully healed!'] });
+}
+
+async function inn_antidote({ player, req, res, pendingMessages }) {
+  if (!player.antidote_owned)
+    return res.json({ ...getInnScreen(player), pendingMessages: ['`@You don\'t have an antidote.'] });
+  if (!player.poisoned)
+    return res.json({ ...getInnScreen(player), pendingMessages: ['`7You are not poisoned.'] });
+  await updatePlayer(player.id, { poisoned: 0, antidote_owned: 0 });
+  player = await getPlayer(player.id);
+  return res.json({ ...getInnScreen(player), pendingMessages: ['`0You drink the antidote. The sickness fades.', '`2You feel yourself again.'] });
 }
 
 // ── BANK ──────────────────────────────────────────────────────────────────────
@@ -148,14 +158,43 @@ async function buy_weapon({ player, param, req, res, pendingMessages }) {
   if (!num || num === 0) return res.json(getTownScreen(player));
   const weapon = getWeaponByNum(num);
   if (!weapon) return res.json(getWeaponShopScreen(player));
-  if (Number(player.gold) < weapon.price)
-    return res.json({ ...getWeaponShopScreen(player), pendingMessages: [`\`@You can't afford that!`] });
+  const weaponTown = TOWNS[player.current_town || 'harood'] || TOWNS.harood;
+  const maxTier = weaponTown.shopMaxTier || 15;
+  const owner = SHOP_OWNERS[weaponTown.id] || SHOP_OWNERS.harood;
+  if (weapon.tier && weapon.tier > maxTier && player.weapon_num !== weapon.num)
+    return res.json({ ...getWeaponShopScreen(player), pendingMessages: ['`@That weapon is not available here. Travel to a larger city.'] });
   if (player.weapon_num === weapon.num)
     return res.json({ ...getWeaponShopScreen(player), pendingMessages: ['`7You already have that weapon.'] });
 
-  const cur = getWeaponByNum(player.weapon_num);
+  // Mirror price calculation from getWeaponShopScreen
+  const todayNum = Math.floor(Date.now() / 86400000);
+  const eligibleNums = WEAPONS.slice(1).filter(w => w && w.tier <= maxTier).map(w => w.num);
+  const dailyDiscountNum = owner.dailyDiscount && eligibleNums.length ? eligibleNums[todayNum % eligibleNums.length] : null;
+
+  let effectiveMult = owner.weaponMult;
+  if (owner.tierCap && weapon.tier > owner.tierCap) effectiveMult = 1.0;
+  if (owner.fleeDiscount && weapon.bonus === 'flee_bonus') effectiveMult *= 0.85;
+  if (owner.poisonGearDiscount && weapon.bonus && weapon.bonusDesc && weapon.bonusDesc.toLowerCase().includes('poison')) effectiveMult *= 0.85;
+  if (dailyDiscountNum === weapon.num) effectiveMult *= 0.80;
+  const displayPrice = Math.floor(weapon.price * effectiveMult);
+
+  const cur = player.weapon_num > 0 ? getWeaponByNum(player.weapon_num) : null;
+  let sellMult = owner.sellMult;
+  if (owner.charmBonus && player.charm >= 20) sellMult *= 1.08;
+  const tradeIn = cur ? Math.floor(cur.price * sellMult) : 0;
+  const netPrice = Math.max(0, displayPrice - tradeIn);
+
+  if (Number(player.gold) < netPrice)
+    return res.json({ ...getWeaponShopScreen(player), pendingMessages: [`\`@You can't afford that!`] });
+
   const newStr = Number(player.strength) - (cur ? cur.strength : 0) + weapon.strength;
-  await updatePlayer(player.id, { gold: Number(player.gold) - weapon.price, strength: newStr, weapon_num: weapon.num, weapon_name: weapon.name });
+  await updatePlayer(player.id, {
+    gold: Number(player.gold) - netPrice,
+    strength: newStr,
+    weapon_num: weapon.num,
+    weapon_name: weapon.name,
+    forge_weapon_upgraded: 0,
+  });
   player = await getPlayer(player.id);
   return res.json({ ...getWeaponShopScreen(player), pendingMessages: [`\`0You purchased a ${weapon.name}!`] });
 }
@@ -169,14 +208,43 @@ async function buy_armor({ player, param, req, res, pendingMessages }) {
   if (!num || num === 0) return res.json(getTownScreen(player));
   const armor = getArmorByNum(num);
   if (!armor) return res.json(getArmorShopScreen(player));
-  if (Number(player.gold) < armor.price)
-    return res.json({ ...getArmorShopScreen(player), pendingMessages: [`\`@You can't afford that!`] });
+  const armorTown = TOWNS[player.current_town || 'harood'] || TOWNS.harood;
+  const maxTier = armorTown.shopMaxTier || 15;
+  const owner = SHOP_OWNERS[armorTown.id] || SHOP_OWNERS.harood;
+  if (armor.tier && armor.tier > maxTier && player.arm_num !== armor.num)
+    return res.json({ ...getArmorShopScreen(player), pendingMessages: ['`@That armour is not available here. Travel to a larger city.'] });
   if (player.arm_num === armor.num)
     return res.json({ ...getArmorShopScreen(player), pendingMessages: ['`7You already have that armour.'] });
 
-  const cur = getArmorByNum(player.arm_num);
+  // Mirror price calculation from getArmorShopScreen
+  const todayNum = Math.floor(Date.now() / 86400000);
+  const eligibleNums = ARMORS.slice(1).filter(a => a && a.tier <= maxTier).map(a => a.num);
+  const dailyDiscountNum = owner.dailyDiscount && eligibleNums.length ? eligibleNums[todayNum % eligibleNums.length] : null;
+
+  let effectiveMult = owner.armorMult;
+  if (owner.tierCap && armor.tier > owner.tierCap) effectiveMult = 1.0;
+  if (owner.fleeDiscount && armor.bonus === 'flee_bonus') effectiveMult *= 0.85;
+  if (owner.poisonGearDiscount && armor.bonus === 'poison_resist') effectiveMult *= 0.85;
+  if (dailyDiscountNum === armor.num) effectiveMult *= 0.80;
+  const displayPrice = Math.floor(armor.price * effectiveMult);
+
+  const cur = player.arm_num > 0 ? getArmorByNum(player.arm_num) : null;
+  let sellMult = owner.sellMult;
+  if (owner.charmBonus && player.charm >= 20) sellMult *= 1.08;
+  const tradeIn = cur ? Math.floor(cur.price * sellMult) : 0;
+  const netPrice = Math.max(0, displayPrice - tradeIn);
+
+  if (Number(player.gold) < netPrice)
+    return res.json({ ...getArmorShopScreen(player), pendingMessages: [`\`@You can't afford that!`] });
+
   const newDef = Number(player.defense) - (cur ? cur.defense : 0) + armor.defense;
-  await updatePlayer(player.id, { gold: Number(player.gold) - armor.price, defense: newDef, arm_num: armor.num, arm_name: armor.name });
+  await updatePlayer(player.id, {
+    gold: Number(player.gold) - netPrice,
+    defense: newDef,
+    arm_num: armor.num,
+    arm_name: armor.name,
+    forge_armor_upgraded: 0,
+  });
   player = await getPlayer(player.id);
   return res.json({ ...getArmorShopScreen(player), pendingMessages: [`\`0You purchased ${armor.name}!`] });
 }
@@ -185,6 +253,8 @@ async function shop_steal({ action, player, req, res, pendingMessages }) {
   if (player.class !== 3)
     return res.json({ ...getTownScreen(player), pendingMessages: ['`@Only Thieves can attempt this!'] });
 
+  const stealTown = TOWNS[player.current_town || 'harood'] || TOWNS.harood;
+  const stealOwner = SHOP_OWNERS[stealTown.id] || SHOP_OWNERS.harood;
   const isWeapon = action === 'shop_steal_weapon';
   const items = isWeapon ? WEAPONS : ARMORS;
   const currentNum = isWeapon ? player.weapon_num : player.arm_num;
@@ -209,7 +279,7 @@ async function shop_steal({ action, player, req, res, pendingMessages }) {
     }
     player = await getPlayer(player.id);
     const screen = isWeapon ? getWeaponShopScreen(player) : getArmorShopScreen(player);
-    await addNews(`\`3${player.handle}\`% quietly liberated a ${target.name} from Ignacius's shop...`);
+    await addNews(`\`3${player.handle}\`% quietly liberated a ${target.name} from ${stealOwner.name}'s shop...`);
     return res.json({ ...screen, pendingMessages: [`\`3Smooth. You walk out with a ${target.name}. No one saw a thing.`] });
   } else {
     const penalty = Math.floor(player.hit_max * 0.20);
@@ -298,11 +368,12 @@ async function post_crier({ player, param, req, res, pendingMessages }) {
   });
   await addNews(`\`6[CRIER]\`% ${player.handle}: "${msg}"`);
   player = await getPlayer(player.id);
-  return res.json({ ...getTownScreen(player), pendingMessages: ['`6The town crier bellows your message across Harood!'] });
+  const crierTown = (TOWNS[player.current_town || 'harood'] || TOWNS.harood).name;
+  return res.json({ ...getTownScreen(player), pendingMessages: [`\`6The town crier bellows your message across ${crierTown}!`] });
 }
 
 module.exports = {
-  inn, inn_rest, inn_gem,
+  inn, inn_rest, inn_gem, inn_antidote,
   bank, bank_deposit, bank_withdraw,
   master, master_train,
   training,

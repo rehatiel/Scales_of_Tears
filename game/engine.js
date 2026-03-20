@@ -1,6 +1,7 @@
 // Screen generation engine for LORD web port
-const { WEAPONS, ARMORS, expForNextLevel, CLASS_NAMES, CLASS_POWER_MOVES, MONSTER_TEMPLATES, getWeaponByNum, getArmorByNum, TOWNS } = require('./data');
+const { WEAPONS, ARMORS, expForNextLevel, CLASS_NAMES, CLASS_POWER_MOVES, MONSTER_TEMPLATES, getWeaponByNum, getArmorByNum, TOWNS, SOCIAL_SPACES, SHOP_OWNERS } = require('./data');
 const { MONSTER_ART } = require('./forest_events');
+const { getBannerOverride } = require('../db');
 
 const c = {
   yellow:  '`$',
@@ -80,6 +81,177 @@ const LOCATION_BANNERS = {
       '`6~`8·`6~`8· `$T O W N `6~`8·`6~`8·`6~`8·`6~`8·`6~`8·`6~`8·`6~`8·`6~`8·`6~`8·`6~`8·`6~`8·`6~`8·`6~`8·`6~`8·`6~`8·`6~`8·`6~`8·`6~`8·`6~',
     ],
     colors: ['dblue','brown','brown','brown','brown','dgray','brown'],
+  },
+
+  // ── City banners (one per TOWNS entry) ───────────────────────────────────
+
+  harood: {
+    lines: [
+      '`1`b▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓`a',
+      '`7  `6▄▄`7▄  `6▄▄`7▄  `6▄▄▄`7▄  `8▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄`7  `6▄▄`7▄  `6▄▄`7▄  `6▄▄▄`7▄',
+      '`6 ▐██▌  ▐██▌  ▐███▌  `8▐█████████████████████▌  `6▐██▌  ▐██▌  ▐███▌',
+      '`6 ▐██▌  ▐██▌  ▐███▌  `8▐█▌`7  `6▐▌`8  `7  `6▐▌  `8▐███▌  `6▐██▌  ▐██▌  ▐███▌',
+      '`6 ▐██▌  ▐██▌  ▐███▌  `8▐█▌     `7╔`8══`7╗`8   ▐███▌  `6▐██▌  ▐██▌  ▐███▌',
+      '`8▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄',
+      '`6~`8·`6~`8· `$H A R O O D `6~`8·`6~`8·`6~`8·`6~`8·`6~`8·`6~`8·`6~`8·`6~`8·`6~`8·`6~`8·`6~`8·`6~`8·`6~`8·`6~`8·`6~`8·`6~',
+    ],
+    colors: ['dblue', 'brown', 'brown', 'brown', 'brown', 'dgray', 'brown'],
+  },
+
+  ironhold: {
+    lines: [
+      '`8 ▄ ▄ ▄ ▄ ▄ ▄ ▄ ▄ ▄ ▄ ▄ ▄ ▄ ▄ ▄ ▄ ▄ ▄ ▄ ▄ ▄ ▄ ▄ ▄ ▄ ▄ ▄ ▄ ▄ ▄',
+      '`8▐█▌`7▐█▌`8▐█████▌`7▐█▌`8▐████████████████████▌`7▐█▌`8▐█████▌`7▐█▌`8▐█▌',
+      '`8▐█████████████████████████████████████████████████████████████▌',
+      '`8▐███▌  `7╔═══╗`8  ▐████████████████▌  `7╔═══╗`8  ▐███████▌',
+      '`8▐███▌  `7║   ║`8  ▐████████████████▌  `7║   ║`8  ▐███████▌',
+      '`8▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓',
+      '`8~`7·`8~`7· `$I R O N H O L D `8~`7·`8~`7·`8~`7·`8~`7·`8~`7·`8~`7·`8~`7·`8~`7·`8~`7·`8~`7·`8~`7·`8~`7·`8~`7·`8~',
+    ],
+    colors: ['dgray', 'dgray', 'dgray', 'dgray', 'dgray', 'dgray', 'dgray'],
+  },
+
+  velmora: {
+    lines: [
+      '`$▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄',
+      '`$  ╔╗  ╔╗  ╔══╗  `%╔══════════════════════╗`$  ╔══╗  ╔╗  ╔╗',
+      '`$  ║║  ║║  ║  ║  `%║ `$◆`%                `$◆`% ║  `$║  ║  ║║  ║║',
+      '`$  ║║  ║║  ╠══╣  `%╠══════════════════════╣  `$╠══╣  ║║  ║║',
+      '`$  ║║  ║║  ║  ║  `%║`$  ╔═╗       ╔═╗`%   ║  `$║  ║  ║║  ║║',
+      '`8▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄',
+      '`$~`8·`$~`8· `$V E L M O R A `$~`8·`$~`8·`$~`8·`$~`8·`$~`8·`$~`8·`$~`8·`$~`8·`$~`8·`$~`8·`$~`8·`$~`8·`$~`8·`$~`8·`$~`8·`$~',
+    ],
+    colors: ['yellow', 'yellow', 'yellow', 'yellow', 'yellow', 'dgray', 'yellow'],
+  },
+
+  silverkeep: {
+    lines: [
+      '`!░`%░`!░`%░`!░`%░`!░`%░`!░`%░`!░`%░`!░`%░`!░`%░`!░`%░`!░`%░`!░`%░`!░`%░`!░`%░`!░`%░`!░`%░`!░`%░`!░`%░`!░`%░`!░`%░`!░`%░`!░',
+      '`%  /\\  /\\  /\\  `!╔═══════════════════════╗`%  /\\  /\\  /\\',
+      '`%  ||  ||  ||  `!║ `%☆`!                `%☆`! ║  `%||  ||  ||',
+      '`%  ||  ||  ||  `!╠═══════════════════════╣  `%||  ||  ||',
+      '`%  ||  ||  ||  `!║`%  ╔══╗       ╔══╗`!   ║  `%||  ||  ||',
+      '`7▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓',
+      '`!~`7·`!~`7· `$S I L V E R K E E P `!~`7·`!~`7·`!~`7·`!~`7·`!~`7·`!~`7·`!~`7·`!~`7·`!~`7·`!~`7·`!~`7·`!~',
+    ],
+    colors: ['cyan', 'white', 'white', 'white', 'white', 'gray', 'cyan'],
+  },
+
+  thornreach: {
+    lines: [
+      '`2░`0░`2░`0░`2░`0░`2░`0░`2░`0░`2░`0░`2░`0░`2░`0░`2░`0░`2░`0░`2░`0░`2░`0░`2░`0░`2░`0░`2░`0░`2░`0░`2░`0░`2░`0░`2░`0░`2░`0░`2░`0░`2░',
+      '`2  /|\\  /|\\  `0/|\\  /|\\  `2/|\\  /|\\  `0/|\\  /|\\  `2/|\\  /|\\  `0/|\\  /|\\',
+      '`2 /|||\\  `0/|||\\  `2/|||\\  `0/|||\\  `2/|||\\  `0/|||\\  `2/|||\\  `0/|||\\',
+      '`8  |||    |||    |||    |||    |||    |||    |||    |||',
+      '`8  |||    |||    |||    |||    |||    |||    |||    |||',
+      '`8▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓',
+      '`2~`8·`2~`8· `$T H O R N R E A C H `2~`8·`2~`8·`2~`8·`2~`8·`2~`8·`2~`8·`2~`8·`2~`8·`2~`8·`2~`8·`2~`8·`2~`8·',
+    ],
+    colors: ['dgreen', 'dgreen', 'dgreen', 'dgray', 'dgray', 'dgray', 'dgreen'],
+  },
+
+  stormwatch: {
+    lines: [
+      '`9░`!░`9░`!░`9░`!░`9░`!░`9░`!░`9░`!░`9░`!░`9░`!░`9░`!░`9░`!░`9░`!░`9░`!░`9░`!░`9░`!░`9░`!░`9░`!░`9░`!░`9░`!░`9░`!░`9░`!░`9░`!░`9░',
+      '`!  *    `9*   `! *    `9*    `! *    `9*    `! *    `9*    `! *    `9*',
+      '`9  |    `! |    `9|    `!  |    `9 |    `!  |    `9 |    `!  |    `9|',
+      '`9╔═════════════════════════════════════════════════════════════╗',
+      '`9║  `!╔══╗  ╔══╗  ╔══╗  ╔══╗  ╔══╗  ╔══╗  ╔══╗  ╔══╗  `9║',
+      '`8▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓',
+      '`9~`!·`9~`!· `$S T O R M W A T C H `9~`!·`9~`!·`9~`!·`9~`!·`9~`!·`9~`!·`9~`!·`9~`!·`9~`!·`9~`!·`9~`!·`9~',
+    ],
+    colors: ['blue', 'cyan', 'blue', 'blue', 'blue', 'dgray', 'blue'],
+  },
+
+  duskveil: {
+    lines: [
+      '`5░`8░`5░`8░`5░`8░`5░`8░`5░`8░`5░`8░`5░`8░`5░`8░`5░`8░`5░`8░`5░`8░`5░`8░`5░`8░`5░`8░`5░`8░`5░`8░`5░`8░`5░`8░`5░`8░`5░`8░`5░`8░`5░`8░`5░',
+      '`8  `5▄▄`8▄  `5▄▄`8▄  `5▄▄▄`8▄  `5▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄`8  `5▄▄`8▄  `5▄▄`8▄  `5▄▄▄`8▄',
+      '`5 ▐▓▓▌  ▐▓▓▌  ▐▓▓▓▌  `8▐█████████████████████▌  `5▐▓▓▌  ▐▓▓▌  ▐▓▓▓▌',
+      '`5 ▐▓▓▌  ▐▓▓▌  ▐▓▓▓▌  `8▐█▌`5  ▐▌`8     `5▐▌  `8▐███▌  `5▐▓▓▌  ▐▓▓▌  ▐▓▓▓▌',
+      '`5 ▐▓▓▌  ▐▓▓▌  ▐▓▓▓▌  `8▐█▌     `5║`8══`5║`8   ▐███▌  `5▐▓▓▌  ▐▓▓▌  ▐▓▓▓▌',
+      '`8▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓',
+      '`5~`8·`5~`8· `$D U S K V E I L `5~`8·`5~`8·`5~`8·`5~`8·`5~`8·`5~`8·`5~`8·`5~`8·`5~`8·`5~`8·`5~`8·`5~`8·`5~`8·`5~`8·`5~',
+    ],
+    colors: ['magenta', 'dgray', 'magenta', 'magenta', 'magenta', 'dgray', 'magenta'],
+  },
+
+  graveport: {
+    lines: [
+      '`1~`8~`1~`8~`1~`8~`1~`8~`1~`8~`1~`8~`1~`8~`1~`8~`1~`8~`1~`8~`1~`8~`1~`8~`1~`8~`1~`8~`1~`8~`1~`8~`1~`8~`1~`8~`1~`8~`1~`8~`1~`8~`1~`8~`1~`8~`1~',
+      '`7  ┼   ┼   ┼  `1║`7  ┼   ┼   ┼  `1║`7  ┼   ┼   ┼  `1║`7  ┼   ┼   ┼',
+      '`7  │   │   │  `1│  `7│   │   │  `1│  `7│   │   │  `1│  `7│   │   │',
+      '`1 ╔═══╗`7  ╔══════╗  `1╔══════════════════╗  `7╔══════╗  `1╔═══╗',
+      '`1 ╚═══╝`7  ╚══════╝  `1╚══════════════════╝  `7╚══════╝  `1╚═══╝',
+      '`1~`8~`1~`8~`1~`8~`1~`8~`1~`8~`1~`8~`1~`8~`1~`8~`1~`8~`1~`8~`1~`8~`1~`8~`1~`8~`1~`8~`1~`8~`1~`8~`1~`8~`1~`8~`1~`8~`1~`8~`1~`8~`1~`8~`1~`8~`1~',
+      '`1~`8·`1~`8· `$G R A V E P O R T `1~`8·`1~`8·`1~`8·`1~`8·`1~`8·`1~`8·`1~`8·`1~`8·`1~`8·`1~`8·`1~`8·`1~`8·`1~`8·`1~',
+    ],
+    colors: ['dblue', 'gray', 'gray', 'dblue', 'dblue', 'dblue', 'dblue'],
+  },
+
+  mirefen: {
+    lines: [
+      '`2~`8~`2~`8~`2~`8~`2~`8~`2~`8~`2~`8~`2~`8~`2~`8~`2~`8~`2~`8~`2~`8~`2~`8~`2~`8~`2~`8~`2~`8~`2~`8~`2~`8~`2~`8~`2~`8~`2~`8~`2~`8~`2~`8~`2~`8~`2~',
+      '`8  `2▄▄`8▄  `2▄▄`8▄  `2▄▄▄`8▄  `2▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄`8  `2▄▄`8▄  `2▄▄`8▄  `2▄▄▄`8▄',
+      '`2 ▐██▌  ▐██▌  ▐███▌  `8▐█████████████████████▌  `2▐██▌  ▐██▌  ▐███▌',
+      '`2 ▐██▌  ▐██▌  ▐███▌  `8▐█▌`2  ▐▌`8     `2▐▌  `8▐███▌  `2▐██▌  ▐██▌  ▐███▌',
+      '`2 ▐██▌  ▐██▌  ▐███▌  `8▐█▌     `2║`8══`2║`8   ▐███▌  `2▐██▌  ▐██▌  ▐███▌',
+      '`2~`8~`2~`8~`2~`8~`2~`8~`2~`8~`2~`8~`2~`8~`2~`8~`2~`8~`2~`8~`2~`8~`2~`8~`2~`8~`2~`8~`2~`8~`2~`8~`2~`8~`2~`8~`2~`8~`2~`8~`2~`8~`2~`8~`2~`8~`2~',
+      '`2~`8·`2~`8· `$M I R E F E N `2~`8·`2~`8·`2~`8·`2~`8·`2~`8·`2~`8·`2~`8·`2~`8·`2~`8·`2~`8·`2~`8·`2~`8·`2~`8·`2~`8·`2~`8·`2~',
+    ],
+    colors: ['dgreen', 'dgray', 'dgreen', 'dgreen', 'dgreen', 'dgreen', 'dgreen'],
+  },
+
+  ashenfall: {
+    lines: [
+      '`4░`8░`4░`8░`4░`8░`4░`8░`4░`8░`4░`8░`4░`8░`4░`8░`4░`8░`4░`8░`4░`8░`4░`8░`4░`8░`4░`8░`4░`8░`4░`8░`4░`8░`4░`8░`4░`8░`4░`8░`4░`8░`4░',
+      '`8  `6▄▄`8▄  `@/`8▄  `6▄▄▄`8▄  `4▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄`8  `6▄▄▄`8▄  `@\\`8▄  `6▄▄`8▄',
+      '`6 ▐██▌  `@/`6██▌  ▐███▌  `4▐█████████████████████▌  `6▐███▌  `@\\`6██▌  ▐██▌',
+      '`6 ▐██▌ `@/ `6▐█▌  ▐███▌  `4▐█▌`6  ▐▌`4     `6▐▌  `4▐███▌  `6▐███▌ `@\\ `6▐██▌',
+      '`6 ▐██▌`@/   `6▐█▌  ▐███▌  `4▐█▌     `8░`6░`8░   `4▐███▌  `6▐███▌`@\\   `6▐██▌',
+      '`8▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒',
+      '`4~`8·`4~`8· `$A S H E N F A L L `4~`8·`4~`8·`4~`8·`4~`8·`4~`8·`4~`8·`4~`8·`4~`8·`4~`8·`4~`8·`4~`8·`4~`8·`4~`8·',
+    ],
+    colors: ['dred', 'dgray', 'brown', 'brown', 'brown', 'dgray', 'dred'],
+  },
+
+  bracken_hollow: {
+    lines: [
+      '`8░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░',
+      '`8                  `7▄▄▄`8                  `7▄▄▄',
+      '`8                  `7▐███▌  `8▐████████████▌  `7▐███▌',
+      '`8                  `7▐███▌  `8▐█▌`7 ▐▌`8   `7▐▌  `8▐█▌  `7▐███▌',
+      '`8                  `7▐███▌  `8▐█▌    `7╔══╗`8  ▐█▌  `7▐███▌',
+      '`8▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓',
+      '`8~`7·`8~`7· `$B R A C K E N   H O L L O W `8~`7·`8~`7·`8~`7·`8~`7·`8~`7·`8~`7·`8~`7·`8~`7·`8~`7·`8~',
+    ],
+    colors: ['dgray', 'dgray', 'dgray', 'dgray', 'dgray', 'dgray', 'dgray'],
+  },
+
+  old_karth: {
+    lines: [
+      '`4░`6░`4░`6░`4░`6░`4░`6░`4░`6░`4░`6░`4░`6░`4░`6░`4░`6░`4░`6░`4░`6░`4░`6░`4░`6░`4░`6░`4░`6░`4░`6░`4░`6░`4░`6░`4░`6░`4░`6░`4░`6░`4░`6░',
+      '`6  ▄▄▄   `4▄▄`6▄  `4▄`6▄▄▄`4▄  `8▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄`6  `4▄`6▄▄▄`4▄  ▄▄▄   `4▄▄▄',
+      '`6 ▐██   `4 ▐██▌ `8 ▐█████████████████████▌ `4▐██▌  `6▐███   `4▐██',
+      '`6  ██    `4 ▐▌`8  ▐█▌`6  ▐▌`8     `6▐▌  `8▐███▌  `4▐▌`6  ▐██▌   `4██',
+      '`6 ▐       `4 `8 ▐█▌     `6╔`4══`6╗`8   ▐███▌  `4    `6▐█',
+      '`8▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒',
+      '`4~`8·`4~`8· `$O L D   K A R T H `4~`8·`4~`8·`4~`8·`4~`8·`4~`8·`4~`8·`4~`8·`4~`8·`4~`8·`4~`8·`4~`8·`4~`8·`4~`8·',
+    ],
+    colors: ['dred', 'brown', 'brown', 'brown', 'brown', 'dgray', 'dred'],
+  },
+
+  frostmere: {
+    lines: [
+      '`!░`%░`!░`%░`!░`%░`!░`%░`!░`%░`!░`%░`!░`%░`!░`%░`!░`%░`!░`%░`!░`%░`!░`%░`!░`%░`!░`%░`!░`%░`!░`%░`!░`%░`!░`%░`!░`%░`!░`%░`!░`%░`!░',
+      '`%  ╔═╗  ╔═╗  ╔══╗  `7╔══════════════════╗`%  ╔══╗  ╔═╗  ╔═╗',
+      '`%  ║ ║  ║ ║  ║  ║  `7║`!  *   *   *   *  `7║`%  ║  ║  ║ ║  ║ ║',
+      '`%  ║ ║  ║ ║  ║  ║  `7║`!    *   *   *     `7║`%  ║  ║  ║ ║  ║ ║',
+      '`%  ╚═╝  ╚═╝  ╚══╝  `7╚══════════════════╝`%  ╚══╝  ╚═╝  ╚═╝',
+      '`7░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░',
+      '`!~`7·`!~`7· `$F R O S T M E R E `!~`7·`!~`7·`!~`7·`!~`7·`!~`7·`!~`7·`!~`7·`!~`7·`!~`7·`!~`7·`!~`7·`!~`7·',
+    ],
+    colors: ['cyan', 'white', 'white', 'white', 'white', 'gray', 'cyan'],
   },
 
   // ── Shared locations ──────────────────────────────────────────────────────
@@ -438,6 +610,8 @@ const LOCATION_BANNERS = {
 };
 
 function renderBanner(key) {
+  const override = getBannerOverride(key);
+  if (override) return override;
   const banner = LOCATION_BANNERS[key] || LOCATION_BANNERS.town;
   return banner.lines.map((line, i) => (c[banner.colors[i]] || c.white) + line);
 }
@@ -494,7 +668,8 @@ function getStatusBar(player) {
 function getTownScreen(player) {
   const stam = player.stamina ?? player.fights_left ?? 10;
   const trainLeft = 5 - (player.training_today || 0);
-  const town = TOWNS[player.current_town || 'harood'] || TOWNS.harood;
+  const town   = TOWNS[player.current_town || 'harood'] || TOWNS.harood;
+  const social = SOCIAL_SPACES[town.id] || SOCIAL_SPACES.harood;
 
   const lines = [
     ...renderBanner(town.id),
@@ -508,11 +683,11 @@ function getTownScreen(player) {
     `${c.yellow}  [X]${c.white} Training Grounds${trainLeft > 0 ? c.dgreen + '  (' + trainLeft + ' session' + (trainLeft !== 1 ? 's' : '') + ' left)' : c.dgray + '  (fully trained today)'}`,
     `${c.yellow}  [W]${c.white} Visit the Weapon Shop`,
     `${c.yellow}  [A]${c.white} Visit the Armour Shop`,
-    `${c.yellow}  [I]${c.white} Go to the Inn`,
+    `${c.yellow}  [I]${c.white} Go to the Inn${player.antidote_owned ? c.dgreen + '  (you have an antidote)' : ''}`,
     `${c.yellow}  [B]${c.white} Visit the Bank`,
     `${c.yellow}  [M]${c.white} Seek the Master (Seth Able)`,
-    `${c.yellow}  [T]${c.white} Go to the Dark Cloak Tavern`,
-    `${c.yellow}  [G]${c.white} Stroll in Violet's Garden`,
+    `${c.yellow}  [T]${c.white} Go to the Tavern`,
+    `${c.yellow}  [G]${c.white} ${social.name}`,
     `${c.yellow}  [R]${c.white} Speak to the Bard`,
     `${c.yellow}  [N]${c.white} View the Daily News`,
     `${c.yellow}  [P]${c.white} View Other Players`,
@@ -522,7 +697,7 @@ function getTownScreen(player) {
     `${c.cyan}  [V]${c.white} World Map / Travel${c.dgray} (${town.connections.length} route${town.connections.length !== 1 ? 's' : ''} from here)`,
     `${c.dgray}  [L]${c.gray} Logout`,
     '',
-  ].filter(l => l !== undefined);
+  ].filter(l => l !== undefined && l !== '');
 
   const choices = [
     { key: 'F', label: 'Enter the Forest', action: 'forest', disabled: stam === 0 },
@@ -533,7 +708,7 @@ function getTownScreen(player) {
     { key: 'B', label: 'Bank', action: 'bank' },
     { key: 'M', label: 'Master', action: 'master' },
     { key: 'T', label: 'Tavern', action: 'tavern' },
-    { key: 'G', label: "Violet's Garden", action: 'garden' },
+    { key: 'G', label: social.name, action: social.action },
     { key: 'R', label: 'The Bard', action: 'bard' },
     { key: 'N', label: 'Daily News', action: 'news' },
     { key: 'P', label: 'Other Players', action: 'players' },
@@ -682,32 +857,66 @@ function getForestCombatScreen(player, monster, roundLog, won, dead, round = 1, 
 }
 
 function getWeaponShopScreen(player) {
-  // Determine which tiers have multiple weapons (for star marking)
+  const town   = TOWNS[player.current_town || 'harood'] || TOWNS.harood;
+  const owner  = SHOP_OWNERS[town.id] || SHOP_OWNERS.harood;
+  const maxTier = town.shopMaxTier || 15;
+  const TODAY  = () => Math.floor(Date.now() / 86400000);
+
+  // Determine which tiers have multiple weapons, within available range
   const tierCounts = {};
   for (let i = 1; i < WEAPONS.length; i++) {
     const w = WEAPONS[i];
-    if (!w) continue;
+    if (!w || (w.tier !== undefined && w.tier > maxTier)) continue;
     if (w.tier !== undefined) tierCounts[w.tier] = (tierCounts[w.tier] || 0) + 1;
   }
 
+  // Daily discounted item for Duskveil
+  const eligibleNums = WEAPONS.slice(1).filter(w => w && w.tier <= maxTier).map(w => w.num);
+  const dailyDiscountNum = owner.dailyDiscount && eligibleNums.length
+    ? eligibleNums[TODAY() % eligibleNums.length]
+    : null;
+
+  const cur = player.weapon_num > 0 ? WEAPONS[player.weapon_num] : null;
+  const effectiveSellMult = owner.sellMult * (owner.charmBonus && player.charm >= 20 ? 1.08 : 1.0);
+  const tradeIn = cur ? Math.floor(cur.price * effectiveSellMult) : 0;
+
   const lines = [
     ...renderBanner('weapon_shop'),
-    `${c.gray}  Your gold: ${c.yellow}${fmt(player.gold)}`,
-    `${c.gray}  Current weapon: ${c.white}${player.weapon_name} ${c.gray}(STR +${player.weapon_num > 0 ? WEAPONS[player.weapon_num].strength : 0})`,
-    divider(),
-    `${c.dgray}  Weapons marked * are alternatives at the same tier`,
-    `${c.yellow}  #   Weapon            Price          STR Bonus`,
+    `${c.brown}  ${owner.name}${c.dgray}, ${owner.title} — ${c.gray}${owner.quote}`,
     divider('─', 55),
-  ];
+    `${c.gray}  Your gold: ${c.yellow}${fmt(player.gold)}`,
+    `${c.gray}  Equipped:  ${c.white}${player.weapon_name}${tradeIn > 0 ? c.dgray + '  (trade-in: ' + fmt(tradeIn) + ' gold)' : ''}`,
+    maxTier < 15 ? `${c.dgray}  Stock limited to tier ${maxTier}.` : undefined,
+    owner.dailyDiscount ? `${c.green}  ★ One item is discounted today.` : undefined,
+    owner.charmBonus    ? `${c.cyan}  Selling price +8% with charm ≥ 20.` : undefined,
+    divider('─', 55),
+    `${c.dgray}  Weapons marked ★ are alternatives at the same tier`,
+    `${c.yellow}  #   Weapon            Price (after trade-in)  STR`,
+    divider('─', 55),
+  ].filter(l => l !== undefined);
 
   for (let i = 1; i < WEAPONS.length; i++) {
     const w = WEAPONS[i];
     if (!w) continue;
-    const canAfford = player.gold >= w.price;
     const owned = player.weapon_num === i;
+    if (w.tier !== undefined && w.tier > maxTier && !owned) continue;
+
+    // Compute effective price
+    let effectiveMult = owner.weaponMult;
+    if (owner.tierCap && w.tier <= owner.tierCap) effectiveMult = Math.min(effectiveMult, owner.weaponMult);
+    else if (owner.tierCap && w.tier > owner.tierCap) effectiveMult = 1.0;
+    if (owner.fleeDiscount && w.bonus === 'flee_bonus') effectiveMult *= 0.85;
+    if (owner.poisonGearDiscount && w.bonus && w.bonusDesc && w.bonusDesc.toLowerCase().includes('poison')) effectiveMult *= 0.85;
+    const isDiscounted = dailyDiscountNum === w.num;
+    if (isDiscounted) effectiveMult *= 0.80;
+    const displayPrice = Math.floor(w.price * effectiveMult);
+    const netPrice = Math.max(0, displayPrice - tradeIn);
+
+    const canAfford = Number(player.gold) >= netPrice;
     const col = owned ? c.cyan : (canAfford ? c.white : c.dgray);
     const tierStar = (w.tier !== undefined && tierCounts[w.tier] > 1) ? c.green + '★' + col : '';
-    lines.push(`${c.yellow}  ${rpad(w.num !== undefined ? w.num : i, 2)}${col}  ${pad(w.name, 18)}${tierStar} ${rpad(fmt(w.price), 14)} +${w.strength}${owned ? c.cyan + '  [EQUIPPED]' : ''}${w.bonus ? c.dgreen + '  (' + w.bonusDesc + ')' : ''}`);
+    const discountTag = isDiscounted ? c.green + ' [SALE]' + col : '';
+    lines.push(`${c.yellow}  ${rpad(w.num, 2)}${col}  ${pad(w.name, 16)}${tierStar}${discountTag} ${rpad(fmt(netPrice), 14)} +${w.strength}${owned ? c.cyan + '  [EQUIPPED]' : ''}${w.bonus ? c.dgreen + ' (' + w.bonusDesc + ')' : ''}`);
   }
 
   lines.push('');
@@ -723,32 +932,64 @@ function getWeaponShopScreen(player) {
 }
 
 function getArmorShopScreen(player) {
-  // Determine which tiers have multiple armors (for star marking)
+  const town   = TOWNS[player.current_town || 'harood'] || TOWNS.harood;
+  const owner  = SHOP_OWNERS[town.id] || SHOP_OWNERS.harood;
+  const maxTier = town.shopMaxTier || 15;
+  const TODAY  = () => Math.floor(Date.now() / 86400000);
+
   const tierCounts = {};
   for (let i = 1; i < ARMORS.length; i++) {
     const a = ARMORS[i];
-    if (!a) continue;
+    if (!a || (a.tier !== undefined && a.tier > maxTier)) continue;
     if (a.tier !== undefined) tierCounts[a.tier] = (tierCounts[a.tier] || 0) + 1;
   }
 
+  // Daily discounted item for Duskveil
+  const eligibleNums = ARMORS.slice(1).filter(a => a && a.tier <= maxTier).map(a => a.num);
+  const dailyDiscountNum = owner.dailyDiscount && eligibleNums.length
+    ? eligibleNums[TODAY() % eligibleNums.length]
+    : null;
+
+  const cur = player.arm_num > 0 ? ARMORS[player.arm_num] : null;
+  const effectiveSellMult = owner.sellMult * (owner.charmBonus && player.charm >= 20 ? 1.08 : 1.0);
+  const tradeIn = cur ? Math.floor(cur.price * effectiveSellMult) : 0;
+
   const lines = [
     ...renderBanner('armor_shop'),
-    `${c.gray}  Your gold: ${c.yellow}${fmt(player.gold)}`,
-    `${c.gray}  Current armour: ${c.white}${player.arm_name} ${c.gray}(DEF +${player.arm_num > 0 ? ARMORS[player.arm_num].defense : 0})`,
-    divider(),
-    `${c.dgray}  Armours marked * are alternatives at the same tier`,
-    `${c.yellow}  #   Armour            Price          DEF Bonus`,
+    `${c.brown}  ${owner.name}${c.dgray}, ${owner.title} — ${c.gray}${owner.quote}`,
     divider('─', 55),
-  ];
+    `${c.gray}  Your gold: ${c.yellow}${fmt(player.gold)}`,
+    `${c.gray}  Equipped:  ${c.white}${player.arm_name}${tradeIn > 0 ? c.dgray + '  (trade-in: ' + fmt(tradeIn) + ' gold)' : ''}`,
+    maxTier < 15 ? `${c.dgray}  Stock limited to tier ${maxTier}.` : undefined,
+    owner.dailyDiscount ? `${c.green}  ★ One item is discounted today.` : undefined,
+    owner.charmBonus    ? `${c.cyan}  Selling price +8% with charm ≥ 20.` : undefined,
+    divider('─', 55),
+    `${c.dgray}  Armours marked ★ are alternatives at the same tier`,
+    `${c.yellow}  #   Armour            Price (after trade-in)  DEF`,
+    divider('─', 55),
+  ].filter(l => l !== undefined);
 
   for (let i = 1; i < ARMORS.length; i++) {
     const a = ARMORS[i];
     if (!a) continue;
-    const canAfford = player.gold >= a.price;
     const owned = player.arm_num === i;
+    if (a.tier !== undefined && a.tier > maxTier && !owned) continue;
+
+    let effectiveMult = owner.armorMult;
+    if (owner.tierCap && a.tier <= owner.tierCap) effectiveMult = Math.min(effectiveMult, owner.armorMult);
+    else if (owner.tierCap && a.tier > owner.tierCap) effectiveMult = 1.0;
+    if (owner.fleeDiscount && a.bonus === 'flee_bonus') effectiveMult *= 0.85;
+    if (owner.poisonGearDiscount && a.bonus === 'poison_resist') effectiveMult *= 0.85;
+    const isDiscounted = dailyDiscountNum === a.num;
+    if (isDiscounted) effectiveMult *= 0.80;
+    const displayPrice = Math.floor(a.price * effectiveMult);
+    const netPrice = Math.max(0, displayPrice - tradeIn);
+
+    const canAfford = Number(player.gold) >= netPrice;
     const col = owned ? c.cyan : (canAfford ? c.white : c.dgray);
     const tierStar = (a.tier !== undefined && tierCounts[a.tier] > 1) ? c.green + '★' + col : '';
-    lines.push(`${c.yellow}  ${rpad(a.num !== undefined ? a.num : i, 2)}${col}  ${pad(a.name, 18)}${tierStar} ${rpad(fmt(a.price), 14)} +${a.defense}${owned ? c.cyan + '  [EQUIPPED]' : ''}${a.bonus ? c.dgreen + '  (' + a.bonusDesc + ')' : ''}`);
+    const discountTag = isDiscounted ? c.green + ' [SALE]' + col : '';
+    lines.push(`${c.yellow}  ${rpad(a.num, 2)}${col}  ${pad(a.name, 16)}${tierStar}${discountTag} ${rpad(fmt(netPrice), 14)} +${a.defense}${owned ? c.cyan + '  [EQUIPPED]' : ''}${a.bonus ? c.dgreen + ' (' + a.bonusDesc + ')' : ''}`);
   }
 
   lines.push('');
@@ -779,6 +1020,9 @@ function getInnScreen(player) {
     player.gems > 0
       ? `${c.yellow}  [G]${c.white} Use a gem to recover all HP${c.dgray} (free, uses 1 gem)`
       : `${c.dgray}  [G] Use a gem${c.dgray} (you have no gems)`,
+    player.antidote_owned
+      ? `${c.yellow}  [U]${c.white} Use antidote${c.dgreen} (cures poison — you have one)`
+      : undefined,
     `${c.yellow}  [L]${c.white} Leave the Inn`,
     '',
     fullHp ? `${c.green}  You are already at full health!` : '',
@@ -787,6 +1031,7 @@ function getInnScreen(player) {
   return buildScreen('The Inn', lines, [
     { key: 'R', label: 'Rest (gold)', action: 'inn_rest', disabled: fullHp || player.gold < restCost },
     { key: 'G', label: 'Use gem', action: 'inn_gem', disabled: player.gems === 0 || fullHp },
+    { key: 'U', label: 'Use antidote', action: 'inn_antidote', disabled: !player.antidote_owned },
     { key: 'L', label: 'Leave', action: 'town' },
   ]);
 }
@@ -1319,10 +1564,12 @@ function getNearDeathWaitingScreen(player) {
     '',
     `${c.yellow}  [W]${c.white} Wait for rescue...`,
     `${c.red}  [G]${c.white} Give up${c.gray} — accept death penalty now and return to town`,
+    `${c.dgray}  [L]${c.gray} Save and log out${c.dgray} — your character will still wait here`,
   ];
   return buildScreen('Near Death...', lines, [
     { key: 'W', label: 'Wait for rescue...', action: 'near_death_wait' },
     { key: 'G', label: 'Give up (accept death)', action: 'near_death_accept' },
+    { key: 'L', label: 'Save & log out', action: 'logout' },
   ]);
 }
 
@@ -1381,10 +1628,12 @@ function getNearDeathScreen(player, monster, log, round, history) {
   lines.push('');
   lines.push(`${c.yellow}  [W]${c.white} Wait and hope...`);
   lines.push(`${c.red}  [G]${c.white} Give up${c.gray} — accept death penalty now and return to town`);
+  lines.push(`${c.dgray}  [L]${c.gray} Save and log out${c.dgray} — your character will still wait here`);
 
   return buildScreen('Near Death!', lines, [
     { key: 'W', label: 'Wait and hope...', action: 'near_death_wait' },
     { key: 'G', label: 'Give up (accept death)', action: 'near_death_accept' },
+    { key: 'L', label: 'Save & log out', action: 'logout' },
   ]);
 }
 
@@ -1393,7 +1642,7 @@ function getCrierScreen(player) {
     ...renderBanner('news'),
     `${c.yellow}  Post a message to the Town Crier!`,
     '',
-    `${c.white}  Your announcement will be read aloud in the Town of Harood`,
+    `${c.white}  Your announcement will be read aloud across ${(TOWNS[player.current_town || 'harood'] || TOWNS.harood).name}`,
     `${c.white}  for the rest of the day. Costs ${c.yellow}50 gold${c.white}.`,
     '',
     `${c.gray}  Your gold: ${c.yellow}${fmt(player.gold)}`,
@@ -1471,16 +1720,19 @@ function getWorldMapScreen(player) {
     `${c.white}  Direct routes from here:`,
     ...connections.map(id => {
       const dest = TOWNS[id];
-      return dest ? `${c.green}    → ${c.white}${dest.name}  ${c.dgray}${dest.tagline}` : null;
+      if (!dest) return null;
+      const gate = (dest.minLevel || 1) > 1 ? `${c.red}  [Lv ${dest.minLevel}+]` : '';
+      return `${c.green}    → ${c.white}${dest.name}${gate}  ${c.dgray}${dest.tagline}`;
     }).filter(Boolean),
     '',
-    `${c.dgray}  Travel costs 50 gold per journey.`,
+    `${c.dgray}  A carriage costs ${c.yellow}50 gold${c.dgray} and arrives instantly.`,
+    `${c.dgray}  Walking is free but takes stamina and has road dangers.`,
     divider('─', 55),
   ];
 
   const choices = connections.map(id => {
     const dest = TOWNS[id];
-    return dest ? { key: dest.name[0].toUpperCase(), label: `Travel to ${dest.name}`, action: 'travel', param: id } : null;
+    return dest ? { key: dest.name[0].toUpperCase(), label: `Travel to ${dest.name}`, action: 'travel_options', param: id } : null;
   }).filter(Boolean);
 
   // Deduplicate keys (e.g. two towns starting with same letter)
@@ -1498,6 +1750,416 @@ function getWorldMapScreen(player) {
   deduped.push({ key: 'L', label: 'Leave (back to town)', action: 'town' });
 
   return buildScreen('World Map', lines, deduped);
+}
+
+// ── Social space screens (one per city) ──────────────────────────────────────
+
+function getSocialVelmoraScreen(player) {
+  const lines = [
+    ...renderBanner('velmora'),
+    `${c.yellow}  The Silken Chamber`,
+    `${c.gray}  Lanterns of amber glass. Soft music. The smell of perfume and wine.`,
+    `${c.gray}  A graceful host extends a hand. "Welcome, warrior. What do you seek?"`,
+    '',
+    `${c.yellow}  [E]${c.white} Enter for an evening ${c.dgray}(100 gold — outcome varies...)`,
+    `${c.yellow}  [L]${c.white} Leave`,
+  ];
+  return buildScreen('The Silken Chamber', lines, [
+    { key: 'E', label: 'Enter (100g)', action: 'social_velmora_enter', disabled: Number(player.gold) < 100 },
+    { key: 'L', label: 'Leave', action: 'town' },
+  ]);
+}
+
+function getSocialIronholdScreen(player) {
+  const lines = [
+    ...renderBanner('ironhold'),
+    `${c.yellow}  The Fighting Pit`,
+    `${c.white}  Iron cages. Roaring crowd. The smell of blood and sawdust.`,
+    '',
+    `${c.yellow}  [W]${c.white} Watch a fight ${c.dgray}(free — hear what warriors say)`,
+    `${c.yellow}  [E]${c.white} Enter the pit ${c.dgray}(100 gold entry — win the prize pot)`,
+    `${c.yellow}  [B]${c.white} Bet on the bout ${c.dgray}(wager gold on the outcome)`,
+    `${c.yellow}  [L]${c.white} Leave`,
+  ];
+  return buildScreen('The Fighting Pit', lines, [
+    { key: 'W', label: 'Watch a fight', action: 'social_ironhold_watch' },
+    { key: 'E', label: 'Enter the pit (100g)', action: 'social_ironhold_enter', disabled: Number(player.gold) < 100 },
+    { key: 'B', label: 'Place a bet', action: 'social_ironhold_bet', needsInput: true, inputLabel: 'Bet amount (gold):', inputType: 'number' },
+    { key: 'L', label: 'Leave', action: 'town' },
+  ]);
+}
+
+function getSocialSilverkeepScreen(player) {
+  const blessingCost = player.level * 50;
+  const lines = [
+    ...renderBanner('silverkeep'),
+    `${c.yellow}  Temple of Valor`,
+    `${c.cyan}  White stone. Candlelight. The soft sound of chanting.`,
+    `${c.cyan}  A priest in silver robes turns toward you.`,
+    '',
+    `${c.yellow}  [P]${c.white} Pray ${c.dgray}(free — removes poison, light healing)`,
+    `${c.yellow}  [D]${c.white} Donate for healing ${c.dgray}(50 gold — +30% HP restored)`,
+    `${c.yellow}  [H]${c.white} Holy Blessing ${c.dgray}(${blessingCost.toLocaleString()} gold — full HP + cure all)`,
+    `${c.yellow}  [L]${c.white} Leave`,
+  ];
+  return buildScreen('Temple of Valor', lines, [
+    { key: 'P', label: 'Pray (free)', action: 'social_silverkeep_pray' },
+    { key: 'D', label: 'Donate (50g)', action: 'social_silverkeep_donate', disabled: Number(player.gold) < 50 },
+    { key: 'H', label: `Holy Blessing (${blessingCost.toLocaleString()}g)`, action: 'social_silverkeep_bless', disabled: Number(player.gold) < blessingCost },
+    { key: 'L', label: 'Leave', action: 'town' },
+  ]);
+}
+
+function getSocialThornreachScreen(player) {
+  const alreadyHealed = player.grove_healed_today;
+  const lines = [
+    ...renderBanner('thornreach'),
+    `${c.yellow}  The Ancient Grove`,
+    `${c.dgreen}  Ancient oaks. Dappled light. The air tastes of moss and old magic.`,
+    '',
+    alreadyHealed
+      ? `${c.dgray}  [C] Commune (you have already drawn from the grove today)`
+      : `${c.yellow}  [C]${c.white} Commune with the grove ${c.dgray}(free, 1×/day — heals 10% HP)`,
+    `${c.yellow}  [H]${c.white} Harvest herbs ${c.dgray}(30 gold — you receive an antidote)`,
+    `${c.yellow}  [W]${c.white} Whisper to the spirits ${c.dgray}(50 gold — gain experience)`,
+    `${c.yellow}  [L]${c.white} Leave`,
+  ];
+  return buildScreen('The Ancient Grove', lines, [
+    { key: 'C', label: 'Commune (free)', action: 'social_thornreach_commune', disabled: !!alreadyHealed },
+    { key: 'H', label: 'Harvest herbs (30g)', action: 'social_thornreach_herbs', disabled: Number(player.gold) < 30 },
+    { key: 'W', label: 'Whisper to spirits (50g)', action: 'social_thornreach_whisper', disabled: Number(player.gold) < 50 },
+    { key: 'L', label: 'Leave', action: 'town' },
+  ]);
+}
+
+function getSocialDuskveilScreen(player) {
+  const lines = [
+    ...renderBanner('duskveil'),
+    `${c.magenta}  The Shadow Market`,
+    `${c.dgray}  Stalls draped in black cloth. Hooded figures. Whispered exchanges.`,
+    `${c.dgray}  A masked woman steps forward. "Information. Services. Discretion."`,
+    '',
+    `${c.yellow}  [I]${c.white} Buy road intelligence ${c.dgray}(150 gold — know what lies ahead)`,
+    `${c.yellow}  [G]${c.white} Hire a guide ${c.dgray}(200 gold — halves road encounter chance)`,
+    `${c.yellow}  [L]${c.white} Leave`,
+  ];
+  return buildScreen('The Shadow Market', lines, [
+    { key: 'I', label: 'Buy road intelligence (150g)', action: 'social_duskveil_intel', disabled: Number(player.gold) < 150 },
+    { key: 'G', label: 'Hire a guide (200g)', action: 'social_duskveil_guide', disabled: Number(player.gold) < 200 },
+    { key: 'L', label: 'Leave', action: 'town' },
+  ]);
+}
+
+function getSocialGraveportScreen(player) {
+  const lines = [
+    ...renderBanner('graveport'),
+    `${c.yellow}  The Drowned Man`,
+    `${c.dgray}  Lanterns hung from rope. A ship's bell above the door.`,
+    `${c.dgray}  The barman is missing two fingers and doesn't explain why.`,
+    '',
+    `${c.yellow}  [D]${c.white} Buy a sailor's drink ${c.dgray}(40 gold — +2 stamina + rumour)`,
+    `${c.yellow}  [R]${c.white} Hear port gossip ${c.dgray}(free — learn something useful)`,
+    `${c.yellow}  [L]${c.white} Leave`,
+  ];
+  return buildScreen('The Drowned Man', lines, [
+    { key: 'D', label: "Sailor's drink (40g)", action: 'social_graveport_drink', disabled: Number(player.gold) < 40 },
+    { key: 'R', label: 'Hear port gossip', action: 'social_graveport_gossip' },
+    { key: 'L', label: 'Leave', action: 'town' },
+  ]);
+}
+
+function getSocialStormwatchScreen(player) {
+  const studyCost   = player.level * 50;
+  const sageCost    = 400;
+  const scrollCost  = player.level * 200;
+  const lines = [
+    ...renderBanner('stormwatch'),
+    `${c.yellow}  The Arcane Library`,
+    `${c.cyan}  Towers of leather-bound tomes. The smell of ozone and old parchment.`,
+    `${c.cyan}  A robed archivist peers over his spectacles.`,
+    '',
+    `${c.yellow}  [S]${c.white} Study ${c.dgray}(${studyCost.toLocaleString()} gold — gain experience)`,
+    `${c.yellow}  [C]${c.white} Consult a Sage ${c.dgray}(${sageCost.toLocaleString()} gold — +1 charm + monster lore)`,
+    `${c.yellow}  [R]${c.white} Purchase a Scroll ${c.dgray}(${scrollCost.toLocaleString()} gold — +1 gem)`,
+    `${c.yellow}  [L]${c.white} Leave`,
+  ];
+  return buildScreen('The Arcane Library', lines, [
+    { key: 'S', label: `Study (${studyCost.toLocaleString()}g)`,   action: 'social_stormwatch_study',  disabled: Number(player.gold) < studyCost },
+    { key: 'C', label: `Consult Sage (${sageCost}g)`,             action: 'social_stormwatch_sage',   disabled: Number(player.gold) < sageCost },
+    { key: 'R', label: `Buy Scroll (${scrollCost.toLocaleString()}g)`, action: 'social_stormwatch_scroll', disabled: Number(player.gold) < scrollCost },
+    { key: 'L', label: 'Leave', action: 'town' },
+  ]);
+}
+
+function getSocialOldKarthScreen(player) {
+  const lines = [
+    ...renderBanner('old_karth'),
+    `${c.yellow}  The Crypts`,
+    `${c.dgray}  Carved stone passages. Ancient torch brackets, long cold.`,
+    `${c.dgray}  The dead have been here a long time. They may have left things behind.`,
+    '',
+    `${c.yellow}  [L]${c.white} Loot the burial chambers ${c.red}(risky — 50/50: find gold or find a curse)`,
+    `${c.yellow}  [C]${c.white} Commune with the dead ${c.dgray}(100 gold — +1 charm, +experience)`,
+    `${c.yellow}  [X]${c.white} Leave the crypts`,
+  ];
+  return buildScreen('The Crypts', lines, [
+    { key: 'L', label: 'Loot (risky)', action: 'social_old_karth_loot' },
+    { key: 'C', label: 'Commune (100g)', action: 'social_old_karth_commune', disabled: Number(player.gold) < 100 },
+    { key: 'X', label: 'Leave', action: 'town' },
+  ]);
+}
+
+function getSocialAshenfallScreen(player) {
+  const weaponCost = player.level * 3000;
+  const armorCost  = player.level * 2000;
+  const lines = [
+    ...renderBanner('ashenfall'),
+    `${c.yellow}  The Forge of Ruin`,
+    `${c.red}  Heat like a furnace wall. Vorn works without looking up.`,
+    `${c.red}  "Want it stronger? Put it in the fire."`,
+    '',
+    player.forge_weapon_upgraded
+      ? `${c.dgray}  [W] Temper Weapon (already upgraded)`
+      : `${c.yellow}  [W]${c.white} Temper Weapon ${c.dgray}(${weaponCost.toLocaleString()} gold — permanent +5 STR)`,
+    player.forge_armor_upgraded
+      ? `${c.dgray}  [A] Reinforce Armour (already upgraded)`
+      : `${c.yellow}  [A]${c.white} Reinforce Armour ${c.dgray}(${armorCost.toLocaleString()} gold — permanent +3 DEF)`,
+    `${c.dgray}  Upgrades apply to currently equipped gear. One per item.`,
+    `${c.yellow}  [L]${c.white} Leave`,
+  ];
+  return buildScreen('The Forge of Ruin', lines, [
+    { key: 'W', label: `Temper Weapon (${weaponCost.toLocaleString()}g)`, action: 'social_ashenfall_weapon', disabled: !!player.forge_weapon_upgraded || Number(player.gold) < weaponCost },
+    { key: 'A', label: `Reinforce Armour (${armorCost.toLocaleString()}g)`, action: 'social_ashenfall_armor', disabled: !!player.forge_armor_upgraded || Number(player.gold) < armorCost },
+    { key: 'L', label: 'Leave', action: 'town' },
+  ]);
+}
+
+function getSocialBrackenHollowScreen(player) {
+  const alreadyUsed = player.well_used_today;
+  const lines = [
+    ...renderBanner('bracken_hollow'),
+    `${c.yellow}  The Village Well`,
+    `${c.white}  A stone well at the centre of a quiet square. Children play nearby.`,
+    `${c.white}  The water is cool and clear.`,
+    '',
+    alreadyUsed
+      ? `${c.dgray}  [D] Drink (you have already drawn from the well today)`
+      : `${c.yellow}  [D]${c.white} Drink from the well ${c.dgreen}(free, 1×/day — +2 HP, +1 stamina)`,
+    `${c.yellow}  [T]${c.white} Talk to the locals ${c.dgray}(free — hear rumours)`,
+    `${c.yellow}  [L]${c.white} Leave`,
+  ];
+  return buildScreen('The Village Well', lines, [
+    { key: 'D', label: 'Drink (free)', action: 'social_bracken_drink', disabled: !!alreadyUsed },
+    { key: 'T', label: 'Talk to locals', action: 'social_bracken_talk' },
+    { key: 'L', label: 'Leave', action: 'town' },
+  ]);
+}
+
+function getSocialMirefenScreen(player) {
+  const brewCost  = player.level * 30;
+  const curseCost = 200;
+  const lines = [
+    ...renderBanner('mirefen'),
+    `${c.yellow}  The Bog Witch's Hut`,
+    `${c.dgreen}  A structure that seems to have grown rather than been built.`,
+    `${c.dgreen}  An ancient woman watches you from the doorway without blinking.`,
+    `${c.dgreen}  "Come in, come in. The swamp told me you were coming."`,
+    '',
+    `${c.yellow}  [B]${c.white} Healing brew ${c.dgray}(${brewCost.toLocaleString()} gold — restores 40% HP)`,
+    `${c.yellow}  [C]${c.white} Curse removal ${c.dgray}(100 gold — clears poison completely)`,
+    `${c.yellow}  [K]${c.white} Curse an enemy ${c.red}(200 gold — a random warrior loses HP)`,
+    `${c.yellow}  [L]${c.white} Leave`,
+  ];
+  return buildScreen("The Bog Witch's Hut", lines, [
+    { key: 'B', label: `Healing brew (${brewCost.toLocaleString()}g)`, action: 'social_mirefen_brew', disabled: Number(player.gold) < brewCost },
+    { key: 'C', label: 'Curse removal (100g)', action: 'social_mirefen_curse_remove', disabled: Number(player.gold) < 100 },
+    { key: 'K', label: 'Curse an enemy (200g)', action: 'social_mirefen_curse_enemy', disabled: Number(player.gold) < curseCost },
+    { key: 'L', label: 'Leave', action: 'town' },
+  ]);
+}
+
+function getSocialFrostmereScreen(player) {
+  const mealCost = 30;
+  const restCost = 50 + player.level * 10;
+  const blessCost = 100;
+  const lines = [
+    ...renderBanner('frostmere'),
+    `${c.yellow}  The Hearthfire Inn`,
+    `${c.cyan}  A great fire blazes in the centre of the hall. Furs on every wall.`,
+    `${c.cyan}  The warmth hits you like a wall. Your bones unclench.`,
+    '',
+    `${c.yellow}  [M]${c.white} Hot meal ${c.dgray}(${mealCost} gold — +3 stamina)`,
+    `${c.yellow}  [R]${c.white} Full rest ${c.dgray}(${restCost.toLocaleString()} gold — full HP restore)`,
+    `${c.yellow}  [H]${c.white} Hunter's blessing ${c.dgray}(${blessCost} gold — +30% HP, clear poison, +4 stamina)`,
+    `${c.yellow}  [L]${c.white} Leave`,
+  ];
+  return buildScreen('The Hearthfire Inn', lines, [
+    { key: 'M', label: `Hot meal (${mealCost}g)`, action: 'social_frostmere_meal', disabled: Number(player.gold) < mealCost },
+    { key: 'R', label: `Full rest (${restCost.toLocaleString()}g)`, action: 'social_frostmere_rest', disabled: Number(player.gold) < restCost },
+    { key: 'H', label: `Hunter's blessing (${blessCost}g)`, action: 'social_frostmere_bless', disabled: Number(player.gold) < blessCost },
+    { key: 'L', label: 'Leave', action: 'town' },
+  ]);
+}
+
+// ── Travel options screen (carriage vs walk) ──────────────────────────────────
+function getTravelOptionsScreen(player, destId) {
+  const { getRoadSegments } = require('./data');
+  const from = TOWNS[player.current_town || 'harood'] || TOWNS.harood;
+  const dest = TOWNS[destId];
+  if (!dest) return getWorldMapScreen(player);
+
+  const segs   = getRoadSegments(from.id, destId);
+  const stam   = player.stamina ?? player.fights_left ?? 10;
+
+  const lines = [
+    ...renderBanner(destId),
+    '',
+    `${c.yellow}  Travelling from ${c.white}${from.name}${c.yellow} to ${c.white}${dest.name}`,
+    '',
+    divider('─', 55),
+    `${c.yellow}  [C]${c.white} Take a Carriage    ${c.dgray}(50 gold — arrive instantly)`,
+    `${c.yellow}  [W]${c.white} Walk               ${c.dgray}(free — ${segs} segments, ${segs} stamina)`,
+    '',
+    `${c.dgray}  Your stamina: ${stam > 6 ? c.green : stam > 3 ? c.yellow : c.red}${stam}${c.dgray}/10`,
+    stam < segs ? `${c.red}  Warning: you may not have enough stamina for the full walk!` : '',
+    divider('─', 55),
+    `${c.yellow}  [B]${c.white} Back to map`,
+  ].filter(l => l !== null);
+
+  return buildScreen(`Travel to ${dest.name}`, lines, [
+    { key: 'C', label: 'Take a Carriage (50g)', action: 'travel',     param: destId },
+    { key: 'W', label: 'Walk',                  action: 'walk_start', param: destId },
+    { key: 'B', label: 'Back',                  action: 'world_map' },
+  ]);
+}
+
+// ── Road walking screen ───────────────────────────────────────────────────────
+function getRoadScreen(player) {
+  const { getRoadSegments } = require('./data');
+  const destId   = player.travel_to;
+  const dest     = TOWNS[destId] || { name: 'Unknown' };
+  const from     = TOWNS[player.current_town || 'harood'] || TOWNS.harood;
+  const done     = player.travel_segments_done || 0;
+  const total    = player.travel_segments_total || getRoadSegments(from.id, destId);
+  const stam     = player.stamina ?? player.fights_left ?? 10;
+  const progress = '█'.repeat(done) + '░'.repeat(Math.max(0, total - done));
+
+  const lines = [
+    ...renderBanner('forest'),
+    '',
+    `${c.yellow}  On the road to ${c.white}${dest.name}`,
+    `${c.dgray}  Progress: ${c.cyan}[${progress}]  ${c.white}${done}${c.dgray}/${total} segments`,
+    `${c.dgray}  Stamina:  ${stam > 6 ? c.green : stam > 3 ? c.yellow : c.red}${stam}${c.dgray}/10`,
+    '',
+    `${c.white}  Each segment costs ${c.yellow}1 stamina${c.white}. Encounter chance: ${c.yellow}35%`,
+    divider('─', 55),
+  ];
+
+  return buildScreen(`Road to ${dest.name}`, lines, [
+    { key: 'C', label: 'Continue walking', action: 'walk_continue' },
+    { key: 'M', label: 'Make camp here',   action: 'road_make_camp' },
+    { key: 'T', label: 'Turn back',        action: 'road_turn_back' },
+  ]);
+}
+
+// ── Camping screen ────────────────────────────────────────────────────────────
+function getCampingScreen(player, msgs) {
+  const dest  = TOWNS[player.travel_to] || { name: 'your destination' };
+  const done  = player.travel_segments_done || 0;
+  const total = player.travel_segments_total || 1;
+
+  const lines = [
+    ...renderBanner('forest'),
+    '',
+    `${c.brown}  You make camp by the roadside.`,
+    `${c.brown}  A fire, your bedroll, and the sounds of the night.`,
+    '',
+    `${c.dgray}  Destination: ${c.white}${dest.name}  ${c.dgray}(${done}/${total} segments done)`,
+    `${c.dgray}  Stamina will be restored on the new day.`,
+    '',
+    `${c.yellow}  [W]${c.white} Wait for morning`,
+    `${c.yellow}  [T]${c.white} Turn back (abandon trip)`,
+  ];
+
+  return buildScreen('Roadside Camp', lines, [
+    { key: 'W', label: 'Wait for morning', action: 'camp_wait' },
+    { key: 'T', label: 'Turn back',        action: 'road_turn_back' },
+  ]);
+}
+
+// ── Captive screen ────────────────────────────────────────────────────────────
+function getCaptiveScreen(player) {
+  const location = player.captive_location || 'an unknown place';
+  const buyPrice = player.level * 1000;
+  const gold     = Number(player.gold);
+
+  const lines = [
+    ...renderBanner('forest'),
+    '',
+    `${c.red}  You are being held captive in ${c.white}${location}${c.red}.`,
+    '',
+    divider('─', 55),
+    `${c.dgray}  Your gold:    ${c.yellow}${gold.toLocaleString()}`,
+    `${c.dgray}  Buy freedom:  ${c.yellow}${buyPrice.toLocaleString()} gold`,
+    '',
+    `${c.yellow}  [W]${c.white} Wait — perhaps someone will rescue you`,
+    gold >= buyPrice
+      ? `${c.yellow}  [B]${c.white} Buy your freedom (${buyPrice.toLocaleString()} gold)`
+      : `${c.dgray}  [B] Buy your freedom (${buyPrice.toLocaleString()} gold) — not enough gold`,
+    `${c.yellow}  [E]${c.white} Attempt to escape ${c.dgray}(40% chance)`,
+    divider('─', 55),
+  ];
+
+  return buildScreen('Captive', lines, [
+    { key: 'W', label: 'Wait',           action: 'captive_wait' },
+    { key: 'B', label: 'Buy freedom',    action: 'captive_buy_freedom', disabled: gold < buyPrice },
+    { key: 'E', label: 'Escape attempt', action: 'captive_escape' },
+  ]);
+}
+
+// ── Road encounter screen (shows the event, player chooses) ───────────────────
+function getRoadEncounterScreen(player, encounter) {
+  const lines = [
+    ...renderBanner('forest'),
+    '',
+    `${c.yellow}  ─── ${encounter.title} ───`,
+    '',
+    ...encounter.lines.map(l => `  ${l}`),
+    '',
+  ];
+
+  const choices = (encounter.choices || []).map(ch => ({
+    key: ch.key, label: ch.label,
+    action: 'road_encounter_resolve', param: ch.param,
+  }));
+
+  if (!choices.length) {
+    choices.push({ key: 'C', label: 'Continue', action: 'walk_continue' });
+  }
+
+  return buildScreen(`On the Road — ${encounter.title}`, lines, choices);
+}
+
+// ── Road fight screen (ongoing combat) ───────────────────────────────────────
+function getRoadFightScreen(player, enemy, log) {
+  const lines = [
+    ...renderBanner('forest'),
+    '',
+    `${c.red}  ROAD COMBAT — ${enemy.name}`,
+    divider('─', 55),
+    `${c.white}  Your HP:   ${hpBar(player.hit_points, player.hit_max)} ${hpColor(player.hit_points, player.hit_max)}${player.hit_points}${c.dgray}/${player.hit_max}`,
+    `${c.red}  Enemy HP:  ${hpBar(enemy.currentHp, enemy.maxHp)} ${hpColor(enemy.currentHp, enemy.maxHp)}${enemy.currentHp}${c.dgray}/${enemy.maxHp}`,
+    divider('─', 55),
+    '',
+    ...log.slice(-5).map(l => `  ${l}`),
+    '',
+  ];
+
+  return buildScreen('Road Combat', lines, [
+    { key: 'F', label: 'Fight!',       action: 'road_encounter_fight' },
+    { key: 'R', label: 'Try to run',   action: 'road_encounter_run' },
+    { key: 'P', label: 'Power Move',   action: 'road_encounter_power' },
+  ]);
 }
 
 function getTavernEncounterScreen(player, encounter) {
@@ -1532,10 +2194,17 @@ module.exports = {
   getWeaponShopScreen, getArmorShopScreen, getInnScreen, getBankScreen,
   getMasterScreen, getTrainingScreen, getTavernScreen, getTavernDrinkScreen,
   getTavernEncounterScreen, getWorldMapScreen,
+  getTravelOptionsScreen, getRoadScreen, getCampingScreen, getCaptiveScreen,
+  getRoadEncounterScreen, getRoadFightScreen,
   getGardenScreen, getBardScreen,
+  getSocialVelmoraScreen, getSocialIronholdScreen, getSocialSilverkeepScreen,
+  getSocialThornreachScreen, getSocialDuskveilScreen, getSocialGraveportScreen,
+  getSocialStormwatchScreen, getSocialOldKarthScreen, getSocialAshenfallScreen,
+  getSocialBrackenHollowScreen, getSocialMirefenScreen, getSocialFrostmereScreen,
   getNewsScreen, getCharacterScreen, getSetupScreen, getDragonScreen,
   getLevelUpScreen, getForestEventScreen, getRescueOpportunityScreen,
   getNearDeathWaitingScreen, getNpcRescueScreen, getNearDeathScreen,
   getCrierScreen,
   renderBanner,
+  LOCATION_BANNERS,
 };

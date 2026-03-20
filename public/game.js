@@ -80,9 +80,20 @@ function updateStatusBar(status) {
 let currentScreen = null;
 let pendingInputAction = null, pendingInputParam = null;
 
+const authNotice = document.getElementById('auth-notice');
+
 function renderScreen(data) {
   if (!data) return;
-  if (data.screen === 'login') { showAuth(); return; }
+  if (data.screen === 'login') {
+    if (data.campLogout) {
+      authNotice.textContent = 'You have settled in for the night. Log back in when a new day comes.';
+      authNotice.classList.remove('hidden');
+    } else {
+      authNotice.classList.add('hidden');
+    }
+    showAuth();
+    return;
+  }
 
   currentScreen = data;
   if (data.title) document.title = `${data.title} — LORD`;

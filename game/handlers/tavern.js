@@ -1,8 +1,13 @@
-const { getPlayer, updatePlayer, getAllPlayers, addNews } = require('../../db');
+const { getPlayer, updatePlayer, getPlayersInTown, addNews } = require('../../db');
 const { getRandomMonster } = require('../data');
 const { resolvePvP } = require('../combat');
 const { getTownScreen, getTavernScreen, getTavernDrinkScreen, getTavernEncounterScreen } = require('../engine');
 const { pickEncounter, RESOLVERS } = require('../tavern_events');
+
+// Helper: fetch players in the same town as player
+function townPlayers(player) {
+  return getPlayersInTown(player.current_town || 'harood', player.id);
+}
 
 async function tavern({ player, req, res, pendingMessages }) {
   const today = Math.floor(Date.now() / 86400000);
@@ -15,14 +20,14 @@ async function tavern({ player, req, res, pendingMessages }) {
       return res.json(getTavernEncounterScreen(player, encounter));
     }
   }
-  const others = await getAllPlayers();
+  const others = await townPlayers(player);
   return res.json({ ...getTavernScreen(player, others), pendingMessages });
 }
 
 async function tavern_encounter({ player, param, req, res, pendingMessages }) {
   const encounterId = req.session.tavernEncounter;
   if (!encounterId || !RESOLVERS[encounterId]) {
-    const others = await getAllPlayers();
+    const others = await townPlayers(player);
     return res.json({ ...getTavernScreen(player, others), pendingMessages: ['`7The moment has passed.'] });
   }
   delete req.session.tavernEncounter;
@@ -30,15 +35,15 @@ async function tavern_encounter({ player, param, req, res, pendingMessages }) {
 }
 
 async function tavern_attack({ player, param, req, res, pendingMessages }) {
-  const others = (await getAllPlayers()).filter(p => p.id !== player.id && p.setup_complete);
+  const others = await townPlayers(player);
   const target = others[parseInt(param) - 1];
 
   if (!target)
-    return res.json({ ...getTavernScreen(player, await getAllPlayers()), pendingMessages: ['`@Invalid target.'] });
+    return res.json({ ...getTavernScreen(player, await townPlayers(player)), pendingMessages: ['`@Invalid target.'] });
   if (player.human_fights_left <= 0)
-    return res.json({ ...getTavernScreen(player, await getAllPlayers()), pendingMessages: ['`@No human fights left today!'] });
+    return res.json({ ...getTavernScreen(player, await townPlayers(player)), pendingMessages: ['`@No human fights left today!'] });
   if (target.dead)
-    return res.json({ ...getTavernScreen(player, await getAllPlayers()), pendingMessages: [`\`7${target.handle} is already dead.`] });
+    return res.json({ ...getTavernScreen(player, await townPlayers(player)), pendingMessages: [`\`7${target.handle} is already dead.`] });
 
   const fullTarget = await getPlayer(target.id);
   const { attackerWon, log } = resolvePvP(player, fullTarget);
@@ -59,22 +64,22 @@ async function tavern_attack({ player, param, req, res, pendingMessages }) {
   }
 
   player = await getPlayer(player.id);
-  return res.json({ ...getTavernScreen(player, await getAllPlayers()), pendingMessages: msgs });
+  return res.json({ ...getTavernScreen(player, await townPlayers(player)), pendingMessages: msgs });
 }
 
 async function tavern_intimidate({ player, param, req, res, pendingMessages }) {
   if (player.class !== 1)
-    return res.json({ ...getTavernScreen(player, await getAllPlayers()), pendingMessages: ['`@Only Death Knights can Intimidate!'] });
+    return res.json({ ...getTavernScreen(player, await townPlayers(player)), pendingMessages: ['`@Only Death Knights can Intimidate!'] });
   if (player.human_fights_left <= 0)
-    return res.json({ ...getTavernScreen(player, await getAllPlayers()), pendingMessages: ['`@No human fights left today!'] });
+    return res.json({ ...getTavernScreen(player, await townPlayers(player)), pendingMessages: ['`@No human fights left today!'] });
 
-  const others = (await getAllPlayers()).filter(p => p.id !== player.id && p.setup_complete);
+  const others = await townPlayers(player);
   const target = others[parseInt(param) - 1];
 
   if (!target)
-    return res.json({ ...getTavernScreen(player, await getAllPlayers()), pendingMessages: ['`@Invalid target.'] });
+    return res.json({ ...getTavernScreen(player, await townPlayers(player)), pendingMessages: ['`@Invalid target.'] });
   if (target.dead)
-    return res.json({ ...getTavernScreen(player, await getAllPlayers()), pendingMessages: [`\`7${target.handle} is already dead.`] });
+    return res.json({ ...getTavernScreen(player, await townPlayers(player)), pendingMessages: [`\`7${target.handle} is already dead.`] });
 
   await updatePlayer(player.id, { human_fights_left: player.human_fights_left - 1 });
   const successChance = Math.min(0.80, 0.40 + (player.strength - (target.strength || 15)) / 200);
@@ -85,13 +90,13 @@ async function tavern_intimidate({ player, param, req, res, pendingMessages }) {
     await updatePlayer(target.id, { gold: Math.max(0, Number(target.gold) - stolen) });
     await addNews(`\`@${player.handle}\`% intimidated \`@${target.handle}\`% and seized \`$${stolen.toLocaleString()}\`% gold!`);
     player = await getPlayer(player.id);
-    return res.json({ ...getTavernScreen(player, await getAllPlayers()), pendingMessages: [
+    return res.json({ ...getTavernScreen(player, await townPlayers(player)), pendingMessages: [
       `\`@You loom over ${target.handle} with a death stare.`,
       `\`@They hand over ${stolen.toLocaleString()} gold without a word.`,
     ]});
   }
 
-  return res.json({ ...getTavernScreen(player, await getAllPlayers()), pendingMessages: [
+  return res.json({ ...getTavernScreen(player, await townPlayers(player)), pendingMessages: [
     `\`7${target.handle} meets your gaze and doesn't flinch.`,
     '`7Even a Death Knight needs more than a stare to shake this one.',
   ]});
@@ -133,9 +138,9 @@ async function tavern_drink_order({ player, param, req, res, pendingMessages }) 
 async function tavern_gamble({ player, param, req, res, pendingMessages }) {
   const bet = Math.max(0, parseInt(param) || 0);
   if (bet < 10)
-    return res.json({ ...getTavernScreen(player, await getAllPlayers()), pendingMessages: ['`7Minimum bet is 10 gold.'] });
+    return res.json({ ...getTavernScreen(player, await townPlayers(player)), pendingMessages: ['`7Minimum bet is 10 gold.'] });
   if (bet > Number(player.gold))
-    return res.json({ ...getTavernScreen(player, await getAllPlayers()), pendingMessages: [`\`@You don't have ${bet.toLocaleString()} gold to bet!`] });
+    return res.json({ ...getTavernScreen(player, await townPlayers(player)), pendingMessages: [`\`@You don't have ${bet.toLocaleString()} gold to bet!`] });
 
   const cappedBet = Math.min(bet, Math.min(500 + player.level * 50, Number(player.gold)));
   const playerRoll = 1 + Math.floor(Math.random() * 6);
@@ -154,7 +159,7 @@ async function tavern_gamble({ player, param, req, res, pendingMessages }) {
   }
 
   player = await getPlayer(player.id);
-  return res.json({ ...getTavernScreen(player, await getAllPlayers()), pendingMessages: msgs });
+  return res.json({ ...getTavernScreen(player, await townPlayers(player)), pendingMessages: msgs });
 }
 
 async function tavern_rumours({ player, req, res, pendingMessages }) {
@@ -167,19 +172,19 @@ async function tavern_rumours({ player, req, res, pendingMessages }) {
     `\`6Someone drew a rough sketch on the table: a \`%${monster.name}\`6. The ink is still fresh.`,
   ];
   const rumour = templates[Math.floor(Math.random() * templates.length)];
-  return res.json({ ...getTavernScreen(player, await getAllPlayers()), pendingMessages: [rumour] });
+  return res.json({ ...getTavernScreen(player, await townPlayers(player)), pendingMessages: [rumour] });
 }
 
 async function tavern_buyround({ player, req, res, pendingMessages }) {
   if (Number(player.gold) < 50)
-    return res.json({ ...getTavernScreen(player, await getAllPlayers()), pendingMessages: ['`@Not enough gold! Buying a round costs 50 gold.'] });
+    return res.json({ ...getTavernScreen(player, await townPlayers(player)), pendingMessages: ['`@Not enough gold! Buying a round costs 50 gold.'] });
 
   const newCharm = Math.min(50, (player.charm || 10) + 1);
   await updatePlayer(player.id, { gold: Number(player.gold) - 50, charm: newCharm });
   await addNews(`\`6${player.handle}\`% bought the house a round at the Dark Cloak Tavern!`);
   player = await getPlayer(player.id);
 
-  return res.json({ ...getTavernScreen(player, await getAllPlayers()), pendingMessages: [
+  return res.json({ ...getTavernScreen(player, await townPlayers(player)), pendingMessages: [
     `\`6"Drinks on ${player.handle}!" A cheer goes up from the tavern.`,
     `\`#Your charm has increased to ${newCharm}!`,
   ]});
