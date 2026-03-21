@@ -3,7 +3,7 @@ const { getRandomMonster, getWeaponByNum, getArmorByNum } = require('../data');
 const { resolveRound } = require('../combat');
 const { checkLevelUp } = require('../newday');
 const { FOREST_EVENTS } = require('../forest_events');
-const { parseWounds, getWoundType, getWoundSeverity, woundChance, getBleedDamage, getCrushDefPenalty, rollInfection, resolveInfection } = require('../wounds');
+const { parseWounds, getWoundType, getWoundSeverity, getWoundLocation, woundChance, getBleedDamage, getCrushDefPenalty, rollInfection, resolveInfection } = require('../wounds');
 const { adjustReps, getHostileFactions, makeAssassin } = require('../factions');
 const {
   getTownScreen, getForestEncounterScreen, getForestCombatScreen,
@@ -358,23 +358,25 @@ async function forest_combat({ action, player, req, res, pendingMessages }) {
     const severity = getWoundSeverity(monster, player);
     const isCrit = log.some(l => l.type === 'monster_crit');
     if (Math.random() < woundChance(severity, isCrit)) {
-      const wType = getWoundType(monster);
-      wounds.push({ type: wType, severity, source: monster.name });
-      woundUpdates.wounds = JSON.stringify(wounds);
-      log.push({ text: `\`@You suffer a ${severity === 3 ? 'critical' : severity === 2 ? 'serious' : 'minor'} ${wType} wound from the ${monster.name}!` });
+        const wType    = getWoundType(monster);
+        const location = getWoundLocation(wType);
+        wounds.push({ type: wType, severity, source: monster.name, location });
+        woundUpdates.wounds = JSON.stringify(wounds);
+        const sevName = ['', 'scratch', 'flesh', 'deep', 'grievous', 'mortal'][severity] || 'serious';
+        log.push({ text: `\`@You suffer a ${sevName} ${wType} wound to your ${location} from the ${monster.name}!` });
 
-      // Infection roll for bite wounds
-      if (wType === 'bite') {
-        const infResult = rollInfection(monster);
-        if (infResult) {
-          const newInfType = resolveInfection(player.infection_type || '', infResult.infectionType);
-          if (newInfType !== player.infection_type) {
-            woundUpdates.infection_type = newInfType;
-            woundUpdates.infection_stage = 0;
-            woundUpdates.infection_days = 0;
-          }
-          log.push({ text: infResult.message });
+      // Infection roll — bites always roll; humanoid/giant wounds roll via dirty weapon chance
+      const { getDirtyWeaponMod } = require('../wounds');
+      const dirtyMod = getDirtyWeaponMod(monster);
+      const infResult = rollInfection(monster, dirtyMod, wType);
+      if (infResult) {
+        const newInfType = resolveInfection(player.infection_type || '', infResult.infectionType);
+        if (newInfType !== player.infection_type) {
+          woundUpdates.infection_type  = newInfType;
+          woundUpdates.infection_stage = 0;
+          woundUpdates.infection_days  = 0;
         }
+        log.push({ text: infResult.message });
       }
     }
   }

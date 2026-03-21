@@ -26,6 +26,10 @@ function applyDefense(rawDamage, defense) {
 // action: 'attack' | 'run' | 'power'
 // Returns { playerDamage, monsterDamage, poisonDamage, fled, monsterFled, appliedPoison, log, playerCrit, monsterCrit }
 function resolveRound(player, monster, action) {
+  const { parseWounds, getLocationPenalties, getCrushDefPenalty } = require('./wounds');
+  const wounds = parseWounds(player);
+  const locPen = getLocationPenalties(wounds);
+
   const log = [];
   let playerDamage = 0;
   let monsterDamage = 0;
@@ -44,12 +48,15 @@ function resolveRound(player, monster, action) {
 
   if (action === 'run') {
     // Flee chance: 45% base, +15% for Thieves, +15% if critically low HP, -scaled by monster strength
+    // Leg wounds reduce flee chance
     let fleeChance = 0.45;
     if (player.class === 3) fleeChance += 0.15;
     const hpRatio = (player.hit_points - poisonDamage) / Math.max(1, player.hit_max || player.hit_points);
     if (hpRatio < 0.20) fleeChance += 0.15;
     fleeChance -= (monster.strength / 2000) * 0.30;
-    fleeChance = Math.min(0.90, Math.max(0.10, fleeChance));
+    fleeChance -= locPen.fleePct;
+    fleeChance = Math.min(0.90, Math.max(0.05, fleeChance));
+    if (locPen.fleePct > 0) log.push({ type: 'wound_penalty', text: '`8Your wounded leg slows your escape!' });
 
     if (Math.random() < fleeChance) {
       log.push({ type: 'flee_success', text: `You turn and flee from the ${monster.name}!` });
@@ -82,8 +89,12 @@ function resolveRound(player, monster, action) {
     return { playerDamage: 0, monsterDamage: 0, poisonDamage, fled: false, monsterFled: true, appliedPoison: false, log, playerCrit, monsterCrit };
   }
 
-  // Player attacks
-  let rawAttack = rollAttack(player.strength);
+  // Player attacks — arm wounds reduce effective strength
+  const effectiveStrength = Math.max(1, Math.floor(player.strength * (1 - locPen.strengthPct)));
+  let rawAttack = rollAttack(effectiveStrength);
+  if (locPen.strengthPct > 0 && action !== 'run') {
+    log.push({ type: 'wound_penalty', text: `\`8Your wounded arm weakens your strike! (-${Math.round(locPen.strengthPct * 100)}% strength)` });
+  }
   if (action === 'power') {
     const { CLASS_POWER_MOVES } = require('./data');
     const move = CLASS_POWER_MOVES[player.class];

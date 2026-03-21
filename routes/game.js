@@ -13,7 +13,8 @@ const { getStartingRepUpdates } = require('../game/factions');
 const router = express.Router();
 const ar = fn => (req, res, next) => fn(req, res, next).catch(next);
 
-const SERVER_START_DAY = Math.floor(Date.now() / 86400000);
+// Day 1 of the Age of Tears = January 1, 2025 UTC
+const EPOCH_DAY = Math.floor(new Date('2025-01-01T00:00:00Z').getTime() / 86400000);
 
 function buildPlayerStatus(player) {
   const gameDay = Math.floor(Date.now() / 86400000);
@@ -33,7 +34,7 @@ function buildPlayerStatus(player) {
     location:  townName,
     poisoned:  player.poisoned || 0,
     dead:      player.dead || 0,
-    lordDay:   gameDay - SERVER_START_DAY + 1,
+    lordDay:   gameDay - EPOCH_DAY + 1,
     timeOfDay,
     wounds:    parseWounds(player).length,
     infection: player.infection_type ? infectionLabel(player.infection_type, player.infection_stage) : null,

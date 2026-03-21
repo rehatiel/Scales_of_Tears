@@ -47,6 +47,8 @@ const gameInput    = document.getElementById('game-input');
 const inputSubmit  = document.getElementById('input-submit');
 const inputCancel  = document.getElementById('input-cancel');
 const statusBar    = document.getElementById('status-bar');
+const msgOverlay   = document.getElementById('msg-overlay');
+const msgContent   = document.getElementById('msg-content');
 
 // ── Screen switchers ──────────────────────────────────────────────────────────
 function showAuth()  { authScreen.classList.remove('hidden');  setupScreen.classList.add('hidden'); gameScreen.classList.add('hidden'); statusBar.classList.add('hidden'); }
@@ -69,7 +71,7 @@ function updateStatusBar(status) {
     : `<span class="c8">EXP </span><span class="cd">${status.exp.toLocaleString()}</span><span class="c8"> MAX</span>`;
   document.getElementById('sb-location').innerHTML = `<span class="c8">@ </span><span class="ce">${escHtml(status.location)}</span>`;
   document.getElementById('sb-time').innerHTML  = `<span class="c6">${escHtml(status.timeOfDay)}</span>`;
-  document.getElementById('sb-day').innerHTML   = `<span class="c8">Age of Tears </span><span class="c6">${status.lordDay}</span>`;
+  document.getElementById('sb-day').innerHTML   = `<span class="c8">Day </span><span class="c6">${status.lordDay}</span>`;
   const poisonEl = document.getElementById('sb-poison');
   if (status.poisoned) {
     poisonEl.innerHTML = `<span class="sb-sep">│</span><span class="c2">POISONED</span>`;
@@ -108,9 +110,15 @@ function renderScreen(data) {
   ).join('');
 
   const msgs = data.pendingMessages || [];
-  pendingMsgs.innerHTML = msgs.length
-    ? msgs.map(m => `<span class="pmsg">${parseLine(m)}</span>`).join('')
-    : '';
+  if (msgs.length && data.screen === 'town') {
+    pendingMsgs.innerHTML = '';
+    msgContent.innerHTML = msgs.map(m => `<span class="pmsg">${parseLine(m)}</span>`).join('');
+    msgOverlay.classList.remove('hidden');
+  } else {
+    pendingMsgs.innerHTML = msgs.length
+      ? msgs.map(m => `<span class="pmsg">${parseLine(m)}</span>`).join('')
+      : '';
+  }
 
   choicesBar.innerHTML = '';
   (data.choices || []).forEach(choice => {
@@ -152,6 +160,10 @@ function hideInput() {
   pendingInputAction = null; pendingInputParam = null;
   gameInput.value = '';
 }
+
+// Dismiss overlay on click (clicking the box itself shouldn't bubble up and close it,
+// but clicking the dark backdrop or the box both dismiss — either is fine here)
+msgOverlay.addEventListener('click', () => { msgOverlay.classList.add('hidden'); });
 
 // ── API ───────────────────────────────────────────────────────────────────────
 async function sendAction(action, param = '') {
@@ -201,6 +213,7 @@ async function loadGameState() {
 
 // ── Keyboard shortcuts ────────────────────────────────────────────────────────
 document.addEventListener('keydown', e => {
+  if (!msgOverlay.classList.contains('hidden')) { msgOverlay.classList.add('hidden'); return; }
   if (e.target.tagName === 'INPUT' || !currentScreen || !gameScreen.classList.contains('hidden') === false) return;
   // Only handle when game screen is visible
   if (!gameScreen || gameScreen.classList.contains('hidden')) return;

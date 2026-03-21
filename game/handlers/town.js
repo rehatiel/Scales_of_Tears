@@ -3,10 +3,13 @@ const { WEAPONS, ARMORS, TOWNS, SHOP_OWNERS, getWeaponByNum, getArmorByNum } = r
 const { checkLevelUp } = require('../newday');
 const {
   getTownScreen, getWeaponShopScreen, getArmorShopScreen, getInnScreen, getInnHealerScreen,
-  getBankScreen, getMasterScreen, getTrainingScreen, getGardenScreen,
+  getHerbalistScreen, getBankScreen, getMasterScreen, getTrainingScreen, getGardenScreen,
   getBardScreen, getNewsScreen, getCharacterScreen, getCrierScreen, getLevelUpScreen,
 } = require('../engine');
-const { parseWounds, healerWoundCost, healerInfectionCost } = require('../wounds');
+const {
+  parseWounds, healerWoundCost, healerInfectionCost, healerCanTreat,
+  herbalistCanTreatWound, herbalistCanTreatInfection, herbalistWoundCost, herbalistInfectionCost,
+} = require('../wounds');
 const { startAbduction } = require('./abduction');
 const { isRefused, adjustReps } = require('../factions');
 
@@ -116,7 +119,7 @@ async function inn_healer_wounds({ player, req, res, pendingMessages }) {
 }
 
 async function inn_healer_infection({ player, req, res, pendingMessages }) {
-  if (!player.infection_type || player.infection_type === 'vampire' || player.vampire_feasted) {
+  if (!player.infection_type || !healerCanTreat(player.infection_type, player.infection_stage) || player.vampire_feasted) {
     const sleeperCount = await getRetiredPlayersInTown(player.current_town || 'dawnmark');
     return res.json({ ...getInnScreen(player, sleeperCount), pendingMessages: ['`7There is nothing to treat.'] });
   }
@@ -486,6 +489,85 @@ async function post_crier({ player, param, req, res, pendingMessages }) {
   return res.json({ ...getTownScreen(player), pendingMessages: [`\`6The town crier bellows your message across ${crierTown}!`] });
 }
 
+// ── HERBALIST ─────────────────────────────────────────────────────────────────
+
+async function herbalist({ player, req, res, pendingMessages }) {
+  const wounds = parseWounds(player);
+  const treatableWounds = wounds.filter(herbalistCanTreatWound).sort((a, b) => b.severity - a.severity);
+  const worstTreatable   = treatableWounds[0] || null;
+  const woundCost        = worstTreatable ? herbalistWoundCost(worstTreatable, player.level) : 0;
+  const infTreatable     = herbalistCanTreatInfection(player.infection_type, player.infection_stage || 0);
+  const infCost          = infTreatable ? herbalistInfectionCost(player.infection_type, player.infection_stage || 0, player.level) : 0;
+  return res.json({ ...getHerbalistScreen(player, wounds, treatableWounds, infTreatable, woundCost, infCost), pendingMessages });
+}
+
+async function herbalist_wound({ player, req, res, pendingMessages }) {
+  if ((player.herbalist_today || 0) >= 3)
+    return res.json({ ...getTownScreen(player), pendingMessages: ['`8Mira shakes her head. "I\'ve done what I can for you today. Come back tomorrow."'] });
+
+  const wounds = parseWounds(player);
+  const treatableWounds = wounds.filter(herbalistCanTreatWound).sort((a, b) => b.severity - a.severity);
+  if (!treatableWounds.length)
+    return res.json({ ...getTownScreen(player), pendingMessages: ['`7You have no wounds the herbalist can treat.'] });
+
+  const worst = treatableWounds[0];
+  const cost  = herbalistWoundCost(worst, player.level);
+  if (Number(player.gold) < cost)
+    return res.json({ ...getTownScreen(player), pendingMessages: [`\`@Not enough gold! Treatment costs ${cost.toLocaleString()} gold.`] });
+
+  // Reduce the worst treatable wound by one tier, remove if healed
+  const idx = wounds.indexOf(worst);
+  wounds[idx] = { ...worst, severity: worst.severity - 1 };
+  const newWounds = wounds.filter(w => w.severity > 0);
+
+  await updatePlayer(player.id, {
+    gold: Number(player.gold) - cost,
+    wounds: JSON.stringify(newWounds),
+    herbalist_today: (player.herbalist_today || 0) + 1,
+  });
+  player = await getPlayer(player.id);
+
+  const msgs = ['`2Mira cleans the wound carefully and packs it with a poultice of honey and yarrow.'];
+  if (worst.severity === 1) msgs.push('`0The scratch is clean and bound. It should heal on its own now.');
+  else msgs.push('`2The wound is better — though not gone. Rest will finish the work.');
+
+  const updatedWounds = parseWounds(player);
+  const treatableLeft = updatedWounds.filter(herbalistCanTreatWound);
+  const infTreatable  = herbalistCanTreatInfection(player.infection_type, player.infection_stage || 0);
+  const woundCost2    = treatableLeft[0] ? herbalistWoundCost(treatableLeft[0], player.level) : 0;
+  const infCost2      = infTreatable ? herbalistInfectionCost(player.infection_type, player.infection_stage || 0, player.level) : 0;
+  return res.json({ ...getHerbalistScreen(player, updatedWounds, treatableLeft, infTreatable, woundCost2, infCost2), pendingMessages: msgs });
+}
+
+async function herbalist_infection({ player, req, res, pendingMessages }) {
+  if ((player.herbalist_today || 0) >= 3)
+    return res.json({ ...getTownScreen(player), pendingMessages: ['`8Mira shakes her head. "I\'ve done what I can for you today. Come back tomorrow."'] });
+
+  if (!herbalistCanTreatInfection(player.infection_type, player.infection_stage || 0))
+    return res.json({ ...getTownScreen(player), pendingMessages: ['`7Mira cannot treat this affliction.'] });
+
+  const cost = herbalistInfectionCost(player.infection_type, player.infection_stage || 0, player.level);
+  if (Number(player.gold) < cost)
+    return res.json({ ...getTownScreen(player), pendingMessages: [`\`@Not enough gold! Treatment costs ${cost.toLocaleString()} gold.`] });
+
+  const typeLabel = player.infection_type === 'rot' ? 'festering' : 'fever-sickness';
+  const msgs = [
+    `\`2Mira brews a tea of ${player.infection_type === 'rabies' ? 'wolfsbane root and willow bark' : 'garlic, honey, and thyme'}.`,
+    `\`2"Drink all of it. Don't make a face."`,
+    `\`0The ${typeLabel} in the wound begins to calm.`,
+  ];
+
+  await updatePlayer(player.id, {
+    gold: Number(player.gold) - cost,
+    infection_type: '',
+    infection_stage: 0,
+    infection_days: 0,
+    herbalist_today: (player.herbalist_today || 0) + 1,
+  });
+  player = await getPlayer(player.id);
+  return res.json({ ...getTownScreen(player), pendingMessages: msgs });
+}
+
 module.exports = {
   inn, inn_rest, inn_gem, inn_antidote,
   inn_retire, inn_wake,
@@ -501,4 +583,7 @@ module.exports = {
   shop_steal_armor: shop_steal,
   garden, garden_female, garden_flower, garden_compliment, garden_kiss,
   bard, news, character, crier, post_crier,
+  herbalist,
+  herbalist_wound,
+  herbalist_infection,
 };

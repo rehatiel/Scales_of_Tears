@@ -686,6 +686,7 @@ function getTownScreen(player) {
     `${c.yellow}  [W]${c.white} Visit the Weapon Shop`,
     `${c.yellow}  [A]${c.white} Visit the Armour Shop`,
     `${c.yellow}  [I]${c.white} Go to the Inn${player.antidote_owned ? c.dgreen + '  (you have an antidote)' : ''}`,
+    `${c.dgreen}  [H]${c.white} Visit the Herbalist${c.dgray}`,
     `${c.yellow}  [B]${c.white} Visit the Bank`,
     `${c.yellow}  [M]${c.white} Seek the Master (Aldric)`,
     `${c.yellow}  [T]${c.white} Go to the Tavern`,
@@ -708,6 +709,7 @@ function getTownScreen(player) {
     { key: 'W', label: 'Weapon Shop', action: 'weapon_shop' },
     { key: 'A', label: 'Armour Shop', action: 'armor_shop' },
     { key: 'I', label: 'Inn', action: 'inn' },
+    { key: 'H', label: 'Herbalist', action: 'herbalist' },
     { key: 'B', label: 'Bank', action: 'bank' },
     { key: 'M', label: 'Master', action: 'master' },
     { key: 'T', label: 'Tavern', action: 'tavern' },
@@ -723,7 +725,7 @@ function getTownScreen(player) {
   if (factionInTown) choices.splice(choices.findIndex(ch => ch.key === 'L'), 0, { key: 'K', label: factionInTown.houseName, action: 'faction_house' });
   if (player.level >= 12) choices.splice(choices.findIndex(ch => ch.key === 'Y'), 0, { key: 'D', label: 'Challenge Dragon', action: 'dragon' });
 
-  return buildScreen(town.name, lines, choices);
+  return { screen: 'town', ...buildScreen(town.name, lines, choices) };
 }
 
 function getForestEncounterScreen(player, monster, depth = 0) {
@@ -1115,6 +1117,62 @@ function getInnHealerScreen(player, wounds, woundCost, infectionCost) {
   if (canCureInfection && !isVampireFeasted) lines.splice(-1, 0, `${c.yellow}  [I]${c.white} Treat infection${c.dgray} (${infectionCost.toLocaleString()} gold)`);
 
   return buildScreen("The Healer's Corner", lines, choices);
+}
+
+function getHerbalistScreen(player, wounds, treatableWounds, infectionTreatable, herbWoundCost, herbInfCost) {
+  const { woundLabel, infectionLabel } = require('./wounds');
+  const hasInfection = !!player.infection_type;
+  const treatmentsLeft = 3 - (player.herbalist_today || 0);
+
+  const lines = [
+    ...renderBanner('town'),
+    `${c.green}  Mira the Herbalist looks up from her pestle and mortar.`,
+    `${c.gray}  "I can treat common ailments — festering wounds, fever-sickness."`,
+    `${c.gray}  "For curses and the deep dark, you'll want the inn's healer."`,
+    '',
+    `${c.dgray}  Treatments remaining today: ${c.yellow}${treatmentsLeft}${c.dgray}/3`,
+    '',
+  ];
+
+  if (wounds.length > 0) {
+    lines.push(`${c.red}  Your wounds:`);
+    for (const w of wounds) {
+      const canTreat = w.severity <= 2;
+      lines.push(`${canTreat ? c.white : c.dgray}    • ${woundLabel(w)}${canTreat ? c.dgreen + '  (treatable)' : c.dgray + '  (beyond my skill)'}`);
+    }
+    lines.push('');
+  }
+
+  if (hasInfection) {
+    lines.push(`${c.magenta}  Affliction: ${infectionLabel(player.infection_type, player.infection_stage)}`);
+    if (infectionTreatable) {
+      lines.push(`${c.gray}  "This I can treat with the right herbs." ${c.yellow}(${herbInfCost.toLocaleString()} gold)`);
+    } else {
+      lines.push(`${c.dgray}  "This is beyond my herbs. Seek the inn's healer — or prayer."`);
+    }
+    lines.push('');
+  }
+
+  if (!wounds.length && !hasInfection) {
+    lines.push(`${c.green}  "You look well enough to me. Come back when you're bleeding."`);
+  }
+
+  const choices = [{ key: 'L', label: 'Leave', action: 'town' }];
+
+  if (treatableWounds.length > 0 && treatmentsLeft > 0) {
+    const cheapest = treatableWounds[0];
+    lines.push(`${c.yellow}  [W]${c.white} Treat worst minor wound${c.dgray} (${herbWoundCost.toLocaleString()} gold — uses 1 treatment)`);
+    choices.unshift({ key: 'W', label: `Treat Wound (${herbWoundCost}g)`, action: 'herbalist_wound', disabled: player.gold < herbWoundCost });
+  }
+
+  if (infectionTreatable && treatmentsLeft > 0) {
+    lines.push(`${c.yellow}  [I]${c.white} Brew herbal treatment for infection${c.dgray} (${herbInfCost.toLocaleString()} gold — uses 1 treatment)`);
+    choices.unshift({ key: 'I', label: `Treat Infection (${herbInfCost}g)`, action: 'herbalist_infection', disabled: player.gold < herbInfCost });
+  }
+
+  lines.push(`${c.yellow}  [L]${c.white} Leave`);
+
+  return buildScreen("Mira's Herbalist", lines, choices);
 }
 
 function getAbductionDungeonScreen(player, captorName, captorsTotal) {
@@ -2436,7 +2494,7 @@ module.exports = {
   getLevelUpScreen, getForestEventScreen, getRescueOpportunityScreen,
   getNearDeathWaitingScreen, getNpcRescueScreen, getNearDeathScreen,
   getCrierScreen,
-  getInnHealerScreen, getAbductionDungeonScreen, getAbductionFightScreen, getAbductionEscapeScreen,
+  getHerbalistScreen, getInnHealerScreen, getAbductionDungeonScreen, getAbductionFightScreen, getAbductionEscapeScreen,
   getFactionHouseScreen, getFactionStandingsLines,
   renderBanner,
   LOCATION_BANNERS,

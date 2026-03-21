@@ -514,6 +514,37 @@ html, body {
 
 .sb-sep { color: #1a3a1a; margin: 0 6px; }
 
+/* ── Message overlay ─────────────────────────────────────── */
+#msg-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.72);
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+#msg-box {
+  background: #050505;
+  border: 1px solid var(--border);
+  padding: 24px 28px;
+  max-width: 600px;
+  width: calc(100% - 32px);
+  max-height: 70vh;
+  overflow-y: auto;
+  cursor: default;
+  animation: fadeSlide 0.15s ease;
+}
+
+#msg-content .pmsg {
+  display: block;
+  padding: 4px 0;
+  margin-bottom: 4px;
+  line-height: 1.6;
+}
+
 /* ── Scrollbar ───────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: #050505; }

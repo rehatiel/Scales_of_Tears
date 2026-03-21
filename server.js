@@ -5,7 +5,8 @@ const session = require('express-session');
 const pgSession = require('connect-pg-simple')(session);
 const { WebSocketServer } = require('ws');
 const path = require('path');
-const { initDb, pool } = require('./db');
+const { initDb, pool, updatePlayer, addNews, TODAY } = require('./db');
+const { runNewDay } = require('./game/newday');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -58,7 +59,46 @@ wss.on('connection', (ws) => {
 
 module.exports = { broadcast };
 
-initDb().then(() => {
+// ── Midnight new-day scheduler ────────────────────────────────────────────────
+// Runs once at UTC midnight and processes all players who haven't had today's
+// new-day applied yet (last_day < TODAY()), then schedules the next midnight.
+async function runGlobalNewDay() {
+  const today = TODAY();
+  const { rows } = await pool.query(
+    'SELECT * FROM players WHERE setup_complete = 1 AND last_day < $1',
+    [today]
+  );
+  if (rows.length === 0) return;
+  for (const player of rows) {
+    try {
+      const { updates } = await runNewDay(player);
+      await updatePlayer(player.id, updates);
+    } catch (err) {
+      console.error(`New-day failed for player ${player.id}:`, err);
+    }
+  }
+  await addNews('`$A new day dawns over the Age of Tears.').catch(() => {});
+  broadcast('new_day', { day: today });
+  console.log(`New day processed for ${rows.length} player(s).`);
+}
+
+function scheduleNextMidnight() {
+  const now = Date.now();
+  const nextMidnightUTC = (Math.floor(now / 86400000) + 1) * 86400000;
+  const msUntilMidnight = nextMidnightUTC - now;
+  setTimeout(async () => {
+    await runGlobalNewDay().catch(err => console.error('Global new-day error:', err));
+    scheduleNextMidnight();
+  }, msUntilMidnight);
+  const h = Math.floor(msUntilMidnight / 3600000);
+  const m = Math.floor((msUntilMidnight % 3600000) / 60000);
+  console.log(`Next new day in ${h}h ${m}m.`);
+}
+
+initDb().then(async () => {
+  // Process any players who missed a new day while the server was down
+  await runGlobalNewDay().catch(err => console.error('Startup new-day error:', err));
+  scheduleNextMidnight();
   server.listen(PORT, () => console.log(`Scales of Tears running at http://localhost:${PORT}`));
 }).catch(err => {
   console.error('Failed to initialize database:', err);
