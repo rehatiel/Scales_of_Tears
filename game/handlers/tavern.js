@@ -6,7 +6,7 @@ const { pickEncounter, RESOLVERS } = require('../tavern_events');
 
 // Helper: fetch players in the same town as player
 function townPlayers(player) {
-  return getPlayersInTown(player.current_town || 'harood', player.id);
+  return getPlayersInTown(player.current_town || 'dawnmark', player.id);
 }
 
 async function tavern({ player, req, res, pendingMessages }) {
@@ -181,7 +181,7 @@ async function tavern_buyround({ player, req, res, pendingMessages }) {
 
   const newCharm = Math.min(50, (player.charm || 10) + 1);
   await updatePlayer(player.id, { gold: Number(player.gold) - 50, charm: newCharm });
-  const tavernTown = (TOWNS[player.current_town || 'harood'] || TOWNS.harood).name;
+  const tavernTown = (TOWNS[player.current_town || 'dawnmark'] || TOWNS.dawnmark).name;
   await addNews(`\`6${player.handle}\`% bought the house a round at the tavern in ${tavernTown}!`);
   player = await getPlayer(player.id);
 

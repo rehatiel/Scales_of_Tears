@@ -503,8 +503,8 @@ const LEVEL_UP_GAINS = {
 // shopMaxTier: highest weapon/armor tier available in this town's shops
 // minLevel:    minimum player level required to enter (0 = no gate)
 const TOWNS = {
-  harood: {
-    id: 'harood', name: 'Town of Harood',
+  dawnmark: {
+    id: 'dawnmark', name: 'Town of Dawnmark',
     tagline: 'The frontier holds no promises — only opportunities.',
     connections: ['thornreach', 'silverkeep', 'bracken_hollow'],
     shopMaxTier: 7, minLevel: 1,
@@ -530,13 +530,13 @@ const TOWNS = {
   thornreach: {
     id: 'thornreach', name: 'Thornreach',
     tagline: 'The forest does not forgive those who ignore it.',
-    connections: ['stormwatch', 'harood', 'silverkeep'],
+    connections: ['stormwatch', 'dawnmark', 'silverkeep'],
     shopMaxTier: 7, minLevel: 1,
   },
   silverkeep: {
     id: 'silverkeep', name: 'Silverkeep',
     tagline: 'Justice is absolute. So is its price.',
-    connections: ['thornreach', 'harood', 'ironhold', 'velmora', 'duskveil'],
+    connections: ['thornreach', 'dawnmark', 'ironhold', 'velmora', 'duskveil'],
     shopMaxTier: 9, minLevel: 1,
   },
   velmora: {
@@ -548,7 +548,7 @@ const TOWNS = {
   bracken_hollow: {
     id: 'bracken_hollow', name: 'Bracken Hollow',
     tagline: 'Small town, big problems.',
-    connections: ['harood'],
+    connections: ['dawnmark'],
     shopMaxTier: 3, minLevel: 1,
   },
   duskveil: {
@@ -586,7 +586,7 @@ const TOWNS = {
 // ── City social spaces ────────────────────────────────────────────────────────
 // One unique location per town shown as the [G] option on the town screen
 const SOCIAL_SPACES = {
-  harood:         { name: "Violet's Garden",    action: 'garden' },
+  dawnmark:         { name: "Lysa's Garden",      action: 'garden' },
   velmora:        { name: 'The Silken Chamber', action: 'social_velmora' },
   ironhold:       { name: 'The Fighting Pit',   action: 'social_ironhold' },
   silverkeep:     { name: 'Temple of Valor',    action: 'social_silverkeep' },
@@ -607,7 +607,7 @@ const SOCIAL_SPACES = {
 // tierCap: if set, only applies discounts on items up to this tier
 // Special flags: charmBonus, dailyDiscount, poisonGearDiscount, fleeDiscount, forgeUpgrade, stocksBonus
 const SHOP_OWNERS = {
-  harood:         { name: 'Silas',        title: 'the Old Soldier',     quote: '"Fought for thirty years. Sells for fifty."',           weaponMult: 0.90, armorMult: 1.00, sellMult: 0.40, tierCap: 5 },
+  dawnmark:         { name: 'Silas',        title: 'the Old Soldier',     quote: '"Fought for thirty years. Sells for fifty."',           weaponMult: 0.90, armorMult: 1.00, sellMult: 0.40, tierCap: 5 },
   silverkeep:     { name: 'Lady Maren',   title: "the Noble's Factor",  quote: '"Quality at a fair price. No haggling."',               weaponMult: 1.00, armorMult: 1.00, sellMult: 0.40, charmBonus: true },
   velmora:        { name: 'Kess',         title: 'the Sharp Merchant',  quote: '"I buy high. Unusual, I know."',                        weaponMult: 1.00, armorMult: 1.00, sellMult: 0.55 },
   ironhold:       { name: 'Brennar',      title: 'the Armorer',         quote: '"Armor first. Weapons are for showing off."',            weaponMult: 1.05, armorMult: 0.90, sellMult: 0.40 },
@@ -625,9 +625,9 @@ const SHOP_OWNERS = {
 // ── Road segment map ──────────────────────────────────────────────────────────
 // Key = sorted town ids joined by '-'; value = number of walking segments
 const ROADS = {
-  'bracken_hollow-harood':    2,
-  'harood-thornreach':        3,
-  'harood-silverkeep':        4,
+  'bracken_hollow-dawnmark':    2,
+  'dawnmark-thornreach':        3,
+  'dawnmark-silverkeep':        4,
   'silverkeep-thornreach':    3,
   'stormwatch-thornreach':    4,
   'frostmere-stormwatch':     3,

@@ -16,7 +16,7 @@ function buildPlayerStatus(player) {
   const gameDay = Math.floor(Date.now() / 86400000);
   const hour = new Date().getUTCHours();
   const timeOfDay = hour < 6 ? 'Night' : hour < 12 ? 'Morning' : hour < 18 ? 'Afternoon' : 'Evening';
-  const townName = (TOWNS[player.current_town || 'harood'] || TOWNS.harood).name;
+  const townName = (TOWNS[player.current_town || 'dawnmark'] || TOWNS.dawnmark).name;
   return {
     name:      player.handle,
     hp:        player.hit_points,

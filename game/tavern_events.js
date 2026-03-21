@@ -1,5 +1,5 @@
 // Tavern random encounters for LORD web port
-// Fires ~40% of the time when entering the Dark Cloak Tavern
+// Fires ~40% of the time when entering the The Rusted Flagon
 // Each encounter has display data and a resolver function
 
 const { getPlayer, updatePlayer, addNews } = require('../db');
@@ -343,7 +343,7 @@ const RESOLVERS = {
         charm: Math.max(1, player.charm - 1),
       });
       player = await getPlayer(player.id);
-      await addNews(`\`#${player.handle}\`% survived a \`#succubus\`% encounter at the Dark Cloak Tavern!`);
+      await addNews(`\`#${player.handle}\`% survived a \`#succubus\`% encounter at the The Rusted Flagon!`);
       return res.json({ ...getTavernScreen(player, others), pendingMessages: [
         '`#Her smile becomes something terrible. The shadows around her deepen.',
         '`@The woman\'s form twists — claws, wings, a shriek that splits the air!',
@@ -664,7 +664,7 @@ const RESOLVERS = {
     if (param === 'shout') {
       const caught = Math.random() < 0.50;
       if (caught) {
-        await addNews(`\`3${player.handle}\`% caught a pickpocket at the Dark Cloak Tavern!`);
+        await addNews(`\`3${player.handle}\`% caught a pickpocket at the The Rusted Flagon!`);
         return res.json({ ...getTavernScreen(player, others), pendingMessages: [
           '`6"THIEF!" The whole tavern turns.',
           '`0Hrok vaults the bar and grabs the figure before they reach the door.',

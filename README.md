@@ -1,6 +1,6 @@
-# Legend of the Red Dragon — Web Port
+# Scales of Tears
 
-A faithful web port of the classic 1989 BBS door game *Legend of the Red Dragon* (LORD) by Seth Able Robinson. Built as a browser-playable Node.js/Express application with PostgreSQL persistence, retaining the original game's ASCII art aesthetic, color codes, and daily-play structure.
+A browser-based RPG inspired by classic BBS door games. Built with Node.js/Express and PostgreSQL, featuring a retro ASCII art aesthetic, color-coded terminal output, and a daily-play structure.
 
 ---
 

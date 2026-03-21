@@ -273,7 +273,7 @@ async function forest_combat({ action, player, req, res, pendingMessages }) {
     req.session.combat = null;
     await updatePlayer(player.id, { gold: Number(player.gold) + monster.gold, exp: Number(player.exp) + monster.exp });
     player = await getPlayer(player.id);
-    await addNews(`\`0${player.handle}\`% slew a \`@${monster.name}\`% in the forest!`);
+    if (Math.random() < 0.10) await addNews(`\`0${player.handle}\`% slew a \`@${monster.name}\`% in the forest!`);
 
     if (Math.random() < 0.05) {
       await updatePlayer(player.id, { gems: player.gems + 1 });

@@ -59,9 +59,9 @@ const LOCATION_BANNERS = {
   title: {
     lines: [
       '`@╔══════════════════════════════════════════════════════════╗',
-      '`@║  `$L E G E N D   O F   T H E   R E D   D R A G O N      `@║',
+      '`@║     `$R E A L M   O F   T H E   R E D   D R A G O N       `@║',
       '`@╠══════════════════════════════════════════════════════════╣',
-      '`8║  `7B B S   D o o r   G a m e   ·   b y   S e t h   A b l e  `8║',
+      '`8║           `7A n   A g e   o f   S w o r d   &   P e r i l    `8║',
       '`8║      `6Seek glory`8.   `6Gain power`8.   `@Face the Dragon`8.       `8║',
       '`@╠══════════════════════════════════════════════════════════╣',
       '`@╚══════════════════════════════════════════════════════════╝',
@@ -85,7 +85,7 @@ const LOCATION_BANNERS = {
 
   // ── City banners (one per TOWNS entry) ───────────────────────────────────
 
-  harood: {
+  dawnmark: {
     lines: [
       '`1`b▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓`a',
       '`7  `6▄▄`7▄  `6▄▄`7▄  `6▄▄▄`7▄  `8▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄`7  `6▄▄`7▄  `6▄▄`7▄  `6▄▄▄`7▄',
@@ -326,9 +326,9 @@ const LOCATION_BANNERS = {
       '`7  (o)       `8│`7  /\\  `8│     `8╔══╗  ╔══╗  ╔══╗  ╔══╗  ╔══╗',
       '`7  -|-  `8·····`7│ /##\\ `8│     `8║  ║  ║  ║  ║  ║  ║  ║  ║  ║',
       '`7  /|\\       `8│/████\\`8│     `8╠══╣  ╠══╣  ╠══╣  ╠══╣  ╠══╣',
-      '`7 / | \\  `%Seth`8│▄▄▄▄▄▄│`7     `8║`7X`8║  ║`7X`8║  ║`7X`8║  ║`7X`8║  ║`7X`8║',
+      '`7 / | \\  `%Ald`8│▄▄▄▄▄▄│`7     `8║`7X`8║  ║`7X`8║  ║`7X`8║  ║`7X`8║  ║`7X`8║',
       '`8▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄',
-      '`7~`8·`7~ `$S E T H   A B L E \'S   G R O U N D S `7~`8·`7~`8·`7~`8·`7~`8·`7~`8·`7~`8·`7~`8·`7~`8·`7~',
+      '`7~`8·`7~ `$A L D R I C \'S   G R O U N D S `7~`8·`7~`8·`7~`8·`7~`8·`7~`8·`7~`8·`7~`8·`7~`8·`7~`8·`7~',
     ],
     colors: ['dblue','gray','gray','gray','gray','dgray','gray'],
   },
@@ -354,7 +354,7 @@ const LOCATION_BANNERS = {
       '`8 `6▓▓▓▓`8   `7╔═══╗`8   `6·  `$░`6  ·`8   `7╔═══╗`8   `6▓▓▓▓`8   `7╔═══╗',
       '`8 `6████`8   `7║ `$▄ `7║`8   `6· `$░░`6 ·`8   `7║ `$▄ `7║`8   `6████`8   `7║ `$▄ `7║',
       '`8▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄',
-      '`6~`8·`6~`8· `$T H E   D A R K   C L O A K   T A V E R N `6~`8·`6~`8·`6~`8·`6~`8·`6~`8·`6~`8·',
+      '`6~`8·`6~`8· `$T H E   R U S T E D   F L A G O N `6~`8·`6~`8·`6~`8·`6~`8·`6~`8·`6~`8·`6~`8·`6~`8·',
     ],
     colors: ['dgray','dgray','dgray','dgray','dgray','dgray','brown'],
   },
@@ -367,7 +367,7 @@ const LOCATION_BANNERS = {
       '`2/ ` ` \\ ` ` / ` ` \\ ` ` / ` ` \\ ` ` / ` ` \\ ` ` / ` ` \\',
       '`2\\ ` ` / ` ` \\ ` ` / ` ` \\ ` ` / ` ` \\ ` ` / ` ` \\ ` ` /',
       '`2`---` `---` `---` `---` `---` `---` `---` `---` `---`',
-      '`5~`2·`5~ `0V I O L E T \'S   G A R D E N `5~`2·`5~`2·`5~`2·`5~`2·`5~`2·`5~`2·`5~`2·`5~`2·`5~`2·`5~`2·`5~`2·`5~`2·`5~`2·`5~`2·',
+      '`5~`2·`5~ `0L Y S A \'S   G A R D E N `5~`2·`5~`2·`5~`2·`5~`2·`5~`2·`5~`2·`5~`2·`5~`2·`5~`2·`5~`2·`5~`2·`5~`2·`5~`2·`5~`2·`5~`2·`5~`2·',
     ],
     colors: ['dgreen','magenta','dgreen','dgreen','dgreen','dgreen','magenta'],
   },
@@ -380,7 +380,7 @@ const LOCATION_BANNERS = {
       '`7  (o)   ·    ·    ·    ·    ·    ·    ·    ·    ·    ·',
       '`7  -|-  `6═══════════════════════════════════════════════',
       '`8▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄',
-      '`6~`8·`6~`8· `$T H E   B A R D \'S   C O R N E R `6~`8·`6~`8·`6~`8·`6~`8·`6~`8·`6~`8·`6~`8·`6~`8·`6~`8·`6~`8·',
+      '`6~`8·`6~`8· `$T H E   M I N S T R E L \'S   C O R N E R `6~`8·`6~`8·`6~`8·`6~`8·`6~`8·`6~`8·`6~`8·`6~`8·',
     ],
     colors: ['brown','brown','yellow','gray','brown','dgray','brown'],
   },
@@ -425,8 +425,8 @@ const LOCATION_BANNERS = {
   },
 
   // ── Town banners ──────────────────────────────────────────────────────────
-  // Harood — frontier, rough wood, torchlit, muddy road
-  harood: {
+  // Dawnmark — frontier, rough wood, torchlit, muddy road
+  dawnmark: {
     lines: [
       '`1`b░░▒░░▒░░▒░░▒░░▒░░▒░░▒░░▒░░▒░░▒░░▒░░▒░░▒░░▒░░▒░░▒░░▒░░▒░░▒░░`a',
       '`6  /\\  /\\   /\\    /\\  /\\   /\\    /\\  /\\   /\\    /\\  /\\',
@@ -668,8 +668,8 @@ function getStatusBar(player) {
 function getTownScreen(player) {
   const stam = player.stamina ?? player.fights_left ?? 10;
   const trainLeft = 5 - (player.training_today || 0);
-  const town   = TOWNS[player.current_town || 'harood'] || TOWNS.harood;
-  const social = SOCIAL_SPACES[town.id] || SOCIAL_SPACES.harood;
+  const town   = TOWNS[player.current_town || 'dawnmark'] || TOWNS.dawnmark;
+  const social = SOCIAL_SPACES[town.id] || SOCIAL_SPACES.dawnmark;
 
   const lines = [
     ...renderBanner(town.id),
@@ -685,7 +685,7 @@ function getTownScreen(player) {
     `${c.yellow}  [A]${c.white} Visit the Armour Shop`,
     `${c.yellow}  [I]${c.white} Go to the Inn${player.antidote_owned ? c.dgreen + '  (you have an antidote)' : ''}`,
     `${c.yellow}  [B]${c.white} Visit the Bank`,
-    `${c.yellow}  [M]${c.white} Seek the Master (Seth Able)`,
+    `${c.yellow}  [M]${c.white} Seek the Master (Aldric)`,
     `${c.yellow}  [T]${c.white} Go to the Tavern`,
     `${c.yellow}  [G]${c.white} ${social.name}`,
     `${c.yellow}  [R]${c.white} Speak to the Bard`,
@@ -857,8 +857,8 @@ function getForestCombatScreen(player, monster, roundLog, won, dead, round = 1, 
 }
 
 function getWeaponShopScreen(player) {
-  const town   = TOWNS[player.current_town || 'harood'] || TOWNS.harood;
-  const owner  = SHOP_OWNERS[town.id] || SHOP_OWNERS.harood;
+  const town   = TOWNS[player.current_town || 'dawnmark'] || TOWNS.dawnmark;
+  const owner  = SHOP_OWNERS[town.id] || SHOP_OWNERS.dawnmark;
   const maxTier = town.shopMaxTier || 15;
   const TODAY  = () => Math.floor(Date.now() / 86400000);
 
@@ -932,8 +932,8 @@ function getWeaponShopScreen(player) {
 }
 
 function getArmorShopScreen(player) {
-  const town   = TOWNS[player.current_town || 'harood'] || TOWNS.harood;
-  const owner  = SHOP_OWNERS[town.id] || SHOP_OWNERS.harood;
+  const town   = TOWNS[player.current_town || 'dawnmark'] || TOWNS.dawnmark;
+  const owner  = SHOP_OWNERS[town.id] || SHOP_OWNERS.dawnmark;
   const maxTier = town.shopMaxTier || 15;
   const TODAY  = () => Math.floor(Date.now() / 86400000);
 
@@ -1067,7 +1067,7 @@ function getMasterScreen(player) {
     `"Ah, ${player.handle}. A ${cls}, I see. You have potential."`,
     `"Greetings, ${player.handle}. The ${cls} path is a noble one."`,
     `"${player.handle}! Come to test your mettle? Good."`,
-    `"Welcome, ${cls}. I am Seth Able. Let me see what you\'re made of."`,
+    `"Welcome, ${cls}. I am Aldric. Let me see what you\'re made of."`,
   ][player.id % 4];
 
   const lines = [
@@ -1092,7 +1092,7 @@ function getMasterScreen(player) {
     `${c.yellow}  [L]${c.white} Leave`,
   ].filter(l => l !== undefined);
 
-  return buildScreen("Seth Able's Training", lines, [
+  return buildScreen("Aldric's Training", lines, [
     { key: 'S', label: 'Train Strength', action: 'master_train', needsInput: true, inputLabel: 'Points to train (each costs ' + fmt(trainCost) + ' gold):', inputType: 'number', inputParam: 'strength' },
     { key: 'D', label: 'Train Defence', action: 'master_train', needsInput: true, inputLabel: 'Points to train (each costs ' + fmt(trainCost) + ' gold):', inputType: 'number', inputParam: 'defense' },
     { key: 'L', label: 'Leave', action: 'town' },
@@ -1187,7 +1187,7 @@ function getTavernScreen(player, otherPlayers) {
     tavernChoices.splice(tavernChoices.findIndex(c => c.key === 'A'), 0, { key: 'I', label: 'Intimidate', action: 'tavern_intimidate', needsInput: true, inputLabel: 'Player number to intimidate:', inputType: 'number', disabled: player.human_fights_left === 0 });
   }
 
-  return buildScreen('Dark Cloak Tavern', lines, tavernChoices);
+  return buildScreen('The Rusted Flagon', lines, tavernChoices);
 }
 
 function getTavernDrinkScreen(player) {
@@ -1233,17 +1233,17 @@ function getGardenScreen(player) {
     `${c.green}  You push open a hidden gate and enter a beautiful garden.`,
     `${c.green}  The scent of roses fills the air.`,
     '',
-    `${c.magenta}  A stunning woman with violet eyes looks up from her flowers.`,
+    `${c.magenta}  A sharp-eyed woman with auburn hair looks up from her work.`,
     `${c.white}  "Oh! A visitor. How... unexpected."`,
     '',
   ];
 
   if (player.flirted_today) {
-    lines.push(`${c.magenta}  Violet smiles. "You again. I must say, you are persistent."`);
-    lines.push(`${c.dgray}  (You have already visited Violet today.)`);
+    lines.push(`${c.magenta}  Lysa smiles. "You again. I must say, you are persistent."`);
+    lines.push(`${c.dgray}  (You have already visited Lysa today.)`);
     lines.push('');
     lines.push(`${c.yellow}  [L]${c.white} Leave the Garden`);
-    return buildScreen("Violet's Garden", lines, [{ key: 'L', label: 'Leave', action: 'town' }]);
+    return buildScreen("Lysa's Garden", lines, [{ key: 'L', label: 'Leave', action: 'town' }]);
   }
 
   if (isFemale) {
@@ -1269,7 +1269,7 @@ function getGardenScreen(player) {
     choices.unshift({ key: 'X', label: 'Accept rose', action: 'garden_female' });
   }
 
-  return buildScreen("Violet's Garden", lines, choices);
+  return buildScreen("Lysa's Garden", lines, choices);
 }
 
 function getBardScreen(hallOfKings) {
@@ -1307,7 +1307,7 @@ function getBardScreen(hallOfKings) {
   lines.push('');
   lines.push(`${c.yellow}  [L]${c.white} Leave`);
 
-  return buildScreen("The Bard's Corner", lines, [{ key: 'L', label: 'Leave', action: 'town' }]);
+  return buildScreen("The Minstrel's Corner", lines, [{ key: 'L', label: 'Leave', action: 'town' }]);
 }
 
 function getNewsScreen(newsList) {
@@ -1382,7 +1382,7 @@ function getCharacterScreen(player) {
 function getSetupScreen(step) {
   if (step === 'name') {
     return buildScreen('Character Creation', [
-      `${c.yellow}         *** Legend of the Red Dragon ***`,
+      `${c.yellow}          *** Scales of Tears ***`,
       `${c.cyan}              Character Creation`,
       divider(),
       `${c.white}  Welcome, new warrior!`,
@@ -1396,7 +1396,7 @@ function getSetupScreen(step) {
 
   if (step === 'sex') {
     return buildScreen('Character Creation', [
-      `${c.yellow}         *** Legend of the Red Dragon ***`,
+      `${c.yellow}          *** Scales of Tears ***`,
       `${c.cyan}              Character Creation`,
       divider(),
       `${c.white}  Are you male or female?`,
@@ -1411,7 +1411,7 @@ function getSetupScreen(step) {
 
   if (step === 'class') {
     return buildScreen('Character Creation', [
-      `${c.yellow}         *** Legend of the Red Dragon ***`,
+      `${c.yellow}          *** Scales of Tears ***`,
       `${c.cyan}              Character Creation`,
       divider(),
       `${c.white}  Choose your class:`,
@@ -1642,7 +1642,7 @@ function getCrierScreen(player) {
     ...renderBanner('news'),
     `${c.yellow}  Post a message to the Town Crier!`,
     '',
-    `${c.white}  Your announcement will be read aloud across ${(TOWNS[player.current_town || 'harood'] || TOWNS.harood).name}`,
+    `${c.white}  Your announcement will be read aloud across ${(TOWNS[player.current_town || 'dawnmark'] || TOWNS.dawnmark).name}`,
     `${c.white}  for the rest of the day. Costs ${c.yellow}50 gold${c.white}.`,
     '',
     `${c.gray}  Your gold: ${c.yellow}${fmt(player.gold)}`,
@@ -1661,7 +1661,7 @@ function getCrierScreen(player) {
 const MAP_NAME_TO_ID = {
   'Frostmere': 'frostmere', 'Stormwatch': 'stormwatch',
   'Thornreach': 'thornreach', 'Ironhold': 'ironhold', 'Old Karth': 'old_karth',
-  'Harood': 'harood', 'Silverkeep': 'silverkeep', 'Velmora': 'velmora',
+  'Dawnmark': 'dawnmark', 'Silverkeep': 'silverkeep', 'Velmora': 'velmora',
   'Bracken': 'bracken_hollow', 'Duskveil': 'duskveil',
   'Graveport': 'graveport', 'Mirefen': 'mirefen', 'Ashenfall': 'ashenfall',
 };
@@ -1673,7 +1673,7 @@ const MAP_LINES = [
   '               /             \\',
   '         [Thornreach]      [Ironhold] - [Old Karth]',
   '          /       \\       \\       |             |',
-  '      [Harood]-[Silverkeep] - [Velmora]        |',
+  '    [Dawnmark]-[Silverkeep] - [Velmora]        |',
   '         |           |              |           |',
   '     [Bracken]   [Duskveil] - [Graveport]      |',
   '                      \\          /             |',
@@ -1705,7 +1705,7 @@ function renderWorldMap(currentTownId, connections, playerLevel) {
 }
 
 function getWorldMapScreen(player) {
-  const town = TOWNS[player.current_town || 'harood'] || TOWNS.harood;
+  const town = TOWNS[player.current_town || 'dawnmark'] || TOWNS.dawnmark;
   const connections = town.connections;
 
   const lines = [
@@ -2009,7 +2009,7 @@ function getSocialFrostmereScreen(player) {
 // ── Travel options screen (carriage vs walk) ──────────────────────────────────
 function getTravelOptionsScreen(player, destId) {
   const { getRoadSegments } = require('./data');
-  const from = TOWNS[player.current_town || 'harood'] || TOWNS.harood;
+  const from = TOWNS[player.current_town || 'dawnmark'] || TOWNS.dawnmark;
   const dest = TOWNS[destId];
   if (!dest) return getWorldMapScreen(player);
 
@@ -2043,7 +2043,7 @@ function getRoadScreen(player) {
   const { getRoadSegments } = require('./data');
   const destId   = player.travel_to;
   const dest     = TOWNS[destId] || { name: 'Unknown' };
-  const from     = TOWNS[player.current_town || 'harood'] || TOWNS.harood;
+  const from     = TOWNS[player.current_town || 'dawnmark'] || TOWNS.dawnmark;
   const done     = player.travel_segments_done || 0;
   const total    = player.travel_segments_total || getRoadSegments(from.id, destId);
   const stam     = player.stamina ?? player.fights_left ?? 10;
@@ -2191,7 +2191,7 @@ function getTavernEncounterScreen(player, encounter) {
     action: 'tavern_encounter', param: ch.param,
   }));
 
-  return buildScreen(`Dark Cloak Tavern — ${encounter.title}`, lines, choices);
+  return buildScreen(`The Rusted Flagon — ${encounter.title}`, lines, choices);
 }
 
 module.exports = {

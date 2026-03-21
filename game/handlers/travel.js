@@ -9,7 +9,7 @@ async function world_map({ player, req, res, pendingMessages }) {
 }
 
 async function travel({ player, param, req, res, pendingMessages }) {
-  const current = TOWNS[player.current_town || 'harood'] || TOWNS.harood;
+  const current = TOWNS[player.current_town || 'dawnmark'] || TOWNS.dawnmark;
   const dest    = TOWNS[param];
 
   if (!dest) {

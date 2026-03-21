@@ -14,7 +14,7 @@ async function travel_options({ player, param, req, res, pendingMessages }) {
   const dest = TOWNS[param];
   if (!dest) return res.json({ ...getWorldMapScreen(player), pendingMessages: ['`@Unknown destination.'] });
 
-  const from = TOWNS[player.current_town || 'harood'] || TOWNS.harood;
+  const from = TOWNS[player.current_town || 'dawnmark'] || TOWNS.dawnmark;
   if (!from.connections.includes(param))
     return res.json({ ...getWorldMapScreen(player), pendingMessages: [`\`@No direct route from ${from.name} to ${dest.name}.`] });
   if (dest.minLevel && player.level < dest.minLevel)
@@ -31,7 +31,7 @@ async function walk_start({ player, param, req, res, pendingMessages }) {
   const dest = TOWNS[param];
   if (!dest) return res.json({ ...getWorldMapScreen(player), pendingMessages: ['`@Unknown destination.'] });
 
-  const from = TOWNS[player.current_town || 'harood'] || TOWNS.harood;
+  const from = TOWNS[player.current_town || 'dawnmark'] || TOWNS.dawnmark;
   if (!from.connections.includes(param))
     return res.json({ ...getWorldMapScreen(player), pendingMessages: [`\`@No direct route.`] });
   if (dest.minLevel && player.level < dest.minLevel)
@@ -75,7 +75,7 @@ async function walk_continue({ player, param, req, res, pendingMessages }) {
   }
 
   const done  = (player.travel_segments_done || 0) + 1;
-  const total = player.travel_segments_total || getRoadSegments(player.current_town || 'harood', player.travel_to);
+  const total = player.travel_segments_total || getRoadSegments(player.current_town || 'dawnmark', player.travel_to);
 
   // Consume 1 stamina
   await updatePlayer(player.id, {
@@ -177,8 +177,8 @@ async function camp_wait({ player, req, res, pendingMessages }) {
 
 // ── Turn back (abandon trip) ──────────────────────────────────────────────────
 async function road_turn_back({ player, req, res, pendingMessages }) {
-  const fromId = player.current_town || 'harood';
-  const from   = TOWNS[fromId] || TOWNS.harood;
+  const fromId = player.current_town || 'dawnmark';
+  const from   = TOWNS[fromId] || TOWNS.dawnmark;
 
   await updatePlayer(player.id, {
     travel_to: null,
@@ -310,7 +310,7 @@ async function road_encounter_resolve({ player, param, req, res, pendingMessages
     delete req.session.roadEncounter;
     if (param === 'submit') {
       // Become captive
-      const town = TOWNS[player.current_town || 'harood'] || TOWNS.harood;
+      const town = TOWNS[player.current_town || 'dawnmark'] || TOWNS.dawnmark;
       await updatePlayer(player.id, {
         captive: 1,
         captive_location: `${town.name} outskirts`,

@@ -158,9 +158,9 @@ async function buy_weapon({ player, param, req, res, pendingMessages }) {
   if (!num || num === 0) return res.json(getTownScreen(player));
   const weapon = getWeaponByNum(num);
   if (!weapon) return res.json(getWeaponShopScreen(player));
-  const weaponTown = TOWNS[player.current_town || 'harood'] || TOWNS.harood;
+  const weaponTown = TOWNS[player.current_town || 'dawnmark'] || TOWNS.dawnmark;
   const maxTier = weaponTown.shopMaxTier || 15;
-  const owner = SHOP_OWNERS[weaponTown.id] || SHOP_OWNERS.harood;
+  const owner = SHOP_OWNERS[weaponTown.id] || SHOP_OWNERS.dawnmark;
   if (weapon.tier && weapon.tier > maxTier && player.weapon_num !== weapon.num)
     return res.json({ ...getWeaponShopScreen(player), pendingMessages: ['`@That weapon is not available here. Travel to a larger city.'] });
   if (player.weapon_num === weapon.num)
@@ -208,9 +208,9 @@ async function buy_armor({ player, param, req, res, pendingMessages }) {
   if (!num || num === 0) return res.json(getTownScreen(player));
   const armor = getArmorByNum(num);
   if (!armor) return res.json(getArmorShopScreen(player));
-  const armorTown = TOWNS[player.current_town || 'harood'] || TOWNS.harood;
+  const armorTown = TOWNS[player.current_town || 'dawnmark'] || TOWNS.dawnmark;
   const maxTier = armorTown.shopMaxTier || 15;
-  const owner = SHOP_OWNERS[armorTown.id] || SHOP_OWNERS.harood;
+  const owner = SHOP_OWNERS[armorTown.id] || SHOP_OWNERS.dawnmark;
   if (armor.tier && armor.tier > maxTier && player.arm_num !== armor.num)
     return res.json({ ...getArmorShopScreen(player), pendingMessages: ['`@That armour is not available here. Travel to a larger city.'] });
   if (player.arm_num === armor.num)
@@ -253,8 +253,8 @@ async function shop_steal({ action, player, req, res, pendingMessages }) {
   if (player.class !== 3)
     return res.json({ ...getTownScreen(player), pendingMessages: ['`@Only Thieves can attempt this!'] });
 
-  const stealTown = TOWNS[player.current_town || 'harood'] || TOWNS.harood;
-  const stealOwner = SHOP_OWNERS[stealTown.id] || SHOP_OWNERS.harood;
+  const stealTown = TOWNS[player.current_town || 'dawnmark'] || TOWNS.dawnmark;
+  const stealOwner = SHOP_OWNERS[stealTown.id] || SHOP_OWNERS.dawnmark;
   const isWeapon = action === 'shop_steal_weapon';
   const items = isWeapon ? WEAPONS : ARMORS;
   const currentNum = isWeapon ? player.weapon_num : player.arm_num;
@@ -299,7 +299,7 @@ async function garden({ player, req, res, pendingMessages }) {
 async function garden_female({ player, req, res, pendingMessages }) {
   await updatePlayer(player.id, { charm: player.charm + 1, flirted_today: 1 });
   player = await getPlayer(player.id);
-  return res.json({ ...getTownScreen(player), pendingMessages: [`\`#Violet gives you a rose. Your charm is now ${player.charm}!`] });
+  return res.json({ ...getTownScreen(player), pendingMessages: [`\`#Lysa gives you a rose. Your charm is now ${player.charm}!`] });
 }
 
 async function garden_flower({ player, req, res, pendingMessages }) {
@@ -307,10 +307,10 @@ async function garden_flower({ player, req, res, pendingMessages }) {
   if (Math.random() < 0.3) {
     await updatePlayer(player.id, { charm: player.charm + 1 });
     player = await getPlayer(player.id);
-    return res.json({ ...getTownScreen(player), pendingMessages: [`\`#"How sweet of you!" Violet smiles. Your charm is now ${player.charm}!`] });
+    return res.json({ ...getTownScreen(player), pendingMessages: [`\`#"How sweet of you!" Lysa smiles. Your charm is now ${player.charm}!`] });
   }
   player = await getPlayer(player.id);
-  return res.json({ ...getTownScreen(player), pendingMessages: ['`#Violet blushes and accepts the flower gracefully.'] });
+  return res.json({ ...getTownScreen(player), pendingMessages: ['`#Lysa blushes and accepts the flower gracefully.'] });
 }
 
 async function garden_compliment({ player, req, res, pendingMessages }) {
@@ -321,7 +321,7 @@ async function garden_compliment({ player, req, res, pendingMessages }) {
     return res.json({ ...getTownScreen(player), pendingMessages: [`\`#"Flattery will get you everywhere." Your charm is now ${player.charm}!`] });
   }
   player = await getPlayer(player.id);
-  return res.json({ ...getTownScreen(player), pendingMessages: ['`#Violet raises an eyebrow. "Flattery will get you everywhere."'] });
+  return res.json({ ...getTownScreen(player), pendingMessages: ['`#Lysa raises an eyebrow. "Flattery will get you everywhere."'] });
 }
 
 async function garden_kiss({ player, req, res, pendingMessages }) {
@@ -329,11 +329,11 @@ async function garden_kiss({ player, req, res, pendingMessages }) {
   if (player.charm >= 12 && Math.random() < 0.3) {
     await updatePlayer(player.id, { charm: player.charm + 2, lays: player.lays + 1 });
     player = await getPlayer(player.id);
-    return res.json({ ...getTownScreen(player), pendingMessages: [`\`#Violet leans in and kisses your cheek. Your charm soars! Now ${player.charm}.`] });
+    return res.json({ ...getTownScreen(player), pendingMessages: [`\`#Lysa leans in and kisses your cheek. Your charm soars! Now ${player.charm}.`] });
   }
   player = await getPlayer(player.id);
   return res.json({ ...getTownScreen(player), pendingMessages: [
-    '`#Violet steps back laughing. "Perhaps when you\'re more... charming."',
+    '`#Lysa steps back laughing. "Perhaps when you\'re more... charming."',
     '`7(You need at least 12 charm to have a chance.)',
   ]});
 }
@@ -368,7 +368,7 @@ async function post_crier({ player, param, req, res, pendingMessages }) {
   });
   await addNews(`\`6[CRIER]\`% ${player.handle}: "${msg}"`);
   player = await getPlayer(player.id);
-  const crierTown = (TOWNS[player.current_town || 'harood'] || TOWNS.harood).name;
+  const crierTown = (TOWNS[player.current_town || 'dawnmark'] || TOWNS.dawnmark).name;
   return res.json({ ...getTownScreen(player), pendingMessages: [`\`6The town crier bellows your message across ${crierTown}!`] });
 }
 

@@ -1506,7 +1506,7 @@ const FOREST_EVENTS = [
     artColor: 'dgray',
     intro: [
       'A knight in battered armour is propped against a fallen tree, breathing hard.',
-      'A broken lance lies nearby. On his chest: the sigil of Harood.',
+      'A broken lance lies nearby. On his chest: the sigil of Dawnmark.',
       '"Ambushed," he manages. "Didn\'t... see them coming."',
       'He is alive. For now.',
     ],

@@ -453,7 +453,7 @@ async function social_bracken_talk({ player, req, res, pendingMessages }) {
     `\`6A farmer adjusts his cap. "Haven't seen trouble like a \`%${monster.name}\`6 in years. But last week..."`,
     `\`6An old woman hanging laundry squints at you. "You look like trouble. The \`%${monster.name}\`6 kind."`,
     `\`6A child runs up. "Are you a hero? My da says a \`%${monster.name}\`6 took our best cow last season."`,
-    `\`6A man fixing a fence tips his head. "Road to Harood's been rough lately. \`%${monster.name}\`6s mostly."`,
+    `\`6A man fixing a fence tips his head. "Road to Dawnmark's been rough lately. \`%${monster.name}\`6s mostly."`,
   ];
   return res.json({ ...getSocialBrackenHollowScreen(player), pendingMessages: [
     locals[Math.floor(Math.random() * locals.length)],

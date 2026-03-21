@@ -94,7 +94,7 @@ async function runNewDay(player, dryRun = false) {
     const interest = Math.min(10000, Math.floor(player.bank * 0.05));
     if (interest > 0) {
       updates.bank = player.bank + interest;
-      messages.push(`\`$The First Bank of Harood pays you \`$${interest.toLocaleString()}\`$ gold in interest.`);
+      messages.push(`\`$The First Bank of Dawnmark pays you \`$${interest.toLocaleString()}\`$ gold in interest.`);
     }
   }
 
