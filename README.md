@@ -1,6 +1,6 @@
 # Scales of Tears
 
-A browser-based RPG inspired by classic BBS door games. Built with Node.js/Express and PostgreSQL, featuring a retro ASCII art aesthetic, color-coded terminal output, and a daily-play structure.
+A browser-based RPG inspired by *Legend of the Red Dragon*, reimagined by Ben. Built with Node.js/Express and PostgreSQL, featuring a retro ASCII art aesthetic, color-coded terminal output, and a daily-play structure.
 
 ---
 
