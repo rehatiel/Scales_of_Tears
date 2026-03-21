@@ -8,6 +8,7 @@ const {
 } = require('../engine');
 const { parseWounds, healerWoundCost, healerInfectionCost } = require('../wounds');
 const { startAbduction } = require('./abduction');
+const { isRefused, adjustReps } = require('../factions');
 
 // ── INN ───────────────────────────────────────────────────────────────────────
 
@@ -167,7 +168,8 @@ async function bank_deposit({ player, param, req, res, pendingMessages }) {
   if (!amount) return res.json({ ...getBankScreen(player), pendingMessages: ['`7No amount specified.'] });
   if (amount > Number(player.gold))
     return res.json({ ...getBankScreen(player), pendingMessages: [`\`@You don't have that much gold!`] });
-  await updatePlayer(player.id, { gold: Number(player.gold) - amount, bank: Number(player.bank) + amount });
+  const bankRepUpdates = adjustReps(player, { merchants: 1 });
+  await updatePlayer(player.id, { gold: Number(player.gold) - amount, bank: Number(player.bank) + amount, ...bankRepUpdates });
   player = await getPlayer(player.id);
   return res.json({ ...getBankScreen(player), pendingMessages: [`\`0Deposited \`$${amount.toLocaleString()}\`0 gold.`] });
 }
@@ -266,6 +268,8 @@ async function buy_weapon({ player, param, req, res, pendingMessages }) {
   const weaponTown = TOWNS[player.current_town || 'dawnmark'] || TOWNS.dawnmark;
   const maxTier = weaponTown.shopMaxTier || 15;
   const owner = SHOP_OWNERS[weaponTown.id] || SHOP_OWNERS.dawnmark;
+  if (isRefused(player, owner.faction))
+    return res.json({ ...getWeaponShopScreen(player), pendingMessages: [`\`@${owner.name} crosses their arms. "I don't do business with your kind. Get out."`] });
   if (weapon.tier && weapon.tier > maxTier && player.weapon_num !== weapon.num)
     return res.json({ ...getWeaponShopScreen(player), pendingMessages: ['`@That weapon is not available here. Travel to a larger city.'] });
   if (player.weapon_num === weapon.num)
@@ -316,6 +320,8 @@ async function buy_armor({ player, param, req, res, pendingMessages }) {
   const armorTown = TOWNS[player.current_town || 'dawnmark'] || TOWNS.dawnmark;
   const maxTier = armorTown.shopMaxTier || 15;
   const owner = SHOP_OWNERS[armorTown.id] || SHOP_OWNERS.dawnmark;
+  if (isRefused(player, owner.faction))
+    return res.json({ ...getArmorShopScreen(player), pendingMessages: [`\`@${owner.name} crosses their arms. "I don't do business with your kind. Get out."`] });
   if (armor.tier && armor.tier > maxTier && player.arm_num !== armor.num)
     return res.json({ ...getArmorShopScreen(player), pendingMessages: ['`@That armour is not available here. Travel to a larger city.'] });
   if (player.arm_num === armor.num)
@@ -382,6 +388,9 @@ async function shop_steal({ action, player, req, res, pendingMessages }) {
       const newDef = Number(player.defense) - (cur ? cur.defense : 0) + target.defense;
       await updatePlayer(player.id, { defense: newDef, arm_num: target.num, arm_name: target.name });
     }
+    player = await getPlayer(player.id);
+    const repUpdates = adjustReps(player, { guild: 3, merchants: -5 });
+    await updatePlayer(player.id, repUpdates);
     player = await getPlayer(player.id);
     const screen = isWeapon ? getWeaponShopScreen(player) : getArmorShopScreen(player);
     await addNews(`\`3${player.handle}\`% quietly liberated a ${target.name} from ${stealOwner.name}'s shop...`);

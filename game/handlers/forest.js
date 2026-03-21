@@ -4,6 +4,7 @@ const { resolveRound } = require('../combat');
 const { checkLevelUp } = require('../newday');
 const { FOREST_EVENTS } = require('../forest_events');
 const { parseWounds, getWoundType, getWoundSeverity, woundChance, getBleedDamage, getCrushDefPenalty, rollInfection, resolveInfection } = require('../wounds');
+const { adjustReps, getHostileFactions, makeAssassin } = require('../factions');
 const {
   getTownScreen, getForestEncounterScreen, getForestCombatScreen,
   getForestEventScreen, getRescueOpportunityScreen, getLevelUpScreen,
@@ -50,6 +51,22 @@ async function forest({ player, req, res, pendingMessages }) {
   }
 
   req.session.forestDepth = 0;
+
+  // Faction assassin — 20% chance per hostile faction to intercept this run
+  const hostileFactions = getHostileFactions(player);
+  if (hostileFactions.length > 0) {
+    for (const faction of hostileFactions) {
+      if (Math.random() < 0.20) {
+        const assassin = makeAssassin(faction, player.level);
+        req.session.combat = { monster: assassin, round: 1, history: [], isAssassin: true, factionId: faction.id };
+        return res.json({ ...getForestEncounterScreen(player, assassin), pendingMessages: [
+          ...pendingMessages,
+          `\`@You sense something wrong. A figure detaches from the tree line.`,
+        ]});
+      }
+    }
+  }
+
   const monster = getRandomMonster(Number(player.level));
   req.session.combat = { monster, round: 1, history: [] };
   return res.json({ ...getForestEncounterScreen(player, monster), pendingMessages });
@@ -162,7 +179,8 @@ async function rescue({ player, req, res, pendingMessages }) {
   const savedHp = Math.max(1, Math.floor(victim.hit_max * 0.3));
   await updatePlayer(targetId, { near_death: 0, near_death_by: '', hit_points: savedHp });
   const expGain = victim.level * 75;
-  await updatePlayer(player.id, { exp: Number(player.exp) + expGain, charm: player.charm + 1 });
+  const rescueRepUpdates = adjustReps(player, { knights: 3, druids: 2 });
+  await updatePlayer(player.id, { exp: Number(player.exp) + expGain, charm: player.charm + 1, ...rescueRepUpdates });
   await addNews(`\`0${player.handle}\`% heroically rescued \`$${victim.handle}\`% from death in the forest!`);
   player = await getPlayer(player.id);
 
@@ -330,9 +348,25 @@ async function forest_combat({ action, player, req, res, pendingMessages }) {
 
   if (monster.currentHp <= 0) {
     req.session.combat = null;
-    await updatePlayer(player.id, { gold: Number(player.gold) + monster.gold, exp: Number(player.exp) + monster.exp });
+    const { getMonsterFamily } = require('../wounds');
+    const family = getMonsterFamily(monster);
+    // Rep adjustments based on monster family
+    const killRep = {};
+    if (family === 'undead')   { killRep.knights = 2; killRep.necromancers = -1; }
+    if (family === 'humanoid') { killRep.knights = 2; killRep.merchants = 1; }
+    if (family === 'beast')    { killRep.druids = -1; }
+    if (family === 'giant')    { killRep.knights = 1; }
+    // Assassin kill: rep boost with that faction for standing up to them
+    if (monster.isAssassin && monster.factionId) killRep[monster.factionId] = (killRep[monster.factionId] || 0) + 5;
+    const repUpdates = adjustReps(player, killRep);
+
+    await updatePlayer(player.id, { gold: Number(player.gold) + monster.gold, exp: Number(player.exp) + monster.exp, ...repUpdates });
     player = await getPlayer(player.id);
-    if (Math.random() < 0.10) await addNews(`\`0${player.handle}\`% slew a \`@${monster.name}\`% in the forest!`);
+    if (monster.isAssassin) {
+      await addNews(`\`$${player.handle}\`% defeated a ${monster.name} sent by the \`@${monster.factionId}\`% in the forest!`);
+    } else if (Math.random() < 0.10) {
+      await addNews(`\`0${player.handle}\`% slew a \`@${monster.name}\`% in the forest!`);
+    }
 
     if (Math.random() < 0.05) {
       await updatePlayer(player.id, { gems: player.gems + 1 });

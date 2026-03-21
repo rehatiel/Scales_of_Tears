@@ -607,19 +607,19 @@ const SOCIAL_SPACES = {
 // tierCap: if set, only applies discounts on items up to this tier
 // Special flags: charmBonus, dailyDiscount, poisonGearDiscount, fleeDiscount, forgeUpgrade, stocksBonus
 const SHOP_OWNERS = {
-  dawnmark:         { name: 'Silas',        title: 'the Old Soldier',     quote: '"Fought for thirty years. Sells for fifty."',           weaponMult: 0.90, armorMult: 1.00, sellMult: 0.40, tierCap: 5 },
-  silverkeep:     { name: 'Lady Maren',   title: "the Noble's Factor",  quote: '"Quality at a fair price. No haggling."',               weaponMult: 1.00, armorMult: 1.00, sellMult: 0.40, charmBonus: true },
-  velmora:        { name: 'Kess',         title: 'the Sharp Merchant',  quote: '"I buy high. Unusual, I know."',                        weaponMult: 1.00, armorMult: 1.00, sellMult: 0.55 },
-  ironhold:       { name: 'Brennar',      title: 'the Armorer',         quote: '"Armor first. Weapons are for showing off."',            weaponMult: 1.05, armorMult: 0.90, sellMult: 0.40 },
-  thornreach:     { name: 'Aldric',       title: 'the Woodsman',        quote: '"Practical gear for practical work."',                   weaponMult: 0.92, armorMult: 0.92, sellMult: 0.40, tierCap: 7 },
-  stormwatch:     { name: 'Zathis',       title: 'the Arcane Merchant', quote: '"My stock is... eclectic."',                             weaponMult: 1.00, armorMult: 1.00, sellMult: 0.40, stocksBonus: true },
-  duskveil:       { name: 'No Name',      title: 'ask no questions',    quote: '"One item. One day. Discounted. That\'s the deal."',     weaponMult: 1.00, armorMult: 1.00, sellMult: 0.40, dailyDiscount: true },
-  graveport:      { name: 'Marek',        title: 'the Smuggler',        quote: '"Fell off a ship. No questions."',                       weaponMult: 0.88, armorMult: 1.00, sellMult: 0.40 },
-  mirefen:        { name: 'Old Petra',    title: 'the Swamp Trader',    quote: '"I smell gold on you. Good."',                           weaponMult: 1.00, armorMult: 1.00, sellMult: 0.40, poisonGearDiscount: true },
-  old_karth:      { name: 'the Dealer',   title: 'of relics',           quote: '"These have outlived their owners. Maybe you won\'t."',  weaponMult: 1.15, armorMult: 1.15, sellMult: 0.60 },
-  ashenfall:      { name: 'Vorn',         title: 'the Master Forger',   quote: '"I built the weapons that broke the last king."',         weaponMult: 1.00, armorMult: 1.00, sellMult: 0.40 },
-  bracken_hollow: { name: 'Marta',        title: "the Farmer's Wife",   quote: '"It\'s not fancy. But it\'ll hold."',                    weaponMult: 0.80, armorMult: 0.80, sellMult: 0.40, tierCap: 3 },
-  frostmere:      { name: 'Bjarne',       title: 'the Hunter',          quote: '"Built for the cold. Built to last."',                   weaponMult: 1.00, armorMult: 1.00, sellMult: 0.40, fleeDiscount: true },
+  dawnmark:         { name: 'Silas',        title: 'the Old Soldier',     quote: '"Fought for thirty years. Sells for fifty."',           weaponMult: 0.90, armorMult: 1.00, sellMult: 0.40, tierCap: 5,  faction: null },
+  silverkeep:       { name: 'Lady Maren',   title: "the Noble's Factor",  quote: '"Quality at a fair price. No haggling."',               weaponMult: 1.00, armorMult: 1.00, sellMult: 0.40, charmBonus: true,  faction: 'knights' },
+  velmora:          { name: 'Kess',         title: 'the Sharp Merchant',  quote: '"I buy high. Unusual, I know."',                        weaponMult: 1.00, armorMult: 1.00, sellMult: 0.55, faction: 'merchants' },
+  ironhold:         { name: 'Brennar',      title: 'the Armorer',         quote: '"Armor first. Weapons are for showing off."',            weaponMult: 1.05, armorMult: 0.90, sellMult: 0.40, faction: null },
+  thornreach:       { name: 'Aldric',       title: 'the Woodsman',        quote: '"Practical gear for practical work."',                   weaponMult: 0.92, armorMult: 0.92, sellMult: 0.40, tierCap: 7,  faction: 'druids' },
+  stormwatch:       { name: 'Zathis',       title: 'the Arcane Merchant', quote: '"My stock is... eclectic."',                             weaponMult: 1.00, armorMult: 1.00, sellMult: 0.40, stocksBonus: true, faction: null },
+  duskveil:         { name: 'No Name',      title: 'ask no questions',    quote: '"One item. One day. Discounted. That\'s the deal."',     weaponMult: 1.00, armorMult: 1.00, sellMult: 0.40, dailyDiscount: true, faction: 'guild' },
+  graveport:        { name: 'Marek',        title: 'the Smuggler',        quote: '"Fell off a ship. No questions."',                       weaponMult: 0.88, armorMult: 1.00, sellMult: 0.40, faction: 'necromancers' },
+  mirefen:          { name: 'Old Petra',    title: 'the Swamp Trader',    quote: '"I smell gold on you. Good."',                           weaponMult: 1.00, armorMult: 1.00, sellMult: 0.40, poisonGearDiscount: true, faction: null },
+  old_karth:        { name: 'the Dealer',   title: 'of relics',           quote: '"These have outlived their owners. Maybe you won\'t."',  weaponMult: 1.15, armorMult: 1.15, sellMult: 0.60, faction: null },
+  ashenfall:        { name: 'Vorn',         title: 'the Master Forger',   quote: '"I built the weapons that broke the last king."',         weaponMult: 1.00, armorMult: 1.00, sellMult: 0.40, faction: null },
+  bracken_hollow:   { name: 'Marta',        title: "the Farmer's Wife",   quote: '"It\'s not fancy. But it\'ll hold."',                    weaponMult: 0.80, armorMult: 0.80, sellMult: 0.40, tierCap: 3,  faction: null },
+  frostmere:        { name: 'Bjarne',       title: 'the Hunter',          quote: '"Built for the cold. Built to last."',                   weaponMult: 1.00, armorMult: 1.00, sellMult: 0.40, fleeDiscount: true, faction: null },
 };
 
 // ── Road segment map ──────────────────────────────────────────────────────────

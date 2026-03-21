@@ -670,6 +670,8 @@ function getTownScreen(player) {
   const trainLeft = 5 - (player.training_today || 0);
   const town   = TOWNS[player.current_town || 'dawnmark'] || TOWNS.dawnmark;
   const social = SOCIAL_SPACES[town.id] || SOCIAL_SPACES.dawnmark;
+  const { FACTIONS } = require('./factions');
+  const factionInTown = Object.values(FACTIONS).find(f => f.homeTown === town.id) || null;
 
   const lines = [
     ...renderBanner(town.id),
@@ -695,6 +697,7 @@ function getTownScreen(player) {
     player.level >= 12 ? `${c.red}  [D]${c.white} Challenge the Red Dragon` : '',
     `${c.yellow}  [Y]${c.white} Town Crier${c.dgray} (post an announcement)`,
     `${c.cyan}  [V]${c.white} World Map / Travel${c.dgray} (${town.connections.length} route${town.connections.length !== 1 ? 's' : ''} from here)`,
+    factionInTown ? `${c.brown}  [K]${c.white} ${factionInTown.houseName}${c.dgray} (${factionInTown.shortName})` : '',
     `${c.dgray}  [L]${c.gray} Logout`,
     '',
   ].filter(l => l !== undefined && l !== '');
@@ -717,6 +720,7 @@ function getTownScreen(player) {
     { key: 'V', label: 'World Map / Travel', action: 'world_map' },
     { key: 'L', label: 'Logout', action: 'logout' },
   ];
+  if (factionInTown) choices.splice(choices.findIndex(ch => ch.key === 'L'), 0, { key: 'K', label: factionInTown.houseName, action: 'faction_house' });
   if (player.level >= 12) choices.splice(choices.findIndex(ch => ch.key === 'Y'), 0, { key: 'D', label: 'Challenge Dragon', action: 'dragon' });
 
   return buildScreen(town.name, lines, choices);
@@ -1505,6 +1509,8 @@ function getCharacterScreen(player) {
     player.is_legend ? `${c.yellow}  Legend Status: ${c.red}★ LEGENDARY WARRIOR ★` : '',
     (player.poisoned || 0) > 0 ? `${c.dgreen}  ☠ Status: POISONED (${player.poisoned} rounds remaining)` : '',
     player.quest_id ? `${c.cyan}  Quest Active: ${player.quest_id.replace(/_/g, ' ')}` : '',
+    '',
+    ...getFactionStandingsLines(player),
     '',
     `${c.yellow}  [L]${c.white} Return to Town`,
   ].filter(l => l !== undefined);
@@ -2327,6 +2333,88 @@ function getTavernEncounterScreen(player, encounter) {
   return buildScreen(`The Rusted Flagon — ${encounter.title}`, lines, choices);
 }
 
+// ── Faction screens ───────────────────────────────────────────────────────────
+
+function repLabelColor(score) {
+  if (score >= 75)  return c.yellow;
+  if (score >= 50)  return c.green;
+  if (score >= 25)  return c.dgreen;
+  if (score >= -24) return c.white;
+  if (score >= -49) return c.gray;
+  return c.red;
+}
+
+function getFactionStandingsLines(player) {
+  const { FACTIONS, getFactionRep, getRepLabel } = require('./factions');
+  const lines = [
+    `${c.yellow}  ── Faction Standings ────────────────`,
+  ];
+  for (const faction of Object.values(FACTIONS)) {
+    const rep = getFactionRep(player, faction.id);
+    const label = getRepLabel(rep);
+    const repStr = (rep > 0 ? '+' : '') + rep;
+    const pad = ' '.repeat(Math.max(0, 28 - faction.shortName.length));
+    lines.push(`${c.gray}  ${faction.shortName}${pad}${repLabelColor(rep)}${repStr.padStart(4)}  ${c.dgray}${label}`);
+  }
+  return lines;
+}
+
+function getFactionHouseScreen(player, factionId) {
+  const { FACTIONS, getFactionRep, getRepLabel } = require('./factions');
+  const { parseWounds, healerWoundCost, healerInfectionCost } = require('./wounds');
+  const faction = FACTIONS[factionId];
+  if (!faction) return getTownScreen(player);
+
+  const rep = getFactionRep(player, factionId);
+  const label = getRepLabel(rep);
+  const repStr = (rep > 0 ? '+' : '') + rep;
+
+  let welcome = faction.welcomeNeutral;
+  if (rep >= 25)  welcome = faction.welcomePositive;
+  if (rep < -25)  welcome = faction.welcomeNegative;
+
+  const lines = [
+    `${c.yellow}  ${faction.houseName}`,
+    `${c.dgray}  ${faction.houseKeeper} regards you steadily.`,
+    `${c.white}  ${welcome}`,
+    '',
+    `${c.gray}  Standing with ${c.white}${faction.name}${c.gray}:  ${repLabelColor(rep)}${repStr}  ${c.dgray}(${label})`,
+    '',
+  ];
+
+  const choices = [{ key: 'L', label: 'Leave', action: 'town' }];
+
+  if (rep >= 75) {
+    const wounds = parseWounds(player);
+    const woundCost = healerWoundCost(wounds, player.level);
+    const fullHp = player.hit_points >= player.hit_max;
+    lines.push(`${c.yellow}  ── Safe House ────────────────────────`);
+    lines.push(`${c.white}  [R]${c.white} Rest here${c.dgreen} (free — faction privilege)${fullHp ? c.dgray + '  (already full HP)' : ''}`);
+    if (wounds.length > 0 || player.infection_type) {
+      lines.push(`${c.white}  [H]${c.white} See the faction healer${c.dgreen} (free — treats wounds & infection)`);
+      choices.unshift({ key: 'H', label: 'Free Healing', action: 'faction_safe_heal' });
+    }
+    choices.unshift({ key: 'R', label: 'Rest (free)', action: 'faction_safe_rest', disabled: fullHp });
+    lines.push('');
+  }
+
+  if (rep >= 50) {
+    lines.push(`${c.yellow}  ── Faction Work ──────────────────────`);
+    lines.push(`${c.dgray}  ${faction.houseKeeper} lowers their voice.`);
+    lines.push(`${c.dgray}  "We may have work for someone of your standing... soon. Come back."`);
+    lines.push('');
+  }
+
+  if (rep <= -50) {
+    lines.push(`${c.red}  The guards here watch you closely. You are not welcome.`);
+    lines.push('');
+  }
+
+  lines.push(`${c.yellow}  [L]${c.white} Leave`);
+
+  return buildScreen(faction.houseName, lines, choices);
+}
+
 module.exports = {
   getTownScreen, getForestEncounterScreen, getForestCombatScreen,
   getWeaponShopScreen, getArmorShopScreen, getInnScreen, getBankScreen,
@@ -2344,6 +2432,7 @@ module.exports = {
   getNearDeathWaitingScreen, getNpcRescueScreen, getNearDeathScreen,
   getCrierScreen,
   getInnHealerScreen, getAbductionDungeonScreen, getAbductionFightScreen, getAbductionEscapeScreen,
+  getFactionHouseScreen, getFactionStandingsLines,
   renderBanner,
   LOCATION_BANNERS,
 };

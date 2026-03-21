@@ -8,6 +8,7 @@ const {
   getAbductionDungeonScreen, getInnScreen,
 } = require('../game/engine');
 const { parseWounds, infectionLabel } = require('../game/wounds');
+const { getStartingRepUpdates } = require('../game/factions');
 
 const router = express.Router();
 const ar = fn => (req, res, next) => fn(req, res, next).catch(next);
@@ -46,6 +47,7 @@ const HANDLERS = {
   ...require('../game/handlers/road'),
   ...require('../game/handlers/social'),
   ...require('../game/handlers/abduction'),
+  ...require('../game/handlers/factions'),
 };
 
 // Auth guard
@@ -87,6 +89,7 @@ router.post('/setup', ar(async (req, res) => {
       handle: name, sex, class: cls,
       hit_points: classHp[cls], hit_max: classHp[cls],
       strength: classStr[cls], setup_complete: 1, last_day: TODAY(),
+      ...getStartingRepUpdates(cls),
     });
     return res.json(getTownScreen(await getPlayer(player.id)));
   }
@@ -111,6 +114,7 @@ router.post('/setup', ar(async (req, res) => {
       class: cls,
       hit_points: classHp[cls], hit_max: classHp[cls],
       strength: classStr[cls], setup_complete: 1, last_day: TODAY(),
+      ...getStartingRepUpdates(cls),
     });
     return res.json(getTownScreen(await getPlayer(player.id)));
   }

@@ -2,6 +2,7 @@
 const { addNews, getAllPlayers } = require('../db');
 const { expForNextLevel, LEVEL_UP_GAINS, CLASS_NAMES } = require('./data');
 const { parseWounds, hasSerious, hasCritical } = require('./wounds');
+const { getHostileFactions, adjustReps, FACTIONS } = require('./factions');
 
 async function runNewDay(player, dryRun = false) {
   const news = dryRun ? async () => {} : addNews;
@@ -158,6 +159,28 @@ async function runNewDay(player, dryRun = false) {
         await news(`\`#${player.handle}\`% has become a creature of the night!`);
       }
     }
+  }
+
+  // ── Faction assassin overnight town event ──────────────────────────────────
+  // Each faction at -75 or below has a 15% chance to ambush the player overnight
+  const hostileFactions = getHostileFactions(player);
+  for (const faction of hostileFactions) {
+    if (Math.random() < 0.15) {
+      const dmg = Math.max(5, Math.floor(player.hit_max * 0.25));
+      const goldLost = Math.min(Number(player.gold), Math.floor(Number(player.gold) * 0.10));
+      const currentHp = updates.hit_points !== undefined ? updates.hit_points : player.hit_points;
+      updates.hit_points = Math.max(1, currentHp - dmg);
+      updates.gold = Math.max(0, (updates.gold !== undefined ? updates.gold : Number(player.gold)) - goldLost);
+      messages.push(`\`@A ${faction.assassinName} found your room while you slept.`);
+      messages.push(`\`@You wake bloodied — \`@${dmg}\`% damage and \`$${goldLost.toLocaleString()}\`@ gold stolen.`);
+      await news(`\`@${player.handle}\`% was attacked in the night by a ${faction.assassinName}!`);
+      break; // only one ambush per night
+    }
+  }
+
+  // Vampire transformation shifts reputation
+  if (updates.is_vampire && !player.is_vampire) {
+    Object.assign(updates, adjustReps(player, { necromancers: 15, knights: -20 }));
   }
 
   // Bank interest — capped at 10,000 gold per day to prevent runaway wealth
