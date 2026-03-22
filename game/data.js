@@ -460,6 +460,59 @@ const RED_DRAGON = {
   death: 'The Red Dragon shudders. Its great wings fold. It crashes to earth with a sound like the end of an age. With its last breath it whispers... "Well done, Warrior."',
 };
 
+// Champion dragon tiers — fought after slaying the Red Dragon at least once.
+const CHAMPION_DRAGONS = [
+  {
+    // times_won === 1 → "The Ancient Dragon"
+    name: 'The Ancient Dragon',
+    hp: 3500, strength: 700,
+    gold: 1000000, exp: 1500000,
+    meet: '"YOU RETURN. I HAVE HAD TIME TO THINK ON OUR LAST MEETING. AND TO CHANGE."',
+    death: 'The Ancient Dragon crashes to earth trailing smoke. "Stronger than you were. Good."',
+  },
+  {
+    // times_won === 2 → "The Eternal Dragon"
+    name: 'The Eternal Dragon',
+    hp: 6000, strength: 1000,
+    gold: 2000000, exp: 3000000,
+    meet: '"TWICE. YOU HAVE SLAIN ME TWICE. I ALMOST ADMIRE YOU."',
+    death: 'The Eternal Dragon dissolves into a pillar of fire. The echo of laughter lingers.',
+  },
+  {
+    // times_won >= 3 → "The Primordial Dragon" (scales further each win)
+    name: 'The Primordial Dragon',
+    hp: 10000, strength: 1500,
+    gold: 4000000, exp: 6000000,
+    meet: '"YOU. AGAIN. I NO LONGER HAVE WORDS. ONLY THIS."',
+    death: 'The Primordial Dragon collapses. The mountain groans. A strange silence falls.',
+  },
+];
+
+// Returns the appropriate champion dragon for a given times_won count.
+// For times_won >= 4, power scales by ×1.30 per win beyond 3.
+function getChampionDragon(timesWon) {
+  if (timesWon <= 1) return { ...CHAMPION_DRAGONS[0] };
+  if (timesWon === 2) return { ...CHAMPION_DRAGONS[1] };
+  const base = { ...CHAMPION_DRAGONS[2] };
+  const extra = timesWon - 3;
+  if (extra > 0) {
+    const m = Math.pow(1.30, extra);
+    base.hp       = Math.floor(base.hp       * m);
+    base.strength = Math.floor(base.strength * m);
+    base.gold     = Math.floor(base.gold     * m);
+    base.exp      = Math.floor(base.exp      * m);
+  }
+  return base;
+}
+
+// Starting stats per class — mirrors the setup route so prestige can reuse them.
+const CLASS_START_HP  = { 1: 28, 2: 35, 3: 22, 4: 20, 5: 25, 6: 32, 7: 25, 8: 22, 9: 18, 10: 26 };
+const CLASS_START_STR = { 1: 20, 2: 16, 3: 17, 4: 22, 5: 17, 6: 17, 7: 18, 8: 19, 9: 23, 10: 18 };
+
+// Title prefix shown next to the player's name at each prestige tier.
+const PRESTIGE_TITLES = ['', 'Reborn', 'Twice-Forged', 'Ancient', 'Eternal'];
+function getPrestigeTitle(n) { return PRESTIGE_TITLES[Math.min(n, PRESTIGE_TITLES.length - 1)] || 'Eternal'; }
+
 function getMonster(level, index) {
   const lvl = Math.min(level, 11) - 1;
   const tmpl = MONSTER_TEMPLATES[lvl][index];
@@ -852,7 +905,9 @@ function hasPerk(player, perkId) {
 }
 
 module.exports = {
-  WEAPONS, ARMORS, RED_DRAGON, MONSTER_TEMPLATES, TOWNS, ROADS,
+  WEAPONS, ARMORS, RED_DRAGON, CHAMPION_DRAGONS, getChampionDragon,
+  CLASS_START_HP, CLASS_START_STR, PRESTIGE_TITLES, getPrestigeTitle,
+  MONSTER_TEMPLATES, TOWNS, ROADS,
   SOCIAL_SPACES, SHOP_OWNERS,
   getMonster, getRandomMonster,
   getWeaponByNum, getArmorByNum,

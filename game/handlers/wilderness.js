@@ -19,7 +19,7 @@ async function wilderness({ player, req, res, pendingMessages }) {
   await updatePlayer(player.id, { stamina: stam - 1 });
   player = await getPlayer(player.id);
 
-  const monster = getWildernessMonster(townId, player.level);
+  const monster = await getWildernessMonster(townId, player.level, player.prestige_level || 0);
   req.session.wildernessMode = {
     townId,
     zoneName: zone.name,
@@ -55,7 +55,7 @@ async function wilderness_continue({ player, req, res, pendingMessages }) {
   await updatePlayer(player.id, { stamina: stam - 1 });
   player = await getPlayer(player.id);
 
-  const monster = getWildernessMonster(wMode.townId, player.level);
+  const monster = await getWildernessMonster(wMode.townId, player.level, player.prestige_level || 0);
   req.session.combat = { monster, round: 1, history: [] };
   req.session.forestDepth = 0;
 

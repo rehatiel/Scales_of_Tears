@@ -32,7 +32,7 @@ async function loadSuppressionsIfNeeded() {
   _suppressionLoadedDay = today;
 }
 
-async function pickForestMonster(level) {
+async function pickForestMonster(level, prestigeLevel = 0) {
   await loadSuppressionsIfNeeded();
   const today = Math.floor(Date.now() / 86400000);
   const allM = Array.from({ length: 11 }, (_, i) => getMonster(level, i));
@@ -41,8 +41,20 @@ async function pickForestMonster(level) {
     return !_suppressedMonsters[k] || _suppressedMonsters[k] <= today;
   });
   const pool = available.length > 0 ? available : allM;
-  const pick = pool[Math.floor(Math.random() * pool.length)];
-  return { ...pick, maxHp: pick.hp, currentHp: pick.hp };
+  let pick = { ...pool[Math.floor(Math.random() * pool.length)] };
+
+  // Prestige scaling: each tier makes monsters 20% harder
+  if (prestigeLevel > 0) {
+    const scale = 1 + prestigeLevel * 0.20;
+    pick.strength   = Math.floor(pick.strength   * scale);
+    pick.hp         = Math.floor(pick.hp         * scale);
+    pick.maxHp      = pick.hp;
+    pick.currentHp  = pick.hp;
+  } else {
+    pick.maxHp     = pick.hp;
+    pick.currentHp = pick.hp;
+  }
+  return pick;
 }
 
 // Returns suppressed monster name if threshold just crossed, null otherwise.
@@ -182,7 +194,7 @@ async function forest({ player, req, res, pendingMessages }) {
     });
   }
 
-  const monster = await pickForestMonster(Number(player.level));
+  const monster = await pickForestMonster(Number(player.level), player.prestige_level || 0);
   req.session.combat = { monster, round: 1, history: [] };
   return res.json({ ...getForestEncounterScreen(player, monster), pendingMessages });
 }
@@ -801,6 +813,10 @@ async function forest_combat({ action, player, req, res, pendingMessages }) {
       } else {
         await updateNamedEnemy(monster.namedEnemyId, { defeated: 1 });
       }
+      // Clear any wilderness infestations this enemy caused
+      const { clearEnemyInfestation } = require('../wilderness');
+      await clearEnemyInfestation(monster.namedEnemyId);
+
       const isAvenger = Number(player.nemesis_id) === Number(monster.namedEnemyId);
       if (isAvenger) {
         await updatePlayer(player.id, { nemesis_id: null, charm: player.charm + 2 });

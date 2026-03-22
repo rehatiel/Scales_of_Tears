@@ -59,6 +59,7 @@ const HANDLERS = {
   ...require('../game/handlers/dungeon'),
   ...require('../game/handlers/ruins'),
   ...require('../game/handlers/world_events'),
+  ...require('../game/handlers/prestige'),
 };
 
 // Auth guard

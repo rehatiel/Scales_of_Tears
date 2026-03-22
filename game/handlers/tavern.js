@@ -236,16 +236,86 @@ async function tavern_gamble({ player, param, req, res, pendingMessages }) {
 }
 
 async function tavern_rumours({ player, req, res, pendingMessages }) {
+  const { getActiveWorldEvent, getWorldState } = require('../../db');
+  const { getEventDef } = require('../world_events');
+
   const monster = getRandomMonster(Number(player.level));
-  const templates = [
-    `\`6Old Hrok leans in: "Careful out there. Folk say a \`%${monster.name}\`6 has been seen on the trail."`,
-    `\`6A cloaked traveller whispers: "I saw a \`%${monster.name}\`6 near the forest edge. Didn't stick around."`,
-    `\`6The barmaid sets down your mug: "My cousin lost a horse to a \`%${monster.name}\`6 last night."`,
-    `\`6A veteran warrior grumbles: "Damned \`%${monster.name}\`6s are thick in the woods tonight. Watch yourself."`,
-    `\`6Someone drew a rough sketch on the table: a \`%${monster.name}\`6. The ink is still fresh.`,
+
+  // Weighted rumour pool — always includes generic sightings
+  const pool = [
+    { w: 3, text: `\`6Old Hrok leans in: "Careful out there. Folk say a \`%${monster.name}\`6 has been seen on the trail."` },
+    { w: 3, text: `\`6A cloaked traveller whispers: "I saw a \`%${monster.name}\`6 near the forest edge. Didn't stick around."` },
+    { w: 3, text: `\`6The barmaid sets down your mug: "My cousin lost a horse to a \`%${monster.name}\`6 last night."` },
+    { w: 3, text: `\`6A veteran warrior grumbles: "Damned \`%${monster.name}\`6s are thick in the woods tonight. Watch yourself."` },
   ];
-  const rumour = templates[Math.floor(Math.random() * templates.length)];
-  return res.json({ ...getTavernScreen(player, await townPlayers(player)), pendingMessages: [rumour] });
+
+  // World event rumours
+  const activeEvent = await getActiveWorldEvent();
+  if (activeEvent) {
+    const evDef = getEventDef(activeEvent.type);
+    if (evDef) {
+      const eventLines = {
+        plague:        [`\`6A pale-faced merchant coughs into his sleeve. "Half the caravans won't leave town. The fever's spreading."`,
+                        `\`6"Healers are charging triple," the barman says grimly. "Supply and demand, they say."`],
+        war:           [`\`6A soldier at the bar stares at nothing. "The eastern roads are gone. Bandits took them."`,
+                        `\`6"War's good for business if you're selling steel," grins the mercenary. "Bad if you're buying anything else."`],
+        dragon_stirs:  [`\`6Someone carved a dragon silhouette into the table. Fresh chips surround it.`,
+                        `\`6"The Red Dragon's shadow passed overhead at dawn," whispers a merchant. "I've never moved a cart faster."`],
+        arcane_storm:  [`\`6A mage in the corner stares at her hands — they glow faintly, and not by choice.`,
+                        `\`6"Wild magic ate three cows last night," the farmer says flatly. "No one knows how. Or cares to ask."`],
+        grand_fair:    [`\`6"Quality like this, I'd normally charge twice as much," the trader beams, sliding a box across the table.`,
+                        `\`6The crowd outside is twice the usual size. Merchants from as far as Velmora, someone says.`],
+        undead_rising: [`\`6A gravedigger drinks alone in the corner. His tools are bent and he won't say why.`,
+                        `\`6"Don't travel at night. Not now," says a cloaked woman, not meeting your eyes.`],
+      };
+      for (const text of (eventLines[activeEvent.type] || [])) {
+        pool.push({ w: 4, text });
+      }
+    }
+  }
+
+  // Monster suppression rumours
+  const suppRaw = await getWorldState('eco:suppressions');
+  if (suppRaw) {
+    const today = Math.floor(Date.now() / 86400000);
+    const suppressed = Object.entries(JSON.parse(suppRaw))
+      .filter(([, exp]) => exp > today)
+      .map(([k]) => k.replace(/_/g, ' '));
+    if (suppressed.length) {
+      const name = suppressed[0];
+      pool.push({ w: 4, text: `\`6"Hunters went mad for \`%${name}\`6s last week," says the trapper. "Now there's none to be found. Give it a couple days."` });
+      pool.push({ w: 3, text: `\`6A leather-worker sighs: "No \`%${name}\`6 pelts in the market. Overhunted. It happens every season."` });
+    }
+  }
+
+  // Infestation rumours — if a nearby zone is infested, locals know about it
+  const infestRaw = await getWorldState('eco:infestations');
+  if (infestRaw) {
+    const today = Math.floor(Date.now() / 86400000);
+    const infestations = JSON.parse(infestRaw);
+    const playerTown = player.current_town || 'dawnmark';
+    const adjacent = TOWNS[playerTown]?.connections || [];
+    for (const adj of adjacent) {
+      const list = (infestations[adj] || []).filter(e => e.expiresDay > today);
+      if (list.length) {
+        const inf = list[0];
+        const adjName = TOWNS[adj]?.name || adj;
+        pool.push({ w: 5, text: `\`6A rider just in from \`%${adjName}\`6 looks shaken: "The wilds are swarming with \`@${inf.monsterName}\`6s out there. Something's driving them."` });
+        break;
+      }
+    }
+  }
+
+  // Weighted pick
+  const total = pool.reduce((s, e) => s + e.w, 0);
+  let r = Math.random() * total;
+  let chosen = pool[pool.length - 1].text;
+  for (const entry of pool) {
+    r -= entry.w;
+    if (r <= 0) { chosen = entry.text; break; }
+  }
+
+  return res.json({ ...getTavernScreen(player, await townPlayers(player)), pendingMessages: [chosen] });
 }
 
 async function tavern_buyround({ player, req, res, pendingMessages }) {

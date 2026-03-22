@@ -422,7 +422,7 @@ async function runWorldDay() {
     await addNews(`\`@${enemy.given_name}${enemy.title ? ', ' + enemy.title : ''}\`% has been sighted near \`$${townName}\`%! The town is in danger!`);
   }
 
-  // 4. Named enemy spread: enemies alive 7+ days grow stronger
+  // 4. Named enemy spread: enemies alive 7+ days grow stronger and infest adjacent zones
   const allEnemies = await getAllUndefeatedNamedEnemies();
   for (const enemy of allEnemies) {
     const firstSeenKey = `nemesis:first_seen:${enemy.id}`;
@@ -437,7 +437,47 @@ async function runWorldDay() {
       const newHp  = Math.floor(enemy.hp * 1.10);
       await updateNamedEnemy(enemy.id, { strength: newStr, hp: newHp });
       const displayName = `${enemy.given_name}${enemy.title ? ', ' + enemy.title : ''}`;
-      await addNews(`\`@${displayName}\`% has grown more powerful — unchecked for a week, it spreads its influence!`);
+
+      // Determine which towns' wilderness zones to infest
+      const { getMonster } = require('./data');
+      const base = getMonster(enemy.level, enemy.template_index);
+      const infestTownIds = [];
+      if (enemy.reached_town && TOWNS[enemy.reached_town]) {
+        // Spread from the town it's threatening to its neighbours
+        infestTownIds.push(...(TOWNS[enemy.reached_town].connections || []).slice(0, 2));
+      }
+      if (!infestTownIds.length) {
+        // No known location — pick 2 random non-Dawnmark towns
+        const pool = Object.keys(TOWNS).filter(id => id !== 'dawnmark');
+        const a = pool[Math.floor(Math.random() * pool.length)];
+        const b = pool.filter(id => id !== a)[Math.floor(Math.random() * (pool.length - 1))];
+        infestTownIds.push(a, b);
+      }
+
+      // Write infestations to world_state
+      const infestRaw = await getWorldState('eco:infestations');
+      const infestations = infestRaw ? JSON.parse(infestRaw) : {};
+      const expiresDay = today + 3;
+      const infestTownNames = [];
+      for (const tid of infestTownIds) {
+        if (!infestations[tid]) infestations[tid] = [];
+        if (!infestations[tid].some(e => e.enemyId === enemy.id)) {
+          infestations[tid].push({
+            enemyId:       enemy.id,
+            monsterName:   base.name,
+            level:         enemy.level,
+            templateIndex: enemy.template_index,
+            expiresDay,
+          });
+          if (TOWNS[tid]) infestTownNames.push(TOWNS[tid].name);
+        }
+      }
+      await setWorldState('eco:infestations', JSON.stringify(infestations));
+
+      const locationStr = infestTownNames.length
+        ? ` Its kind spread to the wilds near \`$${infestTownNames.join('\`% and \`$')}\`%.`
+        : '';
+      await addNews(`\`@${displayName}\`% has grown more powerful — unchecked for a week, it spreads its influence!${locationStr}`);
     }
   }
 

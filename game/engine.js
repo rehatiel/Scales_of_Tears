@@ -724,7 +724,8 @@ function getTownScreen(player) {
     `${c.yellow}  [N]${c.white} View the Daily News`,
     `${c.yellow}  [P]${c.white} View Other Players`,
     `${c.yellow}  [C]${c.white} View Your Character`,
-    player.level >= 12 ? `${c.red}  [D]${c.white} Challenge the Red Dragon` : '',
+    player.level >= 12 ? `${c.red}  [D]${c.white} ${(player.times_won || 0) > 0 ? 'Return to the Lair' : 'Challenge the Red Dragon'}` : '',
+    (player.level >= 12 && (player.times_won || 0) >= 1) ? `${c.magenta}  [J]${c.white} Ascend ${c.dgray}(Prestige — reset to level 1, carry your power forward)` : '',
     (player.perk_points || 0) > 0 ? `${c.magenta}  [E]${c.white} Choose a Perk ${c.magenta}✦ (${player.perk_points} point${player.perk_points > 1 ? 's' : ''} available!)` : '',
     `${c.yellow}  [Y]${c.white} Town Crier${c.dgray} (post an announcement)`,
     `${c.cyan}  [V]${c.white} World Map / Travel${c.dgray} (${town.connections.length} route${town.connections.length !== 1 ? 's' : ''} from here)`,
@@ -756,7 +757,8 @@ function getTownScreen(player) {
   ];
   if ((player.perk_points || 0) > 0) choices.splice(choices.findIndex(ch => ch.key === 'Y'), 0, { key: 'E', label: 'Choose a Perk', action: 'perk_select' });
   if (factionInTown) choices.splice(choices.findIndex(ch => ch.key === 'L'), 0, { key: 'K', label: factionInTown.houseName, action: 'faction_house' });
-  if (player.level >= 12) choices.splice(choices.findIndex(ch => ch.key === 'Y'), 0, { key: 'D', label: 'Challenge Dragon', action: 'dragon' });
+  if (player.level >= 12) choices.splice(choices.findIndex(ch => ch.key === 'Y'), 0, { key: 'D', label: (player.times_won || 0) > 0 ? 'Return to the Lair' : 'Challenge Dragon', action: 'dragon' });
+  if (player.level >= 12 && (player.times_won || 0) >= 1) choices.splice(choices.findIndex(ch => ch.key === 'L'), 0, { key: 'J', label: 'Ascend (Prestige)', action: 'prestige_confirm' });
   if (ruin) choices.splice(1, 0, { key: 'U', label: ruin.name, action: 'ruins', disabled: ruinVisited });
   if (invaders.length > 0) choices.splice(choices.findIndex(ch => ch.key === 'L'), 0,
     { key: 'Z', label: `Fight ${invaders[0].given_name}`, action: 'town_invader_fight' });
@@ -1391,8 +1393,9 @@ function getTavernScreen(player, otherPlayers) {
   } else {
     others.slice(0, 15).forEach((p, i) => {
       const col = p.dead ? c.dgray : (p.times_won > 0 ? c.yellow : c.white);
+      const prestigeTag = (p.prestige_level || 0) > 0 ? `${c.magenta}✦${p.prestige_level} ` : '';
       const status = p.dead ? `${c.red}(dead)` : (p.times_won > 0 ? `${c.yellow}(King x${p.times_won})` : '');
-      lines.push(`${c.yellow}  ${pad(i + 1, 4)}${col}${pad(p.handle, 22)}${pad(p.level, 8)}${pad(CLASS_NAMES[p.class], 16)}${status}`);
+      lines.push(`${c.yellow}  ${pad(i + 1, 4)}${col}${pad(p.handle, 22)}${pad(p.level, 8)}${pad(CLASS_NAMES[p.class], 14)}${prestigeTag}${status}`);
     });
   }
 
@@ -1668,6 +1671,7 @@ function getCharacterRecordsScreen(player) {
     `${c.yellow}  ── Records ──────────────────────────`,
     `${c.gray}  PvP Kills:  ${c.red}${player.kills}    ${c.gray}Times Won: ${c.yellow}${player.times_won}`,
     player.is_legend ? `${c.yellow}  ★ LEGENDARY WARRIOR` : '',
+    (player.prestige_level || 0) > 0 ? `${c.magenta}  ✦ PRESTIGE ${player.prestige_level} — ${require('./data').getPrestigeTitle(player.prestige_level)}` : '',
     '',
     `${c.yellow}  ── Perks ────────────────────────────`,
     ownedPerks.length === 0 ? `${c.dgray}  No perks learned yet` : '',
@@ -1756,30 +1760,45 @@ function getSetupScreen(step) {
 }
 
 function getDragonScreen(player) {
+  const { getChampionDragon } = require('./data');
+  const isChampion = (player.times_won || 0) > 0;
+  const dr = isChampion ? getChampionDragon(player.times_won) : { name: 'The Red Dragon', hp: 2000, strength: 500 };
+
+  const introLines = isChampion
+    ? [
+        `${c.red}  You return. The cave is different — older. Colder.`,
+        `${c.red}  Something vast stirs in the darkness.`,
+        '',
+        `${c.yellow}  ${dr.meet}`,
+      ]
+    : [
+        `${c.white}  You stand at the mouth of a vast cavern.`,
+        `${c.white}  The heat is oppressive. The smell of brimstone fills the air.`,
+        '',
+        `${c.red}  Deep within, two enormous eyes open. They glow like coals.`,
+        `${c.red}  A voice like grinding boulders fills the cave:`,
+        '',
+        `${c.yellow}  "SO. ANOTHER WORM DARES TO FACE ME."`,
+        `${c.yellow}  "COME THEN, ${player.handle.toUpperCase()}. LET US SEE WHAT YOU ARE MADE OF."`,
+        '',
+        `${c.red}  The Red Dragon spreads its wings and ROARS!`,
+      ];
+
   const lines = [
     ...renderBanner('dragon'),
-    `${c.white}  You stand at the mouth of a vast cavern.`,
-    `${c.white}  The heat is oppressive. The smell of brimstone fills the air.`,
+    ...introLines,
     '',
-    `${c.red}  Deep within, two enormous eyes open. They glow like coals.`,
-    `${c.red}  A voice like grinding boulders fills the cave:`,
-    '',
-    `${c.yellow}  "SO. ANOTHER WORM DARES TO FACE ME."`,
-    `${c.yellow}  "COME THEN, ${player.handle.toUpperCase()}. LET US SEE WHAT YOU ARE MADE OF."`,
-    '',
-    `${c.red}  The Red Dragon spreads its wings and ROARS!`,
-    '',
-    `${c.cyan}  ── The Red Dragon ──────────────────────`,
-    `${c.gray}  Hit Points: ${c.red}2000`,
-    `${c.gray}  Strength:   ${c.red}500`,
+    `${c.cyan}  ── ${dr.name} ${'─'.repeat(Math.max(0, 36 - dr.name.length))}`,
+    `${c.gray}  Hit Points: ${c.red}${fmt(dr.hp)}`,
+    `${c.gray}  Strength:   ${c.red}${fmt(dr.strength)}`,
     '',
     `${c.gray}  Your HP: ${hpColor(player.hit_points, player.hit_max)}${fmt(player.hit_points)}${c.gray}/${c.white}${fmt(player.hit_max)}`,
     '',
-    `${c.yellow}  [F]${c.white} FIGHT THE DRAGON!`,
-    `${c.red}  [R]${c.white} Run Away (coward!)`,
+    `${c.yellow}  [F]${c.white} FIGHT ${dr.name.toUpperCase()}!`,
+    `${c.red}  [R]${c.white} Run Away`,
   ];
 
-  return buildScreen('The Red Dragon!', lines, [
+  return buildScreen(dr.name, lines, [
     { key: 'F', label: 'FIGHT!', action: 'dragon_fight' },
     { key: 'R', label: 'Run Away', action: 'town' },
   ]);

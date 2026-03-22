@@ -73,15 +73,7 @@ const RUINS = {
       { key: 'L', label: 'Leave',                         param: 'leave' },
     ],
     outcomes: {
-      pull: {
-        weaponNum: 4, expMult: 60,
-        alignDelta: 5,
-        msg: [
-          'The sword comes free with a sound like a sigh.',
-          'It is not a legendary blade — just a good one, finally freed.',
-          'You feel something of its last owner\'s resolve pass into you.',
-        ],
-      },
+      // pull: handled by handleSwordPull() in ruins handler (randomised outcomes)
       examine: {
         expMult: 100,
         msg: [

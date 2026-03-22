@@ -2,23 +2,85 @@
 // Monster format mirrors MONSTER_TEMPLATES: { name, weapon, behavior, strMult, hpMult, goldMult, expMult, meet, death }
 // Names are chosen to match getMonsterArt() regex patterns — no new art needed.
 
+const { getWorldState, setWorldState } = require('../db');
+
+// ── Infestation cache ─────────────────────────────────────────────────────────
+// When a named enemy spreads (7 days alive), adjacent town wilderness zones are
+// marked as infested — a 30% chance to spawn that enemy's monster type instead.
+let _infestations    = {};  // { townId: [{ enemyId, monsterName, level, templateIndex, expiresDay }] }
+let _infLoadedDay    = -1;
+
+async function loadInfestationsIfNeeded() {
+  const today = Math.floor(Date.now() / 86400000);
+  if (_infLoadedDay === today) return;
+  const raw = await getWorldState('eco:infestations');
+  _infestations = {};
+  if (raw) {
+    for (const [tid, list] of Object.entries(JSON.parse(raw))) {
+      const active = list.filter(e => e.expiresDay > today);
+      if (active.length) _infestations[tid] = active;
+    }
+  }
+  _infLoadedDay = today;
+}
+
+async function clearEnemyInfestation(enemyId) {
+  const raw = await getWorldState('eco:infestations');
+  if (!raw) return;
+  const parsed = JSON.parse(raw);
+  let changed = false;
+  for (const tid of Object.keys(parsed)) {
+    const before = parsed[tid].length;
+    parsed[tid] = parsed[tid].filter(e => e.enemyId !== enemyId);
+    if (parsed[tid].length !== before) changed = true;
+    if (!parsed[tid].length) delete parsed[tid];
+  }
+  if (changed) {
+    await setWorldState('eco:infestations', JSON.stringify(parsed));
+    _infLoadedDay = -1; // invalidate cache
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 //  Base stat formula (same as getMonster in data.js)
 // ─────────────────────────────────────────────────────────────────────────────
-function getWildernessMonster(townId, level) {
+async function getWildernessMonster(townId, level, prestigeLevel = 0) {
   const zone = WILDERNESS_ZONES[townId];
   if (!zone) return null;
-
-  const pool = zone.monsters;
-  const t = pool[Math.floor(Math.random() * pool.length)];
 
   const baseStr  = 10 + level * 8;
   const baseHp   = 20 + level * 15;
   const baseGold = 5  + level * 12;
   const baseExp  = 8  + level * 10;
 
-  const str = Math.floor(baseStr  * (t.strMult  ?? 1.0));
-  const hp  = Math.floor(baseHp   * (t.hpMult   ?? 1.0));
+  // 30% chance to spawn an infesting monster if this zone is affected
+  await loadInfestationsIfNeeded();
+  const today = Math.floor(Date.now() / 86400000);
+  const active = (_infestations[townId] || []).filter(e => e.expiresDay > today);
+  const scale = prestigeLevel > 0 ? 1 + prestigeLevel * 0.20 : 1;
+
+  if (active.length && Math.random() < 0.30) {
+    const inf = active[Math.floor(Math.random() * active.length)];
+    const { getMonster } = require('./data');
+    const base = getMonster(inf.level, inf.templateIndex);
+    const str = Math.floor(baseStr * (base.strMult ?? 1.0) * 1.10 * scale);
+    const hp  = Math.floor(baseHp  * (base.hpMult  ?? 1.0) * 1.10 * scale);
+    return {
+      name:     base.name,
+      weapon:   base.weapon,
+      behavior: base.behavior || 'normal',
+      strength: str,
+      hp, maxHp: hp, currentHp: hp,
+      gold:     Math.floor(baseGold * (base.goldMult ?? 1.0) * 1.20),
+      exp:      Math.floor(baseExp  * (base.expMult  ?? 1.0) * 1.20),
+      meet:     `A \`@${base.name}\`% has been driven here from the distant wilds — fiercer than usual.`,
+      death:    base.death,
+    };
+  }
+
+  const t = zone.monsters[Math.floor(Math.random() * zone.monsters.length)];
+  const str = Math.floor(baseStr * (t.strMult ?? 1.0) * scale);
+  const hp  = Math.floor(baseHp  * (t.hpMult  ?? 1.0) * scale);
 
   return {
     name:      t.name,
@@ -587,4 +649,4 @@ const WILDERNESS_ZONES = {
 // Towns with no wilderness (Dawnmark uses existing forest system)
 const WILDERNESS_NONE = new Set(['dawnmark']);
 
-module.exports = { WILDERNESS_ZONES, WILDERNESS_NONE, getWildernessMonster };
+module.exports = { WILDERNESS_ZONES, WILDERNESS_NONE, getWildernessMonster, clearEnemyInfestation };

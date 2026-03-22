@@ -83,6 +83,7 @@ const PLAYER_COLUMNS = new Set([
   'alignment',
   'named_weapon_id', 'named_armor_id', 'weapon_cursed', 'armor_cursed', 'blood_oath',
   'ruins_visited', 'dungeon_clears',
+  'prestige_level',
 ]);
 
 async function updatePlayer(id, fields) {
