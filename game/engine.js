@@ -1559,76 +1559,128 @@ function getNewsScreen(newsList) {
   return buildScreen('Daily News', lines, [{ key: 'L', label: 'Return', action: 'town' }]);
 }
 
+// ── Character screen — tabbed layout ─────────────────────────────────────────
+
+function charTabNav(active) {
+  const tabs = [
+    { key: '1', label: 'Stats',    action: 'character' },
+    { key: '2', label: 'Gear',     action: 'character_gear' },
+    { key: '3', label: 'Records',  action: 'character_records' },
+    { key: '4', label: 'Factions', action: 'character_factions' },
+  ];
+  const navLine = tabs.map(t =>
+    t.key === active
+      ? `${c.yellow}[${t.key}]${c.white}${t.label}`
+      : `${c.dgray}[${t.key}]${t.label}`
+  ).join(`${c.dgray}  `);
+  const choices = tabs
+    .filter(t => t.key !== active)
+    .map(t => ({ key: t.key, label: t.label, action: t.action }));
+  choices.push({ key: 'L', label: 'Return', action: 'town' });
+  return { navLine, choices };
+}
+
+// Tab 1 — Stats
 function getCharacterScreen(player) {
-  const cls = CLASS_NAMES[player.class];
-  const move = CLASS_POWER_MOVES[player.class];
+  const cls   = CLASS_NAMES[player.class];
+  const move  = CLASS_POWER_MOVES[player.class];
   const nextExp = expForNextLevel(player.level);
+  const al    = getAlignmentLabel(player.alignment || 0);
+  const { navLine, choices } = charTabNav('1');
 
   const lines = [
-    ...renderBanner('character'),
-    `${c.gray}  Name:       ${c.white}${player.handle}`,
-    `${c.gray}  Class:      ${c.cyan}${cls}`,
-    `${c.gray}  Sex:        ${c.white}${player.sex === 5 ? 'Female' : 'Male'}`,
-    `${c.gray}  Level:      ${c.yellow}${player.level}${player.level >= 12 ? c.red + '  (DRAGON SLAYER!)' : ''}`,
-    `${c.gray}  Experience: ${c.green}${fmt(player.exp)}${nextExp ? c.gray + ' / ' + c.cyan + fmt(nextExp) : ''}`,
-    '',
+    `${c.dgray}  ${player.handle}  ${c.gray}·  ${c.cyan}${cls}  ${c.gray}·  ${c.white}Level ${c.yellow}${player.level}${player.level >= 12 ? c.red + ' ★ DRAGON SLAYER' : ''}`,
+    `  ${navLine}`,
     divider('─', 45),
-    `${c.yellow}  ── Combat Statistics ────────────────`,
-    `${c.gray}  Hit Points: ${hpColor(player.hit_points, player.hit_max)}${fmt(player.hit_points)}${c.gray}/${c.white}${fmt(player.hit_max)}`,
-    `${c.gray}  Strength:   ${c.white}${player.strength}`,
-    `${c.gray}  Defence:    ${c.white}${player.defense}`,
-    `${c.gray}  Charm:      ${c.magenta}${player.charm}`,
+    `${c.yellow}  ── Combat ───────────────────────────`,
+    `${c.gray}  HP:        ${hpColor(player.hit_points, player.hit_max)}${fmt(player.hit_points)}${c.gray} / ${c.white}${fmt(player.hit_max)}`,
+    `${c.gray}  Strength:  ${c.white}${player.strength}`,
+    `${c.gray}  Defence:   ${c.white}${player.defense}`,
+    `${c.gray}  Charm:     ${c.magenta}${player.charm}`,
+    `${c.gray}  Alignment: ${c[al.color] || c.white}${al.text}`,
     '',
-    `${c.yellow}  ── Equipment ────────────────────────`,
-    `${c.gray}  Weapon:  ${c.white}${player.weapon_name}`,
-    player.named_weapon_id ? `${c.cyan}  ★ ${NAMED_ITEMS[player.named_weapon_id]?.name || player.named_weapon_id}${player.weapon_cursed ? c.red + ' [CURSED]' : ''}` : '',
-    player.named_weapon_id ? `${c.dgray}    ${NAMED_ITEMS[player.named_weapon_id]?.effectDesc || ''}` : '',
-    `${c.gray}  Armour:  ${c.white}${player.arm_name}`,
-    player.named_armor_id ? `${c.cyan}  ★ ${NAMED_ITEMS[player.named_armor_id]?.name || player.named_armor_id}${player.armor_cursed ? c.red + ' [CURSED]' : ''}` : '',
-    player.named_armor_id ? `${c.dgray}    ${NAMED_ITEMS[player.named_armor_id]?.effectDesc || ''}` : '',
-    player.blood_oath ? `${c.red}  ⚡ Blood Oath: active (−20 max HP, +40 Strength)` : '',
-    '',
-    `${c.yellow}  ── Resources ────────────────────────`,
-    `${c.gray}  Gold:   ${c.yellow}${fmt(player.gold)}`,
-    `${c.gray}  Bank:   ${c.green}${fmt(player.bank)}`,
-    `${c.gray}  Gems:   ${c.cyan}${player.gems}`,
-    player.has_horse ? `${c.gray}  Horse:  ${c.yellow}Yes!` : '',
-    '',
-    `${c.yellow}  ── Class Skills ─────────────────────`,
-    `${c.gray}  Power Move:  ${c.cyan}${move.name}`,
-    `${c.gray}  Skill Pts:   ${c.white}${player.skill_points}`,
-    `${c.gray}  Uses Today:  ${c.white}${player.skill_uses_left}`,
-    '',
+    `${c.yellow}  ── Class ────────────────────────────`,
+    `${c.gray}  ${cls}  —  ${c.cyan}${move.name}`,
+    `${c.gray}  Skill pts: ${c.white}${player.skill_points}   ${c.gray}Uses today: ${c.white}${player.skill_uses_left}`,
+    `${c.gray}  Experience: ${c.green}${fmt(player.exp)}${nextExp ? c.gray + ' / ' + c.cyan + fmt(nextExp) : c.yellow + '  MAX'}`,
     (() => {
-      const ownedPerks = (() => { try { return JSON.parse(player.perks || '[]'); } catch { return []; } })();
-      if (ownedPerks.length === 0 && !(player.perk_points || 0)) return '';
-      const lines2 = [`${c.yellow}  ── Perks ────────────────────────────`];
-      if ((player.perk_points || 0) > 0) lines2.push(`${c.magenta}  ✦ ${player.perk_points} perk point${player.perk_points > 1 ? 's' : ''} unspent! Press [E] in town.`);
-      ownedPerks.forEach(id => {
-        const p = PERKS[id];
-        if (p) lines2.push(`${c.cyan}  • ${p.name}: ${c.gray}${p.desc}`);
-      });
-      return lines2.join('\n');
+      if (!(player.perk_points || 0)) return '';
+      return `${c.magenta}  ✦ ${player.perk_points} perk point${player.perk_points > 1 ? 's' : ''} unspent — press [E] in town`;
     })(),
     '',
-    `${c.yellow}  ── Records ──────────────────────────`,
-    `${c.gray}  PvP Kills:   ${c.red}${player.kills}`,
-    `${c.gray}  Times Won:   ${c.yellow}${player.times_won}`,
-    player.is_legend ? `${c.yellow}  Legend Status: ${c.red}★ LEGENDARY WARRIOR ★` : '',
-    (player.poisoned || 0) > 0 ? `${c.dgreen}  ☠ Status: POISONED (${player.poisoned} rounds remaining)` : '',
-    (() => {
-      const al = getAlignmentLabel(player.alignment || 0);
-      return `${c.gray}  Alignment:   ${c[al.color] || c.white}${al.text}${c.gray} (${player.alignment || 0})`;
-    })(),
-    player.quest_id ? `${c.cyan}  Quest Active: ${getQuestName(player.quest_id)}` : '',
-    player.quest_id ? `${c.gray}  ↳ ${getQuestStepText(player.quest_id, player.quest_step, player.quest_data)}` : '',
-    '',
-    ...getFactionStandingsLines(player),
-    '',
-    `${c.yellow}  [L]${c.white} Return to Town`,
+    `${c.yellow}  ── Status ───────────────────────────`,
+    (player.poisoned || 0) > 0 ? `${c.dgreen}  ☠ POISONED — ${player.poisoned} rounds remaining` : `${c.dgray}  No status effects`,
+    player.quest_id ? `${c.cyan}  Quest: ${getQuestName(player.quest_id)}` : '',
+    player.quest_id ? `${c.dgray}  ↳ ${getQuestStepText(player.quest_id, player.quest_step, player.quest_data)}` : '',
   ].filter(l => l !== undefined);
 
-  return buildScreen('Character', lines, [{ key: 'L', label: 'Return', action: 'town' }]);
+  return buildScreen('Character', lines, choices);
+}
+
+// Tab 2 — Gear
+function getCharacterGearScreen(player) {
+  const { navLine, choices } = charTabNav('2');
+  const nw = player.named_weapon_id ? NAMED_ITEMS[player.named_weapon_id] : null;
+  const na = player.named_armor_id  ? NAMED_ITEMS[player.named_armor_id]  : null;
+
+  const lines = [
+    `${c.dgray}  ${player.handle}  ${c.gray}·  ${c.cyan}${CLASS_NAMES[player.class]}  ${c.gray}·  ${c.white}Level ${c.yellow}${player.level}`,
+    `  ${navLine}`,
+    divider('─', 45),
+    `${c.yellow}  ── Weapon ───────────────────────────`,
+    `${c.gray}  ${player.weapon_name || 'Fists'}`,
+    nw ? `${c.cyan}  ★ ${nw.name}${player.weapon_cursed ? c.red + '  [CURSED]' : ''}` : '',
+    nw ? `${c.dgray}    ${nw.effectDesc}` : '',
+    '',
+    `${c.yellow}  ── Armour ───────────────────────────`,
+    `${c.gray}  ${player.arm_name || 'Naked'}`,
+    na ? `${c.cyan}  ★ ${na.name}${player.armor_cursed ? c.red + '  [CURSED]' : ''}` : '',
+    na ? `${c.dgray}    ${na.effectDesc}` : '',
+    player.blood_oath ? `${c.red}  ⚡ Blood Oath active  ${c.dgray}(−20 max HP, +40 Str)` : '',
+    '',
+    `${c.yellow}  ── Resources ────────────────────────`,
+    `${c.gray}  Gold:  ${c.yellow}${fmt(player.gold)}    ${c.gray}Bank: ${c.green}${fmt(player.bank)}`,
+    `${c.gray}  Gems:  ${c.cyan}${player.gems}` + (player.has_horse ? `    ${c.gray}Horse: ${c.yellow}Yes` : ''),
+  ].filter(l => l !== undefined);
+
+  return buildScreen('Character — Gear', lines, choices);
+}
+
+// Tab 3 — Records & Perks
+function getCharacterRecordsScreen(player) {
+  const { navLine, choices } = charTabNav('3');
+  const ownedPerks = (() => { try { return JSON.parse(player.perks || '[]'); } catch { return []; } })();
+
+  const lines = [
+    `${c.dgray}  ${player.handle}  ${c.gray}·  ${c.cyan}${CLASS_NAMES[player.class]}  ${c.gray}·  ${c.white}Level ${c.yellow}${player.level}`,
+    `  ${navLine}`,
+    divider('─', 45),
+    `${c.yellow}  ── Records ──────────────────────────`,
+    `${c.gray}  PvP Kills:  ${c.red}${player.kills}    ${c.gray}Times Won: ${c.yellow}${player.times_won}`,
+    player.is_legend ? `${c.yellow}  ★ LEGENDARY WARRIOR` : '',
+    '',
+    `${c.yellow}  ── Perks ────────────────────────────`,
+    ownedPerks.length === 0 ? `${c.dgray}  No perks learned yet` : '',
+    ...ownedPerks.map(id => {
+      const p = PERKS[id];
+      return p ? `${c.cyan}  • ${p.name}  ${c.dgray}${p.desc}` : '';
+    }),
+  ].filter(l => l !== undefined);
+
+  return buildScreen('Character — Records', lines, choices);
+}
+
+// Tab 4 — Factions
+function getCharacterFactionsScreen(player) {
+  const { navLine, choices } = charTabNav('4');
+  const lines = [
+    `${c.dgray}  ${player.handle}  ${c.gray}·  ${c.cyan}${CLASS_NAMES[player.class]}  ${c.gray}·  ${c.white}Level ${c.yellow}${player.level}`,
+    `  ${navLine}`,
+    divider('─', 45),
+    ...getFactionStandingsLines(player),
+  ].filter(l => l !== undefined);
+
+  return buildScreen('Character — Factions', lines, choices);
 }
 
 function getSetupScreen(step) {
@@ -2744,7 +2796,7 @@ module.exports = {
   getSocialThornreachScreen, getSocialDuskveilScreen, getSocialGraveportScreen,
   getSocialStormwatchScreen, getSocialOldKarthScreen, getSocialAshenfallScreen,
   getSocialBrackenHollowScreen, getSocialMirefenScreen, getSocialFrostmereScreen,
-  getNewsScreen, getCharacterScreen, getSetupScreen, getDragonScreen,
+  getNewsScreen, getCharacterScreen, getCharacterGearScreen, getCharacterRecordsScreen, getCharacterFactionsScreen, getSetupScreen, getDragonScreen,
   getLevelUpScreen, getPerkSelectionScreen, getForestEventScreen, getRescueOpportunityScreen,
   getNearDeathWaitingScreen, getNpcRescueScreen, getNearDeathScreen,
   getCrierScreen,

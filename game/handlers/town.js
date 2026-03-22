@@ -5,7 +5,7 @@ const { getEventDef } = require('../world_events');
 const {
   getTownScreen, getWeaponShopScreen, getArmorShopScreen, getInnScreen, getInnHealerScreen,
   getHerbalistScreen, getBankScreen, getMasterScreen, getTrainingScreen, getGardenScreen,
-  getBardScreen, getNewsScreen, getCharacterScreen, getCrierScreen, getLevelUpScreen,
+  getBardScreen, getNewsScreen, getCharacterScreen, getCharacterGearScreen, getCharacterRecordsScreen, getCharacterFactionsScreen, getCrierScreen, getLevelUpScreen,
   getPerkSelectionScreen,
 } = require('../engine');
 const {
@@ -471,6 +471,18 @@ async function character({ player, req, res, pendingMessages }) {
   return res.json({ ...getCharacterScreen(player), pendingMessages });
 }
 
+async function character_gear({ player, res, pendingMessages }) {
+  return res.json({ ...getCharacterGearScreen(player), pendingMessages });
+}
+
+async function character_records({ player, res, pendingMessages }) {
+  return res.json({ ...getCharacterRecordsScreen(player), pendingMessages });
+}
+
+async function character_factions({ player, res, pendingMessages }) {
+  return res.json({ ...getCharacterFactionsScreen(player), pendingMessages });
+}
+
 async function crier({ player, req, res, pendingMessages }) {
   return res.json({ ...getCrierScreen(player), pendingMessages });
 }
@@ -694,7 +706,7 @@ module.exports = {
   armor_shop, buy_armor,
   shop_steal_armor: shop_steal,
   garden, garden_female, garden_flower, garden_compliment, garden_kiss,
-  bard, news, character, crier, post_crier,
+  bard, news, character, character_gear, character_records, character_factions, crier, post_crier,
   herbalist,
   herbalist_wound,
   herbalist_infection,
