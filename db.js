@@ -254,6 +254,11 @@ async function getNamedEnemy(id) {
   return rows[0] || null;
 }
 
+async function getAllUndefeatedNamedEnemies() {
+  const { rows } = await pool.query('SELECT * FROM named_enemies WHERE defeated = 0 ORDER BY id ASC');
+  return rows;
+}
+
 async function getUndefeatedNamedEnemiesWithKills(minKills) {
   const { rows } = await pool.query(
     'SELECT * FROM named_enemies WHERE defeated = 0 AND kills >= $1 AND reached_town IS NULL ORDER BY kills DESC',
@@ -316,4 +321,4 @@ async function setWorldState(key, value) {
   );
 }
 
-module.exports = { pool, initDb, getPlayer, getPlayerByUsername, updatePlayer, claimNewDay, createPlayer, getAllPlayers, getPlayersInTown, getRetiredPlayersInTown, getNearDeathPlayers, getCaptivePlayers, getRecentNews, addNews, getHallOfKings, addToHallOfKings, TODAY, getBannerOverride, setBanner, deleteBanner, getAllBanners, loadBanners, getActiveNamedEnemiesForLevel, createNamedEnemy, updateNamedEnemy, getNamedEnemy, getUndefeatedNamedEnemiesWithKills, getInvadingEnemies, getActiveWorldEvent, triggerWorldEvent, expireWorldEvents, getWorldState, setWorldState };
+module.exports = { pool, initDb, getPlayer, getPlayerByUsername, updatePlayer, claimNewDay, createPlayer, getAllPlayers, getPlayersInTown, getRetiredPlayersInTown, getNearDeathPlayers, getCaptivePlayers, getRecentNews, addNews, getHallOfKings, addToHallOfKings, TODAY, getBannerOverride, setBanner, deleteBanner, getAllBanners, loadBanners, getActiveNamedEnemiesForLevel, createNamedEnemy, updateNamedEnemy, getNamedEnemy, getAllUndefeatedNamedEnemies, getUndefeatedNamedEnemiesWithKills, getInvadingEnemies, getActiveWorldEvent, triggerWorldEvent, expireWorldEvents, getWorldState, setWorldState };

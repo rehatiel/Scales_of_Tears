@@ -204,6 +204,21 @@ async function training({ player, req, res, pendingMessages }) {
   return res.json({ ...getTrainingScreen(player), pendingMessages });
 }
 
+async function training_endurance({ player, req, res, pendingMessages }) {
+  const current = player.stamina_max || 10;
+  if (current >= 15)
+    return res.json({ ...getTrainingScreen(player), pendingMessages: ['`7Your endurance is already at its peak. Nothing more can be gained here.'] });
+  const cost = current * 2000;
+  if (Number(player.gold) < cost)
+    return res.json({ ...getTrainingScreen(player), pendingMessages: [`\`@Not enough gold! Expanding endurance costs ${cost.toLocaleString()} gold.`] });
+  await updatePlayer(player.id, { gold: Number(player.gold) - cost, stamina_max: current + 1 });
+  player = await getPlayer(player.id);
+  return res.json({ ...getTrainingScreen(player), pendingMessages: [
+    '`$Grimwald drives you through three days of gruelling endurance training.',
+    `\`$Your body has adapted. Maximum stamina increased to \`!${player.stamina_max}\`$!`,
+  ]});
+}
+
 async function training_action({ action, player, req, res, pendingMessages }) {
   const stam = player.stamina ?? player.fights_left ?? 10;
   if (stam <= 0)
@@ -701,6 +716,7 @@ module.exports = {
   training,
   training_fight: training_action,
   training_spar: training_action,
+  training_endurance,
   weapon_shop, buy_weapon,
   shop_steal_weapon: shop_steal,
   armor_shop, buy_armor,

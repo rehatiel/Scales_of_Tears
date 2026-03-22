@@ -187,31 +187,7 @@
       </div>
     </div>
 
-    <!-- Game screen -->
-    <div id="game-screen" class="screen hidden">
-      <div id="terminal">
-        <div id="terminal-output"></div>
-        <div id="pending-messages"></div>
-        <div id="choices-bar"></div>
-        <div id="input-area" class="hidden">
-          <label id="input-label" for="game-input"></label>
-          <div class="input-row">
-            <input type="text" id="game-input" autocomplete="off">
-            <button id="input-submit">OK</button>
-            <button id="input-cancel">Cancel</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Message overlay -->
-    <div id="msg-overlay" class="hidden">
-      <div id="msg-box">
-        <div id="msg-content"></div>
-      </div>
-    </div>
-
-    <!-- Persistent status bar -->
+    <!-- Persistent status bar (top) -->
     <div id="status-bar" class="hidden">
       <div id="status-inner">
         <span id="sb-name"></span>
@@ -233,6 +209,30 @@
         <span id="sb-day"></span>
         <span id="sb-poison" class="hidden"></span>
       </div>
+    </div>
+
+    <!-- Game screen -->
+    <div id="game-screen" class="screen hidden">
+      <div id="terminal">
+        <div id="terminal-output"></div>
+        <div id="input-area" class="hidden">
+          <label id="input-label" for="game-input"></label>
+          <div class="input-row">
+            <input type="text" id="game-input" autocomplete="off">
+            <button id="input-submit">OK</button>
+            <button id="input-cancel">Cancel</button>
+          </div>
+        </div>
+        <div id="terminal-end"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pending message overlay (town screen only) -->
+  <div id="msg-overlay" class="hidden">
+    <div id="msg-box">
+      <div id="msg-content"></div>
+      <div class="msg-dismiss">[ click anywhere to continue ]</div>
     </div>
   </div>
 

@@ -4,6 +4,7 @@
   --bg: #0a0a0a;
   --term-bg: #000;
   --border: #004444;
+  --sb-height: 36px;
   --c1:  #0000AA; --c2:  #00AA00; --c3:  #00AAAA;
   --c4:  #AA0000; --c5:  #AA00AA; --c6:  #AA5500;
   --c7:  #AAAAAA; --c8:  #555555; --c9:  #5555FF;
@@ -11,8 +12,6 @@
   --c#:  #FF55FF; --c$:  #FFFF55; --c%:  #FFFFFF;
   --default: #AAAAAA;
 }
-
-/* ── Foreground color spans ──────────────────────────────── */
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -22,10 +21,42 @@ html, body {
   font-family: 'Consolas', 'Lucida Console', 'Courier New', monospace;
   font-size: 15px;
   color: var(--default);
+  overflow: hidden;
 }
 
 .screen { width: 100%; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
 .hidden { display: none !important; }
+
+/* ── Status Bar (fixed top) ──────────────────────────────── */
+#status-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--sb-height);
+  background: #050505;
+  border-bottom: 1px solid var(--border);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  overflow: hidden;
+}
+
+#status-inner {
+  max-width: 780px;
+  margin: 0 auto;
+  width: 100%;
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0 2px;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.sb-sep { color: #1a3a1a; margin: 0 5px; }
 
 /* ── Auth Screen ─────────────────────────────────────────── */
 .auth-box {
@@ -113,97 +144,128 @@ html, body {
 
 .auth-notice { color: #888844; font-size: 13px; text-align: center; margin-bottom: 10px; padding: 6px 10px; border: 1px solid #444422; background: #111100; }
 
-/* ── Game Terminal ────────────────────────────────────────── */
+/* ── Game Screen & Terminal ──────────────────────────────── */
 #game-screen {
+  position: fixed;
+  top: var(--sb-height);
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  justify-content: center;
+  overflow: hidden;
+  /* override .screen centering */
   align-items: flex-start;
-  padding: 16px 16px 56px;
+  min-height: unset;
 }
 
 #terminal {
   width: 100%;
   max-width: 780px;
-  margin: 0 auto;
+  height: 100%;
   background: var(--term-bg);
-  border: 1px solid var(--border);
-  padding: 16px;
-  min-height: 100vh;
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  padding: 12px 16px 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
 }
 
 #terminal-output {
+  flex: 1;
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
 }
 
-#terminal-output .tline {
+/* ── Terminal blocks ─────────────────────────────────────── */
+.term-block {
+  margin-bottom: 4px;
+}
+
+.tline {
   display: block;
   min-height: 1.5em;
 }
 
-/* ── Pending Messages ─────────────────────────────────────── */
-#pending-messages {
-  margin-top: 12px;
-  padding: 8px 0;
+/* ── Pending messages ────────────────────────────────────── */
+.pending-block {
+  border-left: 2px solid #2a4a2a;
+  padding: 4px 0 4px 10px;
+  margin: 6px 0;
 }
 
-#pending-messages .pmsg {
+.pmsg {
   display: block;
-  padding: 3px 0;
-  border-left: 3px solid #333;
-  padding-left: 10px;
-  margin-bottom: 4px;
+  padding: 2px 0;
+  animation: fadeIn 0.2s ease;
 }
 
-/* ── Choices bar ──────────────────────────────────────────── */
-#choices-bar {
-  margin-top: 16px;
-  padding-top: 12px;
-  border-top: 1px solid #1a1a1a;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+/* ── Inline choices ──────────────────────────────────────── */
+.choice-block {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1px 12px;
+  margin: 10px 0 6px;
+  padding-top: 8px;
+  border-top: 1px solid #111;
 }
 
-.choice-btn {
-  background: #001100;
-  border: 1px solid #003300;
+.choice-item {
   color: #55FF55;
-  font-family: inherit;
-  font-size: 13px;
-  padding: 8px 16px;
-  min-height: 44px;
   cursor: pointer;
-  transition: background 0.1s, border-color 0.1s;
-  white-space: nowrap;
+  padding: 5px 8px;
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  font-size: 13px;
+  transition: background 0.1s, color 0.1s;
   touch-action: manipulation;
+  user-select: none;
 }
 
-.choice-btn:hover:not(:disabled) {
-  background: #002200;
-  border-color: #55FF55;
+.choice-item:hover:not(.disabled):not(.dead) {
+  background: #001800;
   color: #FFFF55;
 }
 
-.choice-btn:disabled {
-  color: #333;
-  border-color: #1a1a1a;
-  background: #060606;
+.choice-item.disabled {
+  color: #2a2a2a;
   cursor: not-allowed;
 }
 
-.choice-btn .key-hint {
-  color: #FFFF55;
-  font-weight: bold;
-  margin-right: 4px;
+.choice-item.dead {
+  color: #1e3a1e;
+  cursor: default;
 }
 
-.choice-btn:disabled .key-hint { color: #333; }
+.ck {
+  color: #FFFF55;
+  font-weight: bold;
+  margin-right: 6px;
+  min-width: 2.2em;
+}
 
-/* ── Input area ──────────────────────────────────────────── */
+.choice-item.disabled .ck,
+.choice-item.dead .ck {
+  color: #1e2e1e;
+}
+
+/* ── Loading indicator ───────────────────────────────────── */
+.term-loading {
+  padding: 6px 0;
+  animation: blink 0.9s step-start infinite;
+}
+
+/* ── Input area (sticky bottom of terminal) ──────────────── */
 #input-area {
-  margin-top: 16px;
-  padding-top: 12px;
+  position: sticky;
+  bottom: 0;
+  background: var(--term-bg);
   border-top: 1px solid #1a1a1a;
+  padding: 10px 0 12px;
+  margin-top: 8px;
 }
 
 #input-label {
@@ -370,7 +432,6 @@ html, body {
 .class-card:hover { border-color: #444; background: #111; }
 .class-card:focus-visible { border-color: #666; }
 
-/* Selected states */
 .class-card.dk.selected { border-color: #FF5555; background: #0d0000; }
 .class-card.wa.selected { border-color: #FFAA00; background: #0d0800; }
 .class-card.rg.selected { border-color: #FFFF55; background: #0d0d00; }
@@ -450,27 +511,9 @@ html, body {
 }
 .btn-back:hover { color: #AAAAAA; border-color: #555; }
 
-/* ── Loading state ───────────────────────────────────────── */
-#choices-bar.loading .choice-btn {
-  opacity: 0.4;
-  pointer-events: none;
-}
-
-#choices-bar.loading::after {
-  content: '...';
-  color: #555;
-  font-size: 13px;
-  align-self: center;
-  animation: blink 1s step-start infinite;
-}
-
+/* ── Animations ──────────────────────────────────────────── */
 @keyframes blink {
   50% { opacity: 0; }
-}
-
-/* ── Pending message animation ───────────────────────────── */
-#pending-messages .pmsg {
-  animation: fadeIn 0.2s ease;
 }
 
 @keyframes fadeIn {
@@ -478,59 +521,26 @@ html, body {
   to   { opacity: 1; transform: translateX(0); }
 }
 
-/* ── Responsive ──────────────────────────────────────────── */
-@media (max-width: 640px) {
-  html, body { font-size: 14px; }
-  .auth-box, .setup-box { width: 100%; padding: 20px; }
-  #game-screen { padding: 8px; }
-  #terminal { padding: 10px; }
-  .class-cards { grid-template-columns: repeat(2, 1fr); }
-  .sex-options { grid-template-columns: 1fr 1fr; }
-  .choice-btn { font-size: 14px; padding: 10px 16px; }
-  #game-input { font-size: 16px; } /* prevents iOS zoom on focus */
-}
-
-/* ── Status Bar ──────────────────────────────────────────── */
-#status-bar {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  background: #050505;
-  border-top: 1px solid var(--border);
-  z-index: 100;
-  padding: 7px 16px;
-}
-
-#status-inner {
-  max-width: 780px;
-  margin: 0 auto;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0 2px;
-  font-size: 13px;
-}
-
-.sb-sep { color: #1a3a1a; margin: 0 6px; }
-
-/* ── Message overlay ─────────────────────────────────────── */
+/* ── Pending message overlay (town screen) ───────────────── */
 #msg-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.72);
+  background: rgba(0, 0, 0, 0.75);
   z-index: 200;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
+  animation: fadeIn 0.15s ease;
 }
+
+#msg-overlay.hidden { display: none !important; }
 
 #msg-box {
   background: #050505;
   border: 1px solid var(--border);
-  padding: 24px 28px;
-  max-width: 600px;
+  padding: 24px 28px 18px;
+  max-width: 580px;
   width: calc(100% - 32px);
   max-height: 70vh;
   overflow-y: auto;
@@ -545,8 +555,31 @@ html, body {
   line-height: 1.6;
 }
 
+.msg-dismiss {
+  margin-top: 16px;
+  color: #2a4a2a;
+  font-size: 12px;
+  text-align: center;
+  letter-spacing: 1px;
+}
+
 /* ── Scrollbar ───────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: #050505; }
 ::-webkit-scrollbar-thumb { background: #1a3a1a; }
 ::-webkit-scrollbar-thumb:hover { background: #2a5a2a; }
+
+/* ── Responsive ──────────────────────────────────────────── */
+@media (max-width: 640px) {
+  html, body { font-size: 14px; }
+  .auth-box, .setup-box { width: 100%; padding: 20px; }
+  #terminal { padding: 8px 10px 0; }
+  .class-cards { grid-template-columns: repeat(2, 1fr); }
+  .sex-options { grid-template-columns: 1fr 1fr; }
+  #game-input { font-size: 16px; } /* prevents iOS zoom on focus */
+  #status-inner { font-size: 11px; }
+  /* Hide less critical status items on small screens */
+  #sb-exp, #sb-time, #sb-day { display: none; }
+  .choice-block { grid-template-columns: 1fr; }
+  .choice-item { min-height: 40px; }
+}

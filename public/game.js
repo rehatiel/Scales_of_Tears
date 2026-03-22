@@ -2,11 +2,9 @@
 
 // ── Color parser ──────────────────────────────────────────────────────────────
 const COLOR_MAP = {
-  // Foreground
   '1':'c1','2':'c2','3':'c3','4':'c4','5':'c5','6':'c6',
   '7':'c7','8':'c8','9':'c9','0':'c0','!':'ce','@':'ca',
   '#':'ch','$':'cd','%':'cp',
-  // Background (a–h = black through light-gray, CGA palette)
   'a':'b0','b':'b1','c':'b2','d':'b3','e':'b4','f':'b5','g':'b6','h':'b7',
 };
 
@@ -38,9 +36,8 @@ function escHtml(s) {
 const authScreen   = document.getElementById('auth-screen');
 const setupScreen  = document.getElementById('setup-screen');
 const gameScreen   = document.getElementById('game-screen');
+const terminal     = document.getElementById('terminal');
 const termOutput   = document.getElementById('terminal-output');
-const pendingMsgs  = document.getElementById('pending-messages');
-const choicesBar   = document.getElementById('choices-bar');
 const inputArea    = document.getElementById('input-area');
 const inputLabel   = document.getElementById('input-label');
 const gameInput    = document.getElementById('game-input');
@@ -49,32 +46,48 @@ const inputCancel  = document.getElementById('input-cancel');
 const statusBar    = document.getElementById('status-bar');
 const msgOverlay   = document.getElementById('msg-overlay');
 const msgContent   = document.getElementById('msg-content');
+const authNotice   = document.getElementById('auth-notice');
 
 // ── Screen switchers ──────────────────────────────────────────────────────────
-function showAuth()  { authScreen.classList.remove('hidden');  setupScreen.classList.add('hidden'); gameScreen.classList.add('hidden'); statusBar.classList.add('hidden'); }
-function showSetup() { authScreen.classList.add('hidden');     setupScreen.classList.remove('hidden'); gameScreen.classList.add('hidden'); statusBar.classList.add('hidden'); wizardGoTo(1); }
-function showGame()  { authScreen.classList.add('hidden');     setupScreen.classList.add('hidden'); gameScreen.classList.remove('hidden'); }
+function showAuth() {
+  authScreen.classList.remove('hidden');
+  setupScreen.classList.add('hidden');
+  gameScreen.classList.add('hidden');
+  statusBar.classList.add('hidden');
+}
+function showSetup() {
+  authScreen.classList.add('hidden');
+  setupScreen.classList.remove('hidden');
+  gameScreen.classList.add('hidden');
+  statusBar.classList.add('hidden');
+  wizardGoTo(1);
+}
+function showGame() {
+  authScreen.classList.add('hidden');
+  setupScreen.classList.add('hidden');
+  gameScreen.classList.remove('hidden');
+}
 
 // ── Status bar ────────────────────────────────────────────────────────────────
 function updateStatusBar(status) {
   if (!status) return;
   const hpPct = status.hpMax > 0 ? status.hp / status.hpMax : 1;
   const hpClass = hpPct > 0.5 ? 'c0' : hpPct > 0.25 ? 'cd' : 'ca';
-  document.getElementById('sb-name').innerHTML  = `<span class="cd">${escHtml(status.name)}</span>`;
-  document.getElementById('sb-hp').innerHTML    = `<span class="c8">HP </span><span class="${hpClass}">${status.hp}/${status.hpMax}</span>`;
-  document.getElementById('sb-stamina').innerHTML = `<span class="c8">STM </span><span class="c3">${status.stamina}/${status.staminaMax}</span>`;
-  document.getElementById('sb-gold').innerHTML  = `<span class="c8">GOLD </span><span class="cd">${status.gold.toLocaleString()}</span>`;
-  document.getElementById('sb-level').innerHTML = `<span class="c8">LV </span><span class="cp">${status.level}</span>`;
+  document.getElementById('sb-name').innerHTML     = `<span class="cd">${escHtml(status.name)}</span>`;
+  document.getElementById('sb-hp').innerHTML       = `<span class="c8">HP </span><span class="${hpClass}">${status.hp}/${status.hpMax}</span>`;
+  document.getElementById('sb-stamina').innerHTML  = `<span class="c8">STM </span><span class="c3">${status.stamina}/${status.staminaMax}</span>`;
+  document.getElementById('sb-gold').innerHTML     = `<span class="c8">GOLD </span><span class="cd">${status.gold.toLocaleString()}</span>`;
+  document.getElementById('sb-level').innerHTML    = `<span class="c8">LV </span><span class="cp">${status.level}</span>`;
   const expNext = status.expNext;
   document.getElementById('sb-exp').innerHTML = expNext
     ? `<span class="c8">EXP </span><span class="c3">${status.exp.toLocaleString()}</span><span class="c8">/${expNext.toLocaleString()}</span>`
     : `<span class="c8">EXP </span><span class="cd">${status.exp.toLocaleString()}</span><span class="c8"> MAX</span>`;
   document.getElementById('sb-location').innerHTML = `<span class="c8">@ </span><span class="ce">${escHtml(status.location)}</span>`;
-  document.getElementById('sb-time').innerHTML  = `<span class="c6">${escHtml(status.timeOfDay)}</span>`;
-  document.getElementById('sb-day').innerHTML   = `<span class="c8">Day </span><span class="c6">${status.lordDay}</span>`;
+  document.getElementById('sb-time').innerHTML     = `<span class="c6">${escHtml(status.timeOfDay)}</span>`;
+  document.getElementById('sb-day').innerHTML      = `<span class="c8">Day </span><span class="c6">${status.lordDay}</span>`;
   const poisonEl = document.getElementById('sb-poison');
   if (status.poisoned) {
-    poisonEl.innerHTML = `<span class="sb-sep">│</span><span class="c2">POISONED</span>`;
+    poisonEl.innerHTML = `<span class="sb-sep">│</span><span class="ca">☠ POISONED</span>`;
     poisonEl.classList.remove('hidden');
   } else {
     poisonEl.classList.add('hidden');
@@ -83,10 +96,9 @@ function updateStatusBar(status) {
 }
 
 // ── Game render ───────────────────────────────────────────────────────────────
-let currentScreen = null;
+let currentChoices = [];
 let pendingInputAction = null, pendingInputParam = null;
-
-const authNotice = document.getElementById('auth-notice');
+let loadingEl = null;
 
 function renderScreen(data) {
   if (!data) return;
@@ -101,53 +113,68 @@ function renderScreen(data) {
     return;
   }
 
-  currentScreen = data;
   if (data.title) document.title = `${data.title} — SoT`;
+  if (data.status) updateStatusBar(data.status);
   hideInput();
 
-  termOutput.innerHTML = (data.lines || []).map(l =>
-    `<span class="tline">${parseLine(l)}</span>`
-  ).join('');
+  // Replace terminal content
+  termOutput.innerHTML = '';
 
-  const msgs = data.pendingMessages || [];
-  if (msgs.length && data.screen === 'town') {
-    pendingMsgs.innerHTML = '';
-    msgContent.innerHTML = msgs.map(m => `<span class="pmsg">${parseLine(m)}</span>`).join('');
-    msgOverlay.classList.remove('hidden');
-  } else {
-    pendingMsgs.innerHTML = msgs.length
-      ? msgs.map(m => `<span class="pmsg">${parseLine(m)}</span>`).join('')
-      : '';
+  // Screen lines (ANSI art etc. always first)
+  if (data.lines && data.lines.length) {
+    const linesDiv = document.createElement('div');
+    linesDiv.innerHTML = data.lines.map(l =>
+      `<span class="tline">${parseLine(l)}</span>`
+    ).join('');
+    termOutput.appendChild(linesDiv);
   }
 
-  choicesBar.innerHTML = '';
-  (data.choices || []).forEach(choice => {
-    const btn = document.createElement('button');
-    btn.className = 'choice-btn';
-    btn.disabled = !!choice.disabled;
-    btn.dataset.action = choice.action;
-    btn.innerHTML = `<span class="key-hint">[${choice.key}]</span> ${escHtml(choice.label)}`;
-    btn.addEventListener('click', () => {
-      if (choice.needsInput) {
-        showInput(choice.inputLabel || 'Enter:', choice.action, choice.param || '', choice.inputType || 'text', choice.inputParam || '');
-      } else {
-        sendAction(choice.action, choice.param || '');
+  // Pending messages: overlay for town screen, inline just above choices otherwise
+  const msgs = data.pendingMessages || [];
+  if (msgs.length && data.screen === 'town') {
+    msgContent.innerHTML = msgs.map(m => `<span class="pmsg">${parseLine(m)}</span>`).join('');
+    msgOverlay.classList.remove('hidden');
+  } else if (msgs.length) {
+    const pm = document.createElement('div');
+    pm.className = 'pending-block';
+    pm.innerHTML = msgs.map(m => `<span class="pmsg">${parseLine(m)}</span>`).join('');
+    termOutput.appendChild(pm);
+  }
+
+  // Inline choices
+  currentChoices = data.choices || [];
+  if (currentChoices.length) {
+    const choiceDiv = document.createElement('div');
+    choiceDiv.className = 'choice-block';
+    currentChoices.forEach(c => {
+      const item = document.createElement('span');
+      item.className = 'choice-item' + (c.disabled ? ' disabled' : '');
+      item.innerHTML = `<span class="ck">[${escHtml(c.key)}]</span> ${escHtml(c.label)}`;
+      if (!c.disabled) {
+        item.addEventListener('click', () => {
+          if (item.classList.contains('dead')) return;
+          if (c.needsInput) {
+            showInput(c.inputLabel || 'Enter:', c.action, c.param || '', c.inputType || 'text', c.inputParam || '');
+          } else {
+            sendAction(c.action, c.param || '');
+          }
+        });
       }
+      choiceDiv.appendChild(item);
     });
-    choicesBar.appendChild(btn);
-  });
+    termOutput.appendChild(choiceDiv);
+  }
+
+  terminal.scrollTop = 0;
 
   if (data.needsInput) {
     showInput(data.inputLabel || 'Enter:', data.inputAction, '', data.inputType || 'text', data.inputParam || '');
   }
-
-  if (data.status) updateStatusBar(data.status);
-
-  window.scrollTo(0, 0);
 }
 
 function showInput(label, action, param, type = 'text', inputParam = '') {
-  pendingInputAction = action; pendingInputParam = inputParam;
+  pendingInputAction = action;
+  pendingInputParam = inputParam;
   inputLabel.textContent = label;
   gameInput.type = type === 'number' ? 'number' : 'text';
   gameInput.value = '';
@@ -157,17 +184,20 @@ function showInput(label, action, param, type = 'text', inputParam = '') {
 
 function hideInput() {
   inputArea.classList.add('hidden');
-  pendingInputAction = null; pendingInputParam = null;
+  pendingInputAction = null;
+  pendingInputParam = null;
   gameInput.value = '';
 }
 
-// Dismiss overlay on click (clicking the box itself shouldn't bubble up and close it,
-// but clicking the dark backdrop or the box both dismiss — either is fine here)
-msgOverlay.addEventListener('click', () => { msgOverlay.classList.add('hidden'); });
-
 // ── API ───────────────────────────────────────────────────────────────────────
 async function sendAction(action, param = '') {
-  choicesBar.classList.add('loading');
+  // Freeze choices and show loading indicator
+  termOutput.querySelectorAll('.choice-item').forEach(el => el.classList.add('dead'));
+  loadingEl = document.createElement('div');
+  loadingEl.className = 'term-loading';
+  loadingEl.innerHTML = '<span class="c8">· · ·</span>';
+  termOutput.appendChild(loadingEl);
+
   try {
     const body = { action };
     if (param !== '') body.param = param;
@@ -175,25 +205,39 @@ async function sendAction(action, param = '') {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
+    if (loadingEl) { loadingEl.remove(); loadingEl = null; }
     if (res.status === 401) { showAuth(); return; }
     renderScreen(await res.json());
-  } catch { showMessage('Connection error. Please try again.'); }
-  finally { choicesBar.classList.remove('loading'); }
+  } catch {
+    if (loadingEl) { loadingEl.remove(); loadingEl = null; }
+    // Re-enable choices on error so the player can retry
+    termOutput.querySelectorAll('.choice-item.dead').forEach(el => el.classList.remove('dead'));
+    const errEl = document.createElement('div');
+    errEl.className = 'pending-block';
+    errEl.innerHTML = `<span class="pmsg"><span class="ca">Connection error — please try again.</span></span>`;
+    termOutput.appendChild(errEl);
+  }
 }
 
 async function sendMasterTrain(stat, points) {
+  termOutput.querySelectorAll('.choice-item').forEach(el => el.classList.add('dead'));
+  loadingEl = document.createElement('div');
+  loadingEl.className = 'term-loading';
+  loadingEl.innerHTML = '<span class="c8">· · ·</span>';
+  termOutput.appendChild(loadingEl);
+
   try {
     const res = await fetch('/api/game/action', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'master_train', inputParam: stat, inputValue: points }),
     });
+    if (loadingEl) { loadingEl.remove(); loadingEl = null; }
     if (res.status === 401) { showAuth(); return; }
     renderScreen(await res.json());
-  } catch { showMessage('Connection error.'); }
-}
-
-function showMessage(msg) {
-  pendingMsgs.innerHTML = `<span class="pmsg"><span class="ca">${escHtml(msg)}</span></span>`;
+  } catch {
+    if (loadingEl) { loadingEl.remove(); loadingEl = null; }
+    termOutput.querySelectorAll('.choice-item.dead').forEach(el => el.classList.remove('dead'));
+  }
 }
 
 async function loadGameState() {
@@ -213,11 +257,10 @@ async function loadGameState() {
 
 // ── Keyboard shortcuts ────────────────────────────────────────────────────────
 document.addEventListener('keydown', e => {
-  if (!msgOverlay.classList.contains('hidden')) { msgOverlay.classList.add('hidden'); return; }
-  if (e.target.tagName === 'INPUT' || !currentScreen || !gameScreen.classList.contains('hidden') === false) return;
-  // Only handle when game screen is visible
-  if (!gameScreen || gameScreen.classList.contains('hidden')) return;
-  const match = (currentScreen.choices || []).find(c => c.key.toUpperCase() === e.key.toUpperCase() && !c.disabled);
+  if (e.target.tagName === 'INPUT') return;
+  if (gameScreen.classList.contains('hidden')) return;
+  if (!currentChoices.length) return;
+  const match = currentChoices.find(c => c.key.toUpperCase() === e.key.toUpperCase() && !c.disabled);
   if (!match) return;
   e.preventDefault();
   if (match.needsInput) {
@@ -326,7 +369,6 @@ function wizardGoTo(step) {
   });
   if (step === 1) document.getElementById('char-name').focus();
   if (step === 2) {
-    // Restore sex selection state visually
     document.querySelectorAll('.sex-btn').forEach(b => {
       b.classList.toggle('selected', parseInt(b.dataset.value) === wizard.sex);
     });
@@ -420,6 +462,11 @@ document.getElementById('confirm-submit').addEventListener('click', async () => 
     btn.disabled = false; btn.textContent = '⚔ Enter the Realm!';
   }
 });
+
+// ── Message overlay ───────────────────────────────────────────────────────────
+msgOverlay.addEventListener('click', () => msgOverlay.classList.add('hidden'));
+// Prevent clicks inside the box from closing it (only the backdrop dismisses)
+document.getElementById('msg-box').addEventListener('click', e => e.stopPropagation());
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 (async function init() {

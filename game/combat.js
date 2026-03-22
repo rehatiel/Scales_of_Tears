@@ -48,6 +48,12 @@ function resolveRound(player, monster, action) {
   }
 
   if (action === 'run') {
+    // Vampire: Bat Form — always flee successfully
+    if (player.is_vampire) {
+      log.push({ type: 'flee_success', text: '`#You dissolve into a swarm of bats and vanish from combat!' });
+      return { playerDamage: 0, monsterDamage: 0, poisonDamage, fled: true, monsterFled: false, appliedPoison: false, log, playerCrit, monsterCrit };
+    }
+
     // Flee chance: 45% base, +15% for Thieves, +15% if critically low HP, -scaled by monster strength
     // Leg wounds reduce flee chance
     let fleeChance = 0.45;

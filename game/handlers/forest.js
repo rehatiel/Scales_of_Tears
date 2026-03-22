@@ -1,4 +1,4 @@
-const { getPlayer, updatePlayer, getNearDeathPlayers, addNews, getActiveNamedEnemiesForLevel, createNamedEnemy, updateNamedEnemy, getNamedEnemy } = require('../../db');
+const { getPlayer, updatePlayer, getNearDeathPlayers, addNews, getActiveNamedEnemiesForLevel, createNamedEnemy, updateNamedEnemy, getNamedEnemy, getInvadingEnemies, getWorldState, setWorldState } = require('../../db');
 const { getRandomMonster, getMonster, getWeaponByNum, getArmorByNum, hasPerk, generateNamedEnemyName, pickKillTitle, NAMED_ITEMS, getNamedItemDrop } = require('../data');
 const { resolveRound } = require('../combat');
 const { checkLevelUp } = require('../newday');
@@ -11,6 +11,61 @@ const {
   getNpcRescueScreen, getNearDeathScreen, getWildernessVictoryScreen,
 } = require('../engine');
 
+// ── Ecosystem: monster suppression cache ──────────────────────────────────────
+// Tracks which monster names are over-hunted (50+ kills/day) and suppressed for 2 days.
+// Module-level cache is updated immediately when suppression triggers; loaded fresh each day.
+let _suppressedMonsters = {};  // { normalizedName: expiresDay }
+let _suppressionLoadedDay = -1;
+
+function normEco(name) { return name.toLowerCase().replace(/\s+/g, '_'); }
+
+async function loadSuppressionsIfNeeded() {
+  const today = Math.floor(Date.now() / 86400000);
+  if (_suppressionLoadedDay === today) return;
+  const raw = await getWorldState('eco:suppressions');
+  _suppressedMonsters = {};
+  if (raw) {
+    for (const [k, expiresDay] of Object.entries(JSON.parse(raw))) {
+      if (expiresDay > today) _suppressedMonsters[k] = expiresDay;
+    }
+  }
+  _suppressionLoadedDay = today;
+}
+
+async function pickForestMonster(level) {
+  await loadSuppressionsIfNeeded();
+  const today = Math.floor(Date.now() / 86400000);
+  const allM = Array.from({ length: 11 }, (_, i) => getMonster(level, i));
+  const available = allM.filter(m => {
+    const k = normEco(m.name);
+    return !_suppressedMonsters[k] || _suppressedMonsters[k] <= today;
+  });
+  const pool = available.length > 0 ? available : allM;
+  const pick = pool[Math.floor(Math.random() * pool.length)];
+  return { ...pick, maxHp: pick.hp, currentHp: pick.hp };
+}
+
+// Returns suppressed monster name if threshold just crossed, null otherwise.
+async function trackMonsterKill(monsterName) {
+  const today = Math.floor(Date.now() / 86400000);
+  const nameKey = normEco(monsterName);
+  const raw = await getWorldState(`eco:kills:${nameKey}`);
+  let data = raw ? JSON.parse(raw) : { count: 0, day: today };
+  if (data.day !== today) data = { count: 0, day: today };
+  data.count++;
+  await setWorldState(`eco:kills:${nameKey}`, JSON.stringify(data));
+  if (data.count === 50) {
+    const expiresDay = today + 2;
+    const suppRaw = await getWorldState('eco:suppressions');
+    const suppressions = suppRaw ? JSON.parse(suppRaw) : {};
+    suppressions[nameKey] = expiresDay;
+    await setWorldState('eco:suppressions', JSON.stringify(suppressions));
+    _suppressedMonsters[nameKey] = expiresDay;
+    return monsterName;
+  }
+  return null;
+}
+
 async function forest({ player, req, res, pendingMessages }) {
   if (player.dead)
     return res.json({ ...getTownScreen(player), pendingMessages: ['`@You are dead! Come back tomorrow.'] });
@@ -18,6 +73,16 @@ async function forest({ player, req, res, pendingMessages }) {
   const forestStamina = player.stamina ?? player.fights_left ?? 10;
   if (forestStamina <= 0)
     return res.json({ ...getTownScreen(player), pendingMessages: ['`@You are too exhausted to enter the forest! Rest at the tavern.'] });
+
+  // Block forest entry when a named enemy is threatening the town gates
+  const townInvaders = await getInvadingEnemies(player.current_town || 'dawnmark');
+  if (townInvaders.length > 0) {
+    const inv = townInvaders[0];
+    return res.json({ ...getTownScreen(player), pendingMessages: [
+      `\`@${inv.given_name} blocks the town gate — you cannot reach the forest!`,
+      '`7Defeat the invader at the gate [Z] before venturing out.',
+    ]});
+  }
 
   // Vampires take sunlight damage during daylight hours (6:00–18:00 UTC)
   if (player.is_vampire) {
@@ -117,7 +182,7 @@ async function forest({ player, req, res, pendingMessages }) {
     });
   }
 
-  const monster = getRandomMonster(Number(player.level));
+  const monster = await pickForestMonster(Number(player.level));
   req.session.combat = { monster, round: 1, history: [] };
   return res.json({ ...getForestEncounterScreen(player, monster), pendingMessages });
 }
@@ -478,6 +543,15 @@ async function forest_combat({ action, player, req, res, pendingMessages }) {
     }
   }
 
+  // Vampire: Drain Life — heal 20% of damage dealt
+  if (player.is_vampire && finalPlayerDamage > 0 && !fled && !monsterFled) {
+    const drain = Math.max(1, Math.floor(finalPlayerDamage * 0.20));
+    const newHp = Math.min(player.hit_max, player.hit_points + drain);
+    await updatePlayer(player.id, { hit_points: newHp });
+    player = await getPlayer(player.id);
+    log.push({ text: `\`#You drain life from the ${monster.name} for \`$${drain}\`# HP!` });
+  }
+
   const armorBonus = getArmorByNum(player.arm_num)?.bonus;
   let finalMonsterDamage = monsterDamage + (poisonDamage || 0);
 
@@ -754,8 +828,14 @@ async function forest_combat({ action, player, req, res, pendingMessages }) {
       }
     } else if (monster.isAssassin) {
       await addNews(`\`$${player.handle}\`% defeated a ${monster.name} sent by the \`@${monster.factionId}\`% in the forest!`);
-    } else if (Math.random() < 0.10) {
-      await addNews(`\`0${player.handle}\`% slew a \`@${monster.name}\`% in the forest!`);
+    } else {
+      // Ecosystem kill tracking
+      const suppressed = await trackMonsterKill(monster.name);
+      if (suppressed) {
+        await addNews(`\`2The \`%${suppressed}\`2 population has been decimated by hunters. They vanish from the forest for two days.`);
+      } else if (Math.random() < 0.10) {
+        await addNews(`\`0${player.handle}\`% slew a \`@${monster.name}\`% in the forest!`);
+      }
     }
 
     if (Math.random() < 0.05) {

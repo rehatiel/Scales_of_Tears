@@ -67,6 +67,32 @@ async function tavern_attack({ player, param, req, res, pendingMessages }) {
       return res.json({ ...getTavernScreen(player, await townPlayers(player)), pendingMessages: [`\`7${fullTarget.handle} is already dead.`] });
     }
 
+    // Vampire: Hypnosis — charm-based chance to auto-win without normal combat
+    if (freshPlayer.is_vampire) {
+      const hypChance = Math.min(0.50, (freshPlayer.charm || 10) / 60);
+      if (Math.random() < hypChance) {
+        attackerWon = true;
+        msgs = [
+          `\`#Your eyes meet ${fullTarget.handle}\'s. Your gaze holds them — they cannot move.`,
+          `\`#${fullTarget.handle} stands helpless as your will overwhelms theirs.`,
+          '`#Hypnosis succeeds. They never had a chance.',
+        ];
+        await client.query('UPDATE players SET human_fights_left = $1 WHERE id = $2',
+          [freshPlayer.human_fights_left - 1, freshPlayer.id]);
+        const stolen = Math.floor(Number(fullTarget.gold) * 0.25);
+        const expGain = fullTarget.level * 100;
+        await client.query('UPDATE players SET kills = $1, gold = $2, exp = $3 WHERE id = $4',
+          [freshPlayer.kills + 1, Number(freshPlayer.gold) + stolen, Number(freshPlayer.exp) + expGain, freshPlayer.id]);
+        await client.query('UPDATE players SET dead = 1, gold = $1 WHERE id = $2',
+          [Math.max(0, Number(fullTarget.gold) - stolen), fullTarget.id]);
+        msgs.push(`\`$You take ${stolen.toLocaleString()} gold. +${expGain.toLocaleString()} exp.`);
+        await client.query('COMMIT');
+        await addNews(`\`#${freshPlayer.handle}\`% mesmerised \`@${fullTarget.handle}\`% with a vampiric gaze and claimed their gold!`);
+        player = await getPlayer(player.id);
+        return res.json({ ...getTavernScreen(player, await townPlayers(player)), pendingMessages: msgs });
+      }
+    }
+
     ({ attackerWon, log } = resolvePvP(freshPlayer, fullTarget));
     msgs = [...log.slice(-5)];
 

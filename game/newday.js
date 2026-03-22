@@ -1,5 +1,5 @@
 // Daily reset routine for SoT
-const { addNews, getAllPlayers, getWorldState, setWorldState, getActiveWorldEvent, triggerWorldEvent, expireWorldEvents, getUndefeatedNamedEnemiesWithKills, updateNamedEnemy } = require('../db');
+const { addNews, getAllPlayers, getWorldState, setWorldState, getActiveWorldEvent, triggerWorldEvent, expireWorldEvents, getUndefeatedNamedEnemiesWithKills, getAllUndefeatedNamedEnemies, updateNamedEnemy, getInvadingEnemies } = require('../db');
 const { getEventDef, pickNextEvent, EVENT_DURATION_DAYS } = require('./world_events');
 const { expForNextLevel, LEVEL_UP_GAINS, CLASS_NAMES } = require('./data');
 const { parseWounds, hasSerious, hasCritical, getLocationPenalties } = require('./wounds');
@@ -338,6 +338,18 @@ async function runNewDay(player, dryRun = false) {
 
   updates.last_day = Math.floor(Date.now() / 86400000);
 
+  // ── Town invader: passive nightly HP drain ────────────────────────────────
+  if (!player.dead && !updates.dead) {
+    const townInvaders = await getInvadingEnemies(player.current_town || 'dawnmark');
+    if (townInvaders.length > 0) {
+      const inv = townInvaders[0];
+      const drain = Math.max(1, Math.floor(player.hit_max * 0.05));
+      const currentHp = updates.hit_points ?? player.hit_points;
+      updates.hit_points = Math.max(1, currentHp - drain);
+      messages.push(`\`@${inv.given_name} haunts the town — you lose \`@${drain}\`@ HP to fear and dread overnight.`);
+    }
+  }
+
   return { updates, messages };
 }
 
@@ -410,7 +422,26 @@ async function runWorldDay() {
     await addNews(`\`@${enemy.given_name}${enemy.title ? ', ' + enemy.title : ''}\`% has been sighted near \`$${townName}\`%! The town is in danger!`);
   }
 
-  // 4. Dragon spread: post escalating warnings if unchallenged
+  // 4. Named enemy spread: enemies alive 7+ days grow stronger
+  const allEnemies = await getAllUndefeatedNamedEnemies();
+  for (const enemy of allEnemies) {
+    const firstSeenKey = `nemesis:first_seen:${enemy.id}`;
+    let firstSeen = await getWorldState(firstSeenKey);
+    if (!firstSeen) {
+      await setWorldState(firstSeenKey, String(today));
+      continue;
+    }
+    const daysAlive = today - Number(firstSeen);
+    if (daysAlive === 7) {
+      const newStr = Math.floor(enemy.strength * 1.10);
+      const newHp  = Math.floor(enemy.hp * 1.10);
+      await updateNamedEnemy(enemy.id, { strength: newStr, hp: newHp });
+      const displayName = `${enemy.given_name}${enemy.title ? ', ' + enemy.title : ''}`;
+      await addNews(`\`@${displayName}\`% has grown more powerful — unchecked for a week, it spreads its influence!`);
+    }
+  }
+
+  // 5. Dragon spread: post escalating warnings if unchallenged
   const lastKillDay = parseInt(await getWorldState('last_dragon_kill') || '0');
   if (lastKillDay > 0) {
     const daysSince = today - lastKillDay;

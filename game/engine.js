@@ -660,17 +660,20 @@ function getStatusBar(player) {
   const nextExp = expForNextLevel(player.level);
   const expStr = nextExp ? `${fmt(player.exp)}/${fmt(nextExp)}` : `${fmt(player.exp)} (CHAMPION)`;
   const stam = player.stamina ?? player.fights_left ?? 10;
-  const stamC = stam > 6 ? c.green : stam > 3 ? c.yellow : c.red;
+  const stamMax = player.stamina_max || 10;
+  const stamC = stam > Math.floor(stamMax * 0.6) ? c.green : stam > Math.floor(stamMax * 0.3) ? c.yellow : c.red;
+  const poisonStr = (player.poisoned || 0) > 0
+    ? `  ${c.dgreen}☠ POISONED (${player.poisoned} round${player.poisoned !== 1 ? 's' : ''})`
+    : '';
   return [
     divider(),
     `${c.yellow}  ${pad(player.handle, 24)}${c.gray}Class: ${c.cyan}${cls}`,
     `${c.gray}  HP: ${hpC}${fmt(player.hit_points)}${c.gray}/${c.white}${fmt(player.hit_max)}   ${c.gray}Gold: ${c.yellow}${fmt(player.gold)}   ${c.gray}Gems: ${c.cyan}${player.gems}`,
     `${c.gray}  Level: ${c.yellow}${player.level}   ${c.gray}Exp: ${c.green}${expStr}`,
     `${c.gray}  Weapon: ${c.white}${player.weapon_name}   ${c.gray}Armour: ${c.white}${player.arm_name}`,
-    `${c.gray}  Stamina: ${hpBar(stam, 10, 10)} ${stamC}${stam}${c.gray}/10${stam === 0 ? c.red + '  ☆ EXHAUSTED' : ''}`,
-    (player.poisoned || 0) > 0 ? `${c.dgreen}  ☠ POISONED (${player.poisoned} round${player.poisoned !== 1 ? 's' : ''} remaining)` : undefined,
+    `${c.gray}  Stamina: ${hpBar(stam, stamMax, stamMax)} ${stamC}${stam}${c.gray}/${stamMax}${stam === 0 ? `  ${c.red}☆ EXHAUSTED` : ''}${poisonStr}`,
     divider(),
-  ].filter(l => l !== undefined);
+  ];
 }
 
 function getTownScreen(player) {
@@ -1329,10 +1332,13 @@ function getMasterScreen(player) {
 
 function getTrainingScreen(player) {
   const stam = player.stamina ?? player.fights_left ?? 10;
+  const stamMax = player.stamina_max || 10;
   const trainLeft = 5 - (player.training_today || 0);
   const expPerDummy = player.level * 12;
   const expPerSpar = player.level * 20;
   const canTrain = stam > 0 && trainLeft > 0;
+  const enduranceCost = stamMax * 2000;
+  const canUpgradeEndurance = stamMax < 15;
 
   const lines = [
     ...renderBanner('training'),
@@ -1340,7 +1346,7 @@ function getTrainingScreen(player) {
     `${c.gray}  "Weaklings die in the forest. Warriors are MADE here."`,
     '',
     divider('─', 55),
-    `${c.gray}  Stamina: ${hpBar(stam, 10, 10)} ${stam > 6 ? c.green : stam > 3 ? c.yellow : c.red}${stam}${c.gray}/10`,
+    `${c.gray}  Stamina: ${hpBar(stam, stamMax, stamMax)} ${stam > Math.floor(stamMax * 0.6) ? c.green : stam > Math.floor(stamMax * 0.3) ? c.yellow : c.red}${stam}${c.gray}/${stamMax}`,
     `${c.gray}  Training sessions left today: ${c.cyan}${trainLeft}${c.gray}/5`,
     divider('─', 55),
     '',
@@ -1350,6 +1356,9 @@ function getTrainingScreen(player) {
     canTrain
       ? `${c.yellow}  [S]${c.white} Spar with a Recruit       ${c.dgray}(−1 stamina → +${expPerSpar} exp, minor injury risk)`
       : `${c.dgray}  [S] Spar with a Recruit  (unavailable)`,
+    canUpgradeEndurance
+      ? `${c.yellow}  [E]${c.white} Expand Endurance          ${c.dgray}(${fmt(enduranceCost)} gold → max stamina ${stamMax} → ${stamMax + 1})`
+      : `${c.dgray}  [E] Expand Endurance  (max stamina ${stamMax}/15 — peak reached)`,
     `${c.yellow}  [L]${c.white} Leave the Training Yard`,
     '',
     stam === 0 ? `${c.red}  You are too exhausted to train. Visit the tavern for a drink!` : '',
@@ -1359,6 +1368,7 @@ function getTrainingScreen(player) {
   return buildScreen("Grimwald's Training Yard", lines, [
     { key: 'F', label: 'Fight Dummy', action: 'training_fight', disabled: !canTrain },
     { key: 'S', label: 'Spar', action: 'training_spar', disabled: !canTrain },
+    { key: 'E', label: 'Expand Endurance', action: 'training_endurance', disabled: !canUpgradeEndurance },
     { key: 'L', label: 'Leave', action: 'town' },
   ]);
 }

@@ -216,9 +216,22 @@ router.post('/action', ar(async (req, res) => {
   // Inline cases that mutate session directly or need LEVEL_UP_GAINS
   switch (action) {
 
-    case 'town':
+    case 'town': {
       if (player.near_death) return res.json({ ...getNearDeathWaitingScreen(player), pendingMessages });
+      // Invader entry hazard: one-time HP hit per invader per session
+      if (townInvaders.length > 0 && !player.dead) {
+        const inv = townInvaders[0];
+        const seenKey = `invader_seen_${inv.id}`;
+        if (!req.session[seenKey]) {
+          req.session[seenKey] = true;
+          const dmg = Math.max(1, Math.floor(player.hit_max * 0.04));
+          await updatePlayer(player.id, { hit_points: Math.max(1, player.hit_points - dmg) });
+          player = await getPlayer(player.id);
+          pendingMessages = [...pendingMessages, `\`@${inv.given_name} prowls the gates — you take \`@${dmg}\`@ damage forcing your way through!`];
+        }
+      }
       return res.json({ ...getTownScreen(player), pendingMessages });
+    }
 
     case 'near_death_wait':
       return res.json(getNearDeathWaitingScreen(player));

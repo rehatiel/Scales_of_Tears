@@ -25,7 +25,8 @@ async function social_velmora_enter({ player, req, res, pendingMessages }) {
   let msgs;
   if (roll < 0.40) {
     // Good night
-    const stam = Math.min(10, (player.stamina ?? 10) + 2);
+    const stamMax = player.stamina_max || 10;
+    const stam = Math.min(stamMax, (player.stamina ?? stamMax) + 2);
     const newCharm = Math.min(50, (player.charm || 10) + 2);
     await updatePlayer(player.id, { stamina: stam, charm: newCharm });
     player = await getPlayer(player.id);
@@ -334,14 +335,15 @@ async function social_graveport({ player, req, res, pendingMessages }) {
 async function social_graveport_drink({ player, req, res, pendingMessages }) {
   if (Number(player.gold) < 40)
     return res.json({ ...getSocialGraveportScreen(player), pendingMessages: ['`@Not enough gold.'] });
-  const stam = Math.min(10, (player.stamina ?? 10) + 2);
+  const stamMax = player.stamina_max || 10;
+  const stam = Math.min(stamMax, (player.stamina ?? stamMax) + 2);
   const monster = getRandomMonster(player.level);
   await updatePlayer(player.id, { gold: Number(player.gold) - 40, stamina: stam });
   player = await getPlayer(player.id);
   return res.json({ ...getSocialGraveportScreen(player), pendingMessages: [
     '`6The barman pours something dark and potent.',
     '`6You drink. It burns going down and warms for an hour after.',
-    `\`0+2 stamina. (${stam}/10)`,
+    `\`0+2 stamina. (${stam}/${stamMax})`,
     `\`8A sailor leans over: "Saw a \`%${monster.name}\`8 off the docks last night. Big one."`,
   ]});
 }
@@ -495,13 +497,14 @@ async function social_bracken_hollow({ player, req, res, pendingMessages }) {
 async function social_bracken_drink({ player, req, res, pendingMessages }) {
   if (player.well_used_today)
     return res.json({ ...getSocialBrackenHollowScreen(player), pendingMessages: ['`7The well has given you its gift today. Come back tomorrow.'] });
+  const stamMax = player.stamina_max || 10;
   const heal = Math.min(player.hit_max, player.hit_points + 2);
-  const stam = Math.min(10, (player.stamina ?? 10) + 1);
+  const stam = Math.min(stamMax, (player.stamina ?? stamMax) + 1);
   await updatePlayer(player.id, { hit_points: heal, stamina: stam, well_used_today: 1 });
   player = await getPlayer(player.id);
   return res.json({ ...getSocialBrackenHollowScreen(player), pendingMessages: [
     '`%The water is clean and cold. You drink your fill.',
-    `\`0+2 HP, +1 stamina. (${player.hit_points}/${player.hit_max} HP, ${player.stamina}/10 STM)`,
+    `\`0+2 HP, +1 stamina. (${player.hit_points}/${player.hit_max} HP, ${player.stamina}/${stamMax} STM)`,
   ]});
 }
 
@@ -584,13 +587,14 @@ async function social_frostmere({ player, req, res, pendingMessages }) {
 async function social_frostmere_meal({ player, req, res, pendingMessages }) {
   if (Number(player.gold) < 30)
     return res.json({ ...getSocialFrostmereScreen(player), pendingMessages: ['`@Not enough gold.'] });
-  const stam = Math.min(10, (player.stamina ?? 10) + 3);
+  const stamMax = player.stamina_max || 10;
+  const stam = Math.min(stamMax, (player.stamina ?? stamMax) + 3);
   await updatePlayer(player.id, { gold: Number(player.gold) - 30, stamina: stam });
   player = await getPlayer(player.id);
   return res.json({ ...getSocialFrostmereScreen(player), pendingMessages: [
     '`!A bowl of thick stew and a heel of dark bread.',
     '`!It\'s simple but hot. Your body thanks you.',
-    `\`0+3 stamina. (${stam}/10)`,
+    `\`0+3 stamina. (${stam}/${stamMax})`,
   ]});
 }
 
@@ -610,9 +614,10 @@ async function social_frostmere_rest({ player, req, res, pendingMessages }) {
 async function social_frostmere_bless({ player, req, res, pendingMessages }) {
   if (Number(player.gold) < 100)
     return res.json({ ...getSocialFrostmereScreen(player), pendingMessages: ['`@Not enough gold.'] });
+  const stamMax = player.stamina_max || 10;
   const healAmt = Math.floor(player.hit_max * 0.30);
   const newHp = Math.min(player.hit_max, player.hit_points + healAmt);
-  const stam = Math.min(10, (player.stamina ?? 10) + 4);
+  const stam = Math.min(stamMax, (player.stamina ?? stamMax) + 4);
   await updatePlayer(player.id, {
     gold: Number(player.gold) - 100,
     hit_points: newHp,
