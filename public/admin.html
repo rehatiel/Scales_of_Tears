@@ -447,6 +447,18 @@
     <div class="panel-content">
 
       <div class="system-section">
+        <div class="section-title">Server Settings</div>
+        <p>Control server-wide behaviour. Changes take effect immediately.</p>
+        <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+          <label style="font-size:13px;font-weight:600;color:#CCCCCC;">New Registrations</label>
+          <button class="btn" id="reg-toggle-btn" style="min-width:130px;">Loading…</button>
+          <span class="status-msg" id="reg-status"></span>
+        </div>
+      </div>
+
+      <hr class="divider">
+
+      <div class="system-section">
         <div class="section-title">Backup &amp; Restore</div>
         <p>Backup exports all players, news, banners, and hall of kings records. Restore replaces all matching rows — existing data will be overwritten.</p>
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
@@ -865,11 +877,44 @@ document.getElementById('refresh-news-btn').addEventListener('click', loadNews);
 // ═══════════════════════════════════════════════════════════
 // SYSTEM TAB
 // ═══════════════════════════════════════════════════════════
+let _regOpen = true;
+
+function updateRegToggleUI() {
+  const btn = document.getElementById('reg-toggle-btn');
+  if (_regOpen) {
+    btn.textContent = '✅ Registrations Open';
+    btn.style.background = '#226622';
+    btn.style.color = '#AAFFAA';
+  } else {
+    btn.textContent = '🔒 Registrations Closed';
+    btn.style.background = '#662222';
+    btn.style.color = '#FFAAAA';
+  }
+}
+
+document.getElementById('reg-toggle-btn').addEventListener('click', async () => {
+  const statusEl = document.getElementById('reg-status');
+  const newVal = !_regOpen;
+  const res = await api('PUT', '/settings', { registration_open: newVal });
+  if (!res.ok) { statusEl.style.color = '#FF5555'; statusEl.textContent = 'Update failed.'; return; }
+  _regOpen = newVal;
+  updateRegToggleUI();
+  statusEl.style.color = '#55FF55';
+  statusEl.textContent = newVal ? 'Registrations opened.' : 'Registrations closed.';
+  setTimeout(() => { statusEl.textContent = ''; }, 3000);
+});
+
 async function loadSystem() {
-  const [migRes, hokRes] = await Promise.all([
+  const [migRes, hokRes, settingsRes] = await Promise.all([
     api('GET', '/migrations'),
     api('GET', '/hall-of-kings'),
+    api('GET', '/settings'),
   ]);
+  if (settingsRes.ok) {
+    const s = await settingsRes.json();
+    _regOpen = s.registration_open;
+    updateRegToggleUI();
+  }
   if (migRes.ok) {
     const migs = await migRes.json();
     document.getElementById('migrations-table').innerHTML =

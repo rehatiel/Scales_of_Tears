@@ -1,5 +1,5 @@
 // Combat resolution for SoT
-const { hasPerk } = require('./data');
+const { hasPerk, hasSpec } = require('./data');
 
 function rollDice(min, max) {
   return min + Math.floor(Math.random() * (max - min + 1));
@@ -66,6 +66,8 @@ function resolveRound(player, monster, action) {
     if (hasPerk(player, 'foresight')) fleeChance += 0.20;
     // Perk: Druid Shapeshift — +15% flee chance (wolf aspect)
     if (hasPerk(player, 'shapeshift')) fleeChance += 0.15;
+    // Spec: Ranger Strider — +10% flee chance
+    if (hasSpec(player, 'strider')) fleeChance += 0.10;
     // Named armor: Coward's Cloak — +25% flee chance
     if (player.named_armor_id === 'cowards_cloak') fleeChance += 0.25;
     fleeChance = Math.min(0.90, Math.max(0.05, fleeChance));
@@ -123,8 +125,14 @@ function resolveRound(player, monster, action) {
   }
 
   // Perk: Ranger Hunter's Eye — +8% crit chance
-  const critChance = 0.08 + (hasPerk(player, 'hunters_eye') ? 0.08 : 0);
-  playerCrit = action !== 'power' && Math.random() < critChance;
+  // Spec: Rogue Assassin — +15% crit chance
+  const critChance = 0.08
+    + (hasPerk(player, 'hunters_eye')  ? 0.08 : 0)
+    + (hasSpec(player, 'assassin')     ? 0.15 : 0);
+  // Spec: Warrior Champion — guaranteed crit when below 35% HP
+  const isChampionCrit = hasSpec(player, 'champion')
+    && (player.hit_points / Math.max(1, player.hit_max)) < 0.35;
+  playerCrit = action !== 'power' && (isChampionCrit || Math.random() < critChance);
   if (playerCrit) rawAttack = Math.floor(rawAttack * 2.2);
 
   // Defensive monsters absorb 20% of incoming damage

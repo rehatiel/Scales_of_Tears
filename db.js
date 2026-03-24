@@ -79,12 +79,14 @@ const PLAYER_COLUMNS = new Set([
   'rep_knights', 'rep_guild', 'rep_druids', 'rep_necromancers', 'rep_merchants',
   'setup_complete', 'last_seen',
   'perks', 'perk_points',
+  'specialization', 'spec_pending', 'lich_cooldown',
   'nemesis_id',
   'alignment',
   'named_weapon_id', 'named_armor_id', 'weapon_cursed', 'armor_cursed', 'blood_oath',
   'ruins_visited', 'dungeon_clears',
   'prestige_level',
   'earned_titles', 'active_title', 'death_count', 'flee_count',
+  'last_killed_by',
 ]);
 
 async function updatePlayer(id, fields) {
@@ -171,10 +173,13 @@ async function getRetiredPlayersInTown(townId) {
 
 async function getPlayersInTown(townId, excludeId) {
   const { rows } = await pool.query(
-    `SELECT id, handle, level, class, sex, last_seen, dead, times_won, setup_complete
+    `SELECT id, handle, level, class, sex, last_seen, dead, times_won, setup_complete,
+            active_title, prestige_level, specialization
      FROM players
      WHERE current_town = $1 AND setup_complete = 1 AND id != $2
-       AND dead = 0 AND retired_today = 0
+       AND dead = 0 AND (retired_today IS NULL OR retired_today = 0)
+       AND (camping IS NULL OR camping = 0)
+       AND (travel_to IS NULL OR travel_to = '')
      ORDER BY level DESC, exp DESC`,
     [townId, excludeId]
   );
@@ -370,4 +375,219 @@ async function getWeeklyHuntLeaderboard(weekNumber) {
   return rows;
 }
 
-module.exports = { pool, initDb, getPlayer, getPlayerByUsername, updatePlayer, claimNewDay, createPlayer, getAllPlayers, getPlayersInTown, getRetiredPlayersInTown, getNearDeathPlayers, getCaptivePlayers, getRecentNews, addNews, getHallOfKings, addToHallOfKings, TODAY, getBannerOverride, setBanner, deleteBanner, getAllBanners, loadBanners, getActiveNamedEnemiesForLevel, createNamedEnemy, updateNamedEnemy, getNamedEnemy, getAllUndefeatedNamedEnemies, getUndefeatedNamedEnemiesWithKills, getInvadingEnemies, getActiveWorldEvent, triggerWorldEvent, expireWorldEvents, getWorldState, setWorldState, getActiveHunts, generateWeeklyHunts, incrementHuntKill, getWeeklyHuntLeaderboard };
+// ── Player mail ───────────────────────────────────────────────────────────────
+
+async function sendMail(fromId, toId, message) {
+  await pool.query(
+    'INSERT INTO player_mail (from_id, to_id, message) VALUES ($1, $2, $3)',
+    [fromId, toId, message]
+  );
+}
+
+async function getInboxMail(playerId) {
+  const { rows } = await pool.query(
+    `SELECT m.*, p.handle AS sender_handle
+     FROM player_mail m
+     JOIN players p ON p.id = m.from_id
+     WHERE m.to_id = $1
+     ORDER BY m.sent_at DESC
+     LIMIT 50`,
+    [playerId]
+  );
+  return rows;
+}
+
+async function getSentMail(playerId) {
+  const { rows } = await pool.query(
+    `SELECT m.*, p.handle AS recipient_handle
+     FROM player_mail m
+     JOIN players p ON p.id = m.to_id
+     WHERE m.from_id = $1
+     ORDER BY m.sent_at DESC
+     LIMIT 50`,
+    [playerId]
+  );
+  return rows;
+}
+
+async function markMailRead(mailId, playerId) {
+  await pool.query(
+    'UPDATE player_mail SET read = 1 WHERE id = $1 AND to_id = $2',
+    [mailId, playerId]
+  );
+}
+
+async function getUnreadMailCount(playerId) {
+  const { rows } = await pool.query(
+    'SELECT COUNT(*) AS cnt FROM player_mail WHERE to_id = $1 AND read = 0',
+    [playerId]
+  );
+  return parseInt(rows[0].cnt, 10);
+}
+
+// ── Online players ─────────────────────────────────────────────────────────────
+
+async function getOnlinePlayers(excludeId) {
+  const cutoff = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+  const { rows } = await pool.query(
+    `SELECT id, handle, level, class, current_town, active_title
+     FROM players
+     WHERE setup_complete = 1 AND dead = 0 AND last_seen > $1 AND id != $2
+     ORDER BY last_seen DESC`,
+    [cutoff, excludeId]
+  );
+  return rows;
+}
+
+// ── Bounties ──────────────────────────────────────────────────────────────────
+
+async function postBounty(posterId, targetId, gold) {
+  const { rows } = await pool.query(
+    'INSERT INTO bounties (poster_id, target_id, gold) VALUES ($1, $2, $3) RETURNING *',
+    [posterId, targetId, gold]
+  );
+  return rows[0];
+}
+
+async function getBountiesOnTarget(targetId) {
+  const { rows } = await pool.query(
+    `SELECT b.*, p.handle AS poster_handle
+     FROM bounties b JOIN players p ON p.id = b.poster_id
+     WHERE b.target_id = $1 AND b.active = TRUE
+     ORDER BY b.gold DESC`,
+    [targetId]
+  );
+  return rows;
+}
+
+async function getAllActiveBounties() {
+  const { rows } = await pool.query(
+    `SELECT b.*, poster.handle AS poster_handle, target.handle AS target_handle
+     FROM bounties b
+     JOIN players poster ON poster.id = b.poster_id
+     JOIN players target ON target.id = b.target_id
+     WHERE b.active = TRUE
+     ORDER BY b.gold DESC
+     LIMIT 20`
+  );
+  return rows;
+}
+
+// Collect all active bounties on targetId, pay killerId; returns total gold collected
+async function collectBounties(killerId, targetId) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows } = await client.query(
+      'SELECT id, gold FROM bounties WHERE target_id = $1 AND active = TRUE FOR UPDATE',
+      [targetId]
+    );
+    if (!rows.length) { await client.query('ROLLBACK'); return 0; }
+    const total = rows.reduce((s, r) => s + r.gold, 0);
+    await client.query(
+      'UPDATE bounties SET active = FALSE WHERE target_id = $1 AND active = TRUE',
+      [targetId]
+    );
+    await client.query('UPDATE players SET gold = gold + $1 WHERE id = $2', [total, killerId]);
+    await client.query('COMMIT');
+    return total;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+// ── Arena ──────────────────────────────────────────────────────────────────────
+
+async function createArenaChallenge(challengerId, defenderId, town) {
+  const { rows } = await pool.query(
+    `INSERT INTO arena_challenges (challenger_id, defender_id, town, status)
+     VALUES ($1, $2, $3, 'pending') RETURNING *`,
+    [challengerId, defenderId, town]
+  );
+  return rows[0];
+}
+
+async function getPendingChallengesForPlayer(playerId) {
+  const { rows } = await pool.query(
+    `SELECT ac.*, p.handle AS challenger_handle
+     FROM arena_challenges ac
+     JOIN players p ON p.id = ac.challenger_id
+     WHERE ac.defender_id = $1 AND ac.status = 'pending'
+       AND ac.created_at > $2
+     ORDER BY ac.created_at DESC`,
+    [playerId, Date.now() - 30 * 60 * 1000]  // challenges expire after 30 min
+  );
+  return rows;
+}
+
+async function getArenaChallenge(id) {
+  const { rows } = await pool.query('SELECT * FROM arena_challenges WHERE id = $1', [id]);
+  return rows[0] || null;
+}
+
+async function updateArenaChallenge(id, fields) {
+  const allowed = ['status', 'winner_id', 'bet_pool', 'resolved_at'];
+  const keys = Object.keys(fields).filter(k => allowed.includes(k));
+  if (!keys.length) return;
+  const set = keys.map((k, i) => `${k} = $${i + 1}`).join(', ');
+  await pool.query(`UPDATE arena_challenges SET ${set} WHERE id = $${keys.length + 1}`, [...keys.map(k => fields[k]), id]);
+}
+
+async function placeBet(challengeId, playerId, side, amount) {
+  const { rows } = await pool.query(
+    `INSERT INTO arena_bets (challenge_id, player_id, side, amount)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT (challenge_id, player_id) DO NOTHING
+     RETURNING *`,
+    [challengeId, playerId, side, amount]
+  );
+  if (rows.length) {
+    await pool.query('UPDATE arena_challenges SET bet_pool = bet_pool + $1 WHERE id = $2', [amount, challengeId]);
+  }
+  return rows[0] || null;
+}
+
+async function getArenaSpectators(challengeId) {
+  const { rows } = await pool.query(
+    `SELECT ab.*, p.handle FROM arena_bets ab
+     JOIN players p ON p.id = ab.player_id
+     WHERE ab.challenge_id = $1`,
+    [challengeId]
+  );
+  return rows;
+}
+
+// Pay out bets: winners get back (stake * totalPool / winningSide total), losers get nothing
+async function resolveArenaBets(challengeId, winnerId) {
+  const challenge = await getArenaChallenge(challengeId);
+  if (!challenge) return;
+  const winSide = challenge.challenger_id === winnerId ? 'challenger' : 'defender';
+  const bets = await getArenaSpectators(challengeId);
+  const winners = bets.filter(b => b.side === winSide);
+  const losers  = bets.filter(b => b.side !== winSide);
+  const loserPool = losers.reduce((s, b) => s + b.amount, 0);
+  const winnerPool = winners.reduce((s, b) => s + b.amount, 0);
+  if (!winnerPool) return;
+  for (const w of winners) {
+    const share = Math.floor((w.amount / winnerPool) * loserPool);
+    await pool.query('UPDATE players SET gold = gold + $1 WHERE id = $2', [w.amount + share, w.player_id]);
+  }
+  // refund nothing to losers
+}
+
+async function getOpenArenaChallenge(challengeId) {
+  const { rows } = await pool.query(
+    `SELECT ac.*, ch.handle AS challenger_handle, df.handle AS defender_handle
+     FROM arena_challenges ac
+     JOIN players ch ON ch.id = ac.challenger_id
+     JOIN players df ON df.id = ac.defender_id
+     WHERE ac.id = $1`,
+    [challengeId]
+  );
+  return rows[0] || null;
+}
+
+module.exports = { pool, initDb, getPlayer, getPlayerByUsername, updatePlayer, claimNewDay, createPlayer, getAllPlayers, getPlayersInTown, getRetiredPlayersInTown, getNearDeathPlayers, getCaptivePlayers, getRecentNews, addNews, getHallOfKings, addToHallOfKings, TODAY, getBannerOverride, setBanner, deleteBanner, getAllBanners, loadBanners, getActiveNamedEnemiesForLevel, createNamedEnemy, updateNamedEnemy, getNamedEnemy, getAllUndefeatedNamedEnemies, getUndefeatedNamedEnemiesWithKills, getInvadingEnemies, getActiveWorldEvent, triggerWorldEvent, expireWorldEvents, getWorldState, setWorldState, getActiveHunts, generateWeeklyHunts, incrementHuntKill, getWeeklyHuntLeaderboard, sendMail, getInboxMail, getSentMail, markMailRead, getUnreadMailCount, getOnlinePlayers, postBounty, getBountiesOnTarget, getAllActiveBounties, collectBounties, createArenaChallenge, getPendingChallengesForPlayer, getArenaChallenge, updateArenaChallenge, placeBet, getArenaSpectators, resolveArenaBets, getOpenArenaChallenge };

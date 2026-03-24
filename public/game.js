@@ -307,7 +307,9 @@ document.getElementById('login-btn').addEventListener('click', async () => {
     });
     const data = await res.json();
     if (!res.ok) { errEl.textContent = data.error || 'Login failed.'; return; }
-    if (data.newDayMessages?.length) sessionStorage.setItem('newDayMessages', JSON.stringify(data.newDayMessages));
+    const loginMsgs = [...(data.newDayMessages || [])];
+    if (data.unreadMail > 0) loginMsgs.push(`\`!Hrok waves at you: "Oi — got ${data.unreadMail} letter${data.unreadMail > 1 ? 's' : ''} waiting for ya. Ask me about it at the tavern."`);
+    if (loginMsgs.length) sessionStorage.setItem('newDayMessages', JSON.stringify(loginMsgs));
     if (!data.setup_complete) { showSetup(); } else { loadGameState(); }
   } catch { errEl.textContent = 'Connection error.'; }
 });

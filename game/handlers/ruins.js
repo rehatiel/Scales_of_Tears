@@ -181,7 +181,7 @@ async function handleSwordPull({ player, res }) {
       player = await getPlayer(player.id);
       await addNews(`\`$${player.handle}\`% has advanced to level \`$${levelUp.newLevel}\`%!`);
       return res.json({
-        ...getLevelUpScreen(player, levelUp.newLevel, levelUp.hpGain, levelUp.strGain, levelUp.perkPoint),
+        ...getLevelUpScreen(player, levelUp.newLevel, levelUp.hpGain, levelUp.strGain, levelUp.perkPoint, levelUp.specPoint),
         pendingMessages: msgs,
       });
     }
@@ -288,7 +288,7 @@ async function ruins_choice({ player, param, req, res, pendingMessages }) {
       player = await getPlayer(player.id);
       await addNews(`\`$${player.handle}\`% has advanced to level \`$${levelUp.newLevel}\`%!`);
       return res.json({
-        ...getLevelUpScreen(player, levelUp.newLevel, levelUp.hpGain, levelUp.strGain, levelUp.perkPoint),
+        ...getLevelUpScreen(player, levelUp.newLevel, levelUp.hpGain, levelUp.strGain, levelUp.perkPoint, levelUp.specPoint),
         pendingMessages: msgs,
       });
     }

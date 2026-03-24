@@ -1,6 +1,6 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
-const { getPlayerByUsername, createPlayer, updatePlayer, TODAY } = require('../db');
+const { getPlayerByUsername, createPlayer, updatePlayer, TODAY, getWorldState, getUnreadMailCount } = require('../db');
 const { runNewDay } = require('../game/newday');
 
 const router = express.Router();
@@ -37,6 +37,8 @@ function checkAuthRate(req, res) {
 
 router.post('/register', async (req, res) => {
   if (!checkAuthRate(req, res)) return;
+  const regOpen = await getWorldState('registration_open');
+  if (regOpen === '0') return res.status(403).json({ error: 'New registrations are currently closed.' });
   const { username, password } = req.body;
   if (!username || !password) return res.status(400).json({ error: 'Username and password required.' });
   if (username.length < 2 || username.length > 20) return res.status(400).json({ error: 'Username must be 2–20 characters.' });
@@ -76,7 +78,8 @@ router.post('/login', async (req, res) => {
   }
 
   await updatePlayer(player.id, { last_seen: new Date().toISOString() });
-  res.json({ ok: true, setup_complete: !!player.setup_complete, newDayMessages });
+  const unreadMail = player.setup_complete ? await getUnreadMailCount(player.id) : 0;
+  res.json({ ok: true, setup_complete: !!player.setup_complete, newDayMessages, unreadMail });
 });
 
 router.post('/logout', (req, res) => {

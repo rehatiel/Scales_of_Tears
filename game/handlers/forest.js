@@ -1,5 +1,5 @@
 const { getPlayer, updatePlayer, getNearDeathPlayers, addNews, getActiveNamedEnemiesForLevel, createNamedEnemy, updateNamedEnemy, getNamedEnemy, getInvadingEnemies, getWorldState, setWorldState, getActiveHunts, incrementHuntKill } = require('../../db');
-const { getRandomMonster, getMonster, getWeaponByNum, getArmorByNum, hasPerk, generateNamedEnemyName, pickKillTitle, NAMED_ITEMS, getNamedItemDrop } = require('../data');
+const { getRandomMonster, getMonster, getWeaponByNum, getArmorByNum, hasPerk, hasSpec, generateNamedEnemyName, pickKillTitle, NAMED_ITEMS, getNamedItemDrop } = require('../data');
 const { buildTitleAward } = require('../titles');
 const { resolveRound } = require('../combat');
 const { checkLevelUp } = require('../newday');
@@ -196,7 +196,22 @@ async function forest({ player, req, res, pendingMessages }) {
   }
 
   const monster = await pickForestMonster(Number(player.level), player.prestige_level || 0);
-  req.session.combat = { monster, round: 1, history: [] };
+
+  // Spec: Mage Enchanter — 25% chance to charm the enemy before combat; award full gold+exp
+  if (hasSpec(player, 'enchanter') && Math.random() < 0.25) {
+    await updatePlayer(player.id, {
+      gold: Number(player.gold) + monster.gold,
+      exp:  Number(player.exp)  + monster.exp,
+    });
+    player = await getPlayer(player.id);
+    return res.json({ ...getTownScreen(player), pendingMessages: [
+      ...pendingMessages,
+      `\`#Enchanting Aura! The ${monster.name} blinks at you dreamily and wanders off.`,
+      `\`$You pocket ${monster.gold} gold and earn ${monster.exp} exp without a fight.`,
+    ]});
+  }
+
+  req.session.combat = { monster, round: 1, history: [], warlordStacks: req.session.warlordStacks || 0 };
   return res.json({ ...getForestEncounterScreen(player, monster), pendingMessages });
 }
 
@@ -313,13 +328,13 @@ async function forest_event({ player, param, req, res, pendingMessages }) {
       player = await getPlayer(player.id);
       await addNews(`\`$${player.handle}\`% has advanced to level \`$${levelUp.newLevel}\`%!`);
       if (!outcome.fight)
-        return res.json({ ...getLevelUpScreen(player, levelUp.newLevel, levelUp.hpGain, levelUp.strGain, levelUp.perkPoint), pendingMessages: msgs });
+        return res.json({ ...getLevelUpScreen(player, levelUp.newLevel, levelUp.hpGain, levelUp.strGain, levelUp.perkPoint, levelUp.specPoint), pendingMessages: msgs });
     }
   }
 
   if (outcome.fight) {
     const monster = getRandomMonster(Number(player.level));
-    req.session.combat = { monster, round: 1, history: [] };
+    req.session.combat = { monster, round: 1, history: [], warlordStacks: req.session.warlordStacks || 0 };
     player = await getPlayer(player.id);
     return res.json({ ...getForestEncounterScreen(player, monster), pendingMessages: msgs });
   }
@@ -351,7 +366,7 @@ async function rescue({ player, req, res, pendingMessages }) {
     player = await getPlayer(player.id);
     await addNews(`\`$${player.handle}\`% has advanced to level \`$${levelUp.newLevel}\`%!`);
     return res.json({
-      ...getLevelUpScreen(player, levelUp.newLevel, levelUp.hpGain, levelUp.strGain, levelUp.perkPoint),
+      ...getLevelUpScreen(player, levelUp.newLevel, levelUp.hpGain, levelUp.strGain, levelUp.perkPoint, levelUp.specPoint),
       pendingMessages: [
         `\`0You carry ${victim.handle} to safety! They owe you their life.`,
         `\`$You gain ${expGain.toLocaleString()} experience and +1 charm for your heroism!`,
@@ -373,7 +388,7 @@ async function rescue_skip({ player, req, res, pendingMessages }) {
   await updatePlayer(player.id, { stamina: stam - 1 });
   player = await getPlayer(player.id);
   const monster = getRandomMonster(Number(player.level));
-  req.session.combat = { monster, round: 1, history: [] };
+  req.session.combat = { monster, round: 1, history: [], warlordStacks: req.session.warlordStacks || 0 };
   return res.json({ ...getForestEncounterScreen(player, monster), pendingMessages });
 }
 
@@ -393,9 +408,25 @@ async function forest_combat({ action, player, req, res, pendingMessages }) {
   const activePowerMove = act === 'power' ? (CLASS_POWER_MOVES[player.class] || {}) : {};
   const preLog = [];
 
+  // Spec: Dread Knight Berserker — pay 3% max HP at round start for +50% damage
+  if (hasSpec(player, 'berserker') && act !== 'run') {
+    const berserkCost = Math.max(1, Math.floor(player.hit_max * 0.03));
+    await updatePlayer(player.id, { hit_points: Math.max(1, player.hit_points - berserkCost) });
+    player = await getPlayer(player.id);
+    preLog.push({ text: `\`@Berserker rage costs \`@${berserkCost}\`@ HP!` });
+  }
+
   if (act === 'power') {
+    // Spec: Elementalist Invoker — Elemental Fury ×2 damage, always costs 15% HP
+    if (activePowerMove.sideEffect === 'hp_cost' && hasSpec(player, 'invoker')) {
+      const cost = Math.max(1, Math.floor(player.hit_max * 0.15));
+      if (player.hit_points <= cost)
+        return res.json({ ...getForestEncounterScreen(player, monster), pendingMessages: ['`@You don\'t have enough HP for Invoker\'s fury!'] });
+      await updatePlayer(player.id, { hit_points: player.hit_points - cost });
+      player = await getPlayer(player.id);
+      preLog.push({ text: `\`@Invoker burns \`@${cost}\`@ HP — power beyond measure!` });
     // Elementalist: Elemental Fury costs 10% max HP to cast (unless Elemental Mastery perk waives it)
-    if (activePowerMove.sideEffect === 'hp_cost' && !hasPerk(player, 'elemental_mastery')) {
+    } else if (activePowerMove.sideEffect === 'hp_cost' && !hasPerk(player, 'elemental_mastery')) {
       const cost = Math.max(1, Math.floor(player.hit_max * 0.10));
       if (player.hit_points <= cost)
         return res.json({ ...getForestEncounterScreen(player, monster), pendingMessages: ['`@You don\'t have enough HP to channel Elemental Fury!'] });
@@ -415,9 +446,11 @@ async function forest_combat({ action, player, req, res, pendingMessages }) {
   }
 
   // Monk: if monster was stunned last round, it deals no damage this round
-  const monsterStunned = !!(combat.monsterStunned);
+  // monsterStunRounds counts down: 1 = stunned this round, 2 = Iron Fist 2-round stun
+  const stunRounds = combat.monsterStunRounds || 0;
+  const monsterStunned = stunRounds > 0;
   if (monsterStunned) {
-    combat.monsterStunned = false;
+    combat.monsterStunRounds = stunRounds - 1;
     preLog.push({ text: `\`7The ${monster.name} is still reeling from your last strike!` });
   }
 
@@ -444,13 +477,26 @@ async function forest_combat({ action, player, req, res, pendingMessages }) {
       log.push({ text: `\`$You stun the ${monster.name}! It staggers!` });
   }
 
-  // ── Perk: offensive effects ───────────────────────────────────────────────
+  // ── Perk + Spec: offensive effects ───────────────────────────────────────
   if (!fled && !monsterFled && act !== 'run' && finalPlayerDamage > 0) {
+    // Spec: Ranger Strider — first strike in round 1 (+25% bonus damage)
+    if (round === 1 && hasSpec(player, 'strider') && !hasPerk(player, 'shadow_step')) {
+      const strikerBonus = Math.floor(finalPlayerDamage * 0.25);
+      finalPlayerDamage += strikerBonus;
+      log.push({ text: `\`0Strider's Advantage! You strike first for \`$${strikerBonus}\`0 bonus damage!` });
+    }
+
     // Rogue: Shadow Step — free ambush strike in round 1
     if (round === 1 && hasPerk(player, 'shadow_step')) {
-      const ambush = Math.floor(finalPlayerDamage * 0.5);
+      // Spec: Assassin — shadow step ambush is always a crit (2.2× instead of 0.5×)
+      const isCritAmbush = hasSpec(player, 'assassin');
+      const ambush = isCritAmbush
+        ? Math.floor(finalPlayerDamage * 1.2)
+        : Math.floor(finalPlayerDamage * 0.5);
       finalPlayerDamage += ambush;
-      log.push({ text: `\`#Shadow Step! You strike from the shadows for \`$${ambush}\`# bonus damage!` });
+      log.push({ text: isCritAmbush
+        ? `\`#Assassin's Shadow Step! Critical ambush for \`$${ambush}\`# bonus damage!`
+        : `\`#Shadow Step! You strike from the shadows for \`$${ambush}\`# bonus damage!` });
     }
 
     // Ranger: Armor Pierce — attacks deal 35% more damage
@@ -461,20 +507,39 @@ async function forest_combat({ action, player, req, res, pendingMessages }) {
     }
 
     // Ranger: Animal Bond — wolf companion deals 10% of player strength each round
+    // Spec: Beastmaster — companion deals double (20% str) and may intercept monster attacks
     if (hasPerk(player, 'animal_bond')) {
-      const wolfDmg = Math.max(1, Math.floor(player.strength * 0.10));
+      const wolfPct  = hasSpec(player, 'beastmaster') ? 0.20 : 0.10;
+      const wolfDmg  = Math.max(1, Math.floor(player.strength * wolfPct));
       finalPlayerDamage += wolfDmg;
       log.push({ text: `\`0Your wolf companion snaps at the ${monster.name} for \`$${wolfDmg}\`0 damage!` });
     }
 
+    // Mage: Conjurer — shadow minion deals 15% strength as bonus damage each round
+    if (hasSpec(player, 'conjurer')) {
+      const minionDmg = Math.max(1, Math.floor(player.strength * 0.15));
+      finalPlayerDamage += minionDmg;
+      log.push({ text: `\`8Your shadow minion claws the ${monster.name} for \`$${minionDmg}\`8 damage!` });
+    }
+
     // Paladin: Consecrate — double damage vs undead
-    if (hasPerk(player, 'consecrate')) {
+    // Spec: Inquisitor — triple damage vs undead (stacks with Consecrate for ×6), +stun chance
+    if (hasPerk(player, 'consecrate') || hasSpec(player, 'inquisitor')) {
       const { getMonsterFamily: gmf } = require('../wounds');
       if (gmf(monster) === 'undead') {
-        const bonus = finalPlayerDamage;
+        const mult = (hasPerk(player, 'consecrate') && hasSpec(player, 'inquisitor')) ? 5 : // ×6 total
+                      hasSpec(player, 'inquisitor') ? 2 : 1; // ×3 or ×2
+        const bonus = finalPlayerDamage * mult;
         finalPlayerDamage += bonus;
-        log.push({ text: `\`!Consecrate! Holy light sears the undead for double damage!` });
+        log.push({ text: hasSpec(player, 'inquisitor')
+          ? `\`!Inquisitor's Judgement! Holy fury obliterates the undead!`
+          : `\`!Consecrate! Holy light sears the undead for double damage!` });
       }
+    }
+    // Spec: Inquisitor — 15% stun chance on any hit
+    if (hasSpec(player, 'inquisitor') && Math.random() < 0.15 && !monsterStunned) {
+      combat.monsterStunRounds = 1;
+      log.push({ text: `\`!Inquisitor's Strike! The ${monster.name} staggers from divine force!` });
     }
 
     // Warrior: Battle Cry — crit hits deal extra burst
@@ -489,6 +554,19 @@ async function forest_combat({ action, player, req, res, pendingMessages }) {
     if (act === 'power' && hasPerk(player, 'spell_surge')) {
       finalPlayerDamage = finalPlayerDamage * 2;
       log.push({ text: `\`!Spell Surge! Arcane power doubles the strike!` });
+    }
+
+    // Spec: Elementalist Arcanist — 35% chance of free second cast at half power
+    if (act === 'power' && hasSpec(player, 'arcanist') && Math.random() < 0.35) {
+      const echo = Math.floor(finalPlayerDamage * 0.50);
+      finalPlayerDamage += echo;
+      log.push({ text: `\`9Arcane Echo! A second cast erupts for \`$${echo}\`9 bonus damage!` });
+    }
+
+    // Spec: Elementalist Invoker — Elemental Fury deals double damage
+    if (act === 'power' && hasSpec(player, 'invoker') && activePowerMove.sideEffect === 'hp_cost') {
+      finalPlayerDamage = finalPlayerDamage * 2;
+      log.push({ text: `\`9Invoker's Fury! Raw elemental power doubles the strike!` });
     }
 
     // Necromancer: Dark Pact — Death Coil +50% damage
@@ -514,10 +592,39 @@ async function forest_combat({ action, player, req, res, pendingMessages }) {
       log.push({ text: `\`9Storm Call! Lightning chains ${chains}× for \`$${finalPlayerDamage}\`9 total!` });
     }
 
+    // Spec: Dread Knight Berserker — +50% damage
+    if (hasSpec(player, 'berserker')) {
+      const berserkBonus = Math.floor(finalPlayerDamage * 0.50);
+      finalPlayerDamage += berserkBonus;
+      log.push({ text: `\`@Berserker rage adds \`$${berserkBonus}\`@ to the blow!` });
+    }
+
+    // Spec: Dread Knight Warlord — +10% damage per intimidation stack
+    const warlordStacks = combat.warlordStacks || 0;
+    if (hasSpec(player, 'warlord') && warlordStacks > 0) {
+      const warlordBonus = Math.floor(finalPlayerDamage * warlordStacks * 0.10);
+      finalPlayerDamage += warlordBonus;
+      log.push({ text: `\`@Warlord's Presence (${warlordStacks} stack${warlordStacks > 1 ? 's' : ''})! +${warlordBonus} intimidation damage!` });
+    }
+
+    // Spec: Monk Iron Fist — +25% attack damage
+    if (hasSpec(player, 'iron_fist')) {
+      const ironBonus = Math.floor(finalPlayerDamage * 0.25);
+      finalPlayerDamage += ironBonus;
+      log.push({ text: `\`3Iron Fist strikes for \`$${ironBonus}\`3 extra damage!` });
+    }
+
     // Rogue: Poisoned Blade — 25% chance to poison monster
-    if (hasPerk(player, 'poisoned_blade') && Math.random() < 0.25) {
+    // Spec: Plague Doctor — doubles the poison chance and adds disease
+    const poisonChance = hasSpec(player, 'plague_doctor') ? 0.50 : 0.25;
+    if (hasPerk(player, 'poisoned_blade') && Math.random() < poisonChance) {
       combat.monsterPoisoned = true;
       log.push({ text: `\`2Poisoned Blade! Your blade seeps venom into the ${monster.name}!` });
+    }
+    // Spec: Plague Doctor — 25% disease on any attack
+    if (hasSpec(player, 'plague_doctor') && !combat.monsterDiseased && Math.random() < 0.25) {
+      combat.monsterDiseased = true;
+      log.push({ text: `\`2Plague Doctor! The ${monster.name} is diseased — its attacks weaken!` });
     }
 
     // Named weapon: Widow's Fang — 25% poison on hit
@@ -543,16 +650,18 @@ async function forest_combat({ action, player, req, res, pendingMessages }) {
       log.push({ text: `\`@Blooddrinker drains \`$${drain}\`@ HP from the ${monster.name}!` });
     }
 
-    // Warrior: Unbreakable — power move 35% chance to stun
-    if (act === 'power' && hasPerk(player, 'unbreakable') && Math.random() < 0.35) {
-      combat.monsterStunned = true;
+    // Warrior: Unbreakable — power move 35% stun (Spec: Guardian raises this to 60%)
+    const shieldSlamStunChance = hasSpec(player, 'guardian') ? 0.60 : 0.35;
+    if (act === 'power' && hasPerk(player, 'unbreakable') && Math.random() < shieldSlamStunChance) {
+      combat.monsterStunRounds = 1;
       log.push({ text: `\`$Unbreakable! The force of your blow stuns the ${monster.name}!` });
     }
 
-    // Monk: Pressure Points — 20% chance to stun on hit
+    // Monk: Pressure Points — 20% stun on hit
+    // Spec: Iron Fist — stun lasts 2 rounds
     if (hasPerk(player, 'pressure_points') && Math.random() < 0.20) {
-      combat.monsterStunned = true;
-      log.push({ text: `\`3Pressure Points! You strike a vital nerve — the ${monster.name} staggers!` });
+      combat.monsterStunRounds = hasSpec(player, 'iron_fist') ? 2 : 1;
+      log.push({ text: `\`3Pressure Points! You strike a vital nerve — the ${monster.name} staggers${hasSpec(player, 'iron_fist') ? ' for 2 rounds' : ''}!` });
     }
   }
 
@@ -585,9 +694,38 @@ async function forest_combat({ action, player, req, res, pendingMessages }) {
       log.push({ text: '`2Your armour spikes reflect 10 damage!' });
     }
 
+    // Spec: Rogue Trickster — 30% dodge; on dodge, counter-attacks for 50% player str
+    if (hasSpec(player, 'trickster') && monsterDamage > 0 && Math.random() < 0.30) {
+      const counter = Math.max(1, Math.floor(player.strength * 0.50));
+      monster.currentHp = Math.max(0, monster.currentHp - counter);
+      finalMonsterDamage = poisonDamage || 0;
+      log.push({ text: `\`#Trickster's Dodge! You sidestep the attack and counter for \`$${counter}\`# damage!` });
+    }
+
+    // Spec: Ranger Beastmaster — wolf companion 20% chance to intercept monster attack
+    if (hasSpec(player, 'beastmaster') && hasPerk(player, 'animal_bond') && monsterDamage > 0 && Math.random() < 0.20) {
+      finalMonsterDamage = poisonDamage || 0;
+      log.push({ text: `\`0Your wolf leaps in front of the blow, taking the hit for you!` });
+    }
+
+    // Spec: Plague Doctor — diseased monster deals 15% less damage
+    if (combat.monsterDiseased && monsterDamage > 0) {
+      const reduced = Math.floor(finalMonsterDamage * 0.15);
+      finalMonsterDamage = Math.max(0, finalMonsterDamage - reduced);
+      log.push({ text: `\`2Disease weakens the ${monster.name} (−${reduced} damage)!` });
+    }
+
     // Perk: Monk Ki Shield — 25% chance to block all incoming damage
-    if (hasPerk(player, 'ki_shield') && monsterDamage > 0 && Math.random() < 0.25) {
-      log.push({ text: `\`3Ki Shield! You deflect the ${monster.name}\'s attack completely!` });
+    // Spec: Wind Walker — block chance raised to 40%; blocked attacks trigger a counter
+    const kiBlockChance = hasSpec(player, 'wind_walker') ? 0.40 : 0.25;
+    if (hasPerk(player, 'ki_shield') && monsterDamage > 0 && Math.random() < kiBlockChance) {
+      if (hasSpec(player, 'wind_walker')) {
+        const counter = Math.max(1, Math.floor(player.strength * 0.60));
+        monster.currentHp = Math.max(0, monster.currentHp - counter);
+        log.push({ text: `\`3Wind Walker! You deflect and counter for \`$${counter}\`3 damage!` });
+      } else {
+        log.push({ text: `\`3Ki Shield! You deflect the ${monster.name}\'s attack completely!` });
+      }
       finalMonsterDamage = poisonDamage || 0;
     }
 
@@ -606,11 +744,30 @@ async function forest_combat({ action, player, req, res, pendingMessages }) {
     }
 
     // Perk: Druid Regrowth — regenerate 3% max HP per round
+    // Spec: Stormcaller — regrowth also zaps the enemy for 3% max HP as lightning
     if (hasPerk(player, 'regrowth')) {
       const regen = Math.max(1, Math.floor(player.hit_max * 0.03));
       finalMonsterDamage = Math.max(0, finalMonsterDamage - regen);
       log.push({ text: `\`0Regrowth heals \`$${regen}\`0 HP!` });
+      if (hasSpec(player, 'stormcaller')) {
+        const lightning = Math.max(1, Math.floor(player.hit_max * 0.03));
+        monster.currentHp = Math.max(0, monster.currentHp - lightning);
+        log.push({ text: `\`9Stormcaller! Lightning zaps the ${monster.name} for \`$${lightning}\`9 damage!` });
+      }
     }
+  }
+
+  // Spec: Shapeshifter — immune to poison in combat (block the poison DoT component)
+  if (hasSpec(player, 'shapeshifter') && hasPerk(player, 'shapeshift') && (poisonDamage || 0) > 0) {
+    finalMonsterDamage = Math.max(0, finalMonsterDamage - (poisonDamage || 0));
+    log.push({ text: `\`0Shapeshifter form purges the venom — poison nullified!` });
+  }
+
+  // Spec: Plague Doctor — extra poison tick each round (second DoT tick)
+  if (hasSpec(player, 'plague_doctor') && hasPerk(player, 'poisoned_blade') && (player.poisoned || 0) > 0) {
+    const extraTick = Math.max(1, Math.floor((player.hit_max || player.hit_points) * 0.05));
+    finalMonsterDamage += extraTick;
+    log.push({ text: `\`2Plague Doctor! A second poison tide hits for \`@${extraTick}\`2 more!` });
   }
 
   let willPoison = appliedPoison;
@@ -678,9 +835,10 @@ async function forest_combat({ action, player, req, res, pendingMessages }) {
 
   // ── Power move side effects (post-hit) ──────────────────────────────────────
   if (act === 'power' && !fled && !monsterFled) {
-    // Paladin Divine Smite: heal 10% max HP after a successful hit (20% with Lay on Hands perk)
+    // Paladin Divine Smite: heal 10% max HP (20% Lay on Hands, 35% Templar spec)
     if (activePowerMove.sideEffect === 'self_heal' && finalPlayerDamage > 0) {
-      const healPct = hasPerk(player, 'lay_on_hands') ? 0.20 : 0.10;
+      const healPct = hasSpec(player, 'templar') ? 0.35
+                    : hasPerk(player, 'lay_on_hands') ? 0.20 : 0.10;
       const healAmt = Math.max(1, Math.floor(player.hit_max * healPct));
       const newHp = Math.min(player.hit_max, player.hit_points + healAmt);
       await updatePlayer(player.id, { hit_points: newHp });
@@ -744,7 +902,15 @@ async function forest_combat({ action, player, req, res, pendingMessages }) {
   const newPlayerHp = Math.max(0, player.hit_points - totalPlayerDamage);
   await updatePlayer(player.id, { hit_points: newPlayerHp, ...woundUpdates });
   player = await getPlayer(player.id);
-  req.session.combat = { monster, round: round + 1, history: newHistory, monsterPoisoned: combat.monsterPoisoned || false };
+  req.session.combat = {
+    monster,
+    round:             round + 1,
+    history:           newHistory,
+    monsterPoisoned:   combat.monsterPoisoned   || false,
+    monsterStunRounds: combat.monsterStunRounds  || 0,
+    monsterDiseased:   combat.monsterDiseased    || false,
+    warlordStacks:     combat.warlordStacks       || 0,
+  };
 
   if (monster.currentHp <= 0) {
     req.session.combat = null;
@@ -758,6 +924,8 @@ async function forest_combat({ action, player, req, res, pendingMessages }) {
     if (family === 'giant')    { killRep.knights = 1; }
     // Assassin kill: rep boost with that faction for standing up to them
     if (monster.isAssassin && monster.factionId) killRep[monster.factionId] = (killRep[monster.factionId] || 0) + 5;
+    // Spec: Paladin Templar — +1 Knights and Merchants rep on every kill
+    if (hasSpec(player, 'templar')) { killRep.knights = (killRep.knights || 0) + 1; killRep.merchants = (killRep.merchants || 0) + 1; }
     const repUpdates = adjustReps(player, killRep);
 
     // ── Perk: kill rewards ──────────────────────────────────────────────────
@@ -821,6 +989,15 @@ async function forest_combat({ action, player, req, res, pendingMessages }) {
     if (hasPerk(player, 'corpse_explosion')) {
       req.session.corpseExplosion = true;
       log.push({ text: `\`8Corpse Explosion primed — your next kill will be supercharged!` });
+    }
+
+    // Spec: Dread Knight Warlord — gain an intimidation stack on kill (max 3, persists in session)
+    if (hasSpec(player, 'warlord')) {
+      const prevStacks = req.session.warlordStacks || 0;
+      if (prevStacks < 3) {
+        req.session.warlordStacks = prevStacks + 1;
+        log.push({ text: `\`@Warlord's Presence! Intimidation rises to \`$${req.session.warlordStacks}\`@ stack${req.session.warlordStacks > 1 ? 's' : ''}.` });
+      }
     }
 
     // Named enemy kill: mark defeated, avenger check, town invader clear, news
@@ -943,7 +1120,7 @@ async function forest_combat({ action, player, req, res, pendingMessages }) {
       await updatePlayer(player.id, levelUp.updates);
       player = await getPlayer(player.id);
       await addNews(`\`$${player.handle}\`% has advanced to level \`$${levelUp.newLevel}\`%!`);
-      return res.json({ ...getLevelUpScreen(player, levelUp.newLevel, levelUp.hpGain, levelUp.strGain, levelUp.perkPoint), pendingMessages: log.map(l => l.text) });
+      return res.json({ ...getLevelUpScreen(player, levelUp.newLevel, levelUp.hpGain, levelUp.strGain, levelUp.perkPoint, levelUp.specPoint), pendingMessages: log.map(l => l.text) });
     }
 
     // Dungeon room advancement
@@ -962,6 +1139,25 @@ async function forest_combat({ action, player, req, res, pendingMessages }) {
   }
 
   if (newPlayerHp <= 0) {
+    // Spec: Necromancer Lichborn — once per day, survive with 1 HP instead of dying
+    const today = Math.floor(Date.now() / 86400000);
+    if (hasSpec(player, 'lichborn') && (player.lich_cooldown || 0) < today) {
+      await updatePlayer(player.id, { hit_points: 1, lich_cooldown: today });
+      player = await getPlayer(player.id);
+      log.push({ text: `\`8Death reaches for you — but Lichborn defies it. You stand at \`$1\`8 HP!` });
+      req.session.combat = {
+        monster,
+        round:             round + 1,
+        history:           [...newHistory, ...log].slice(-30),
+        monsterPoisoned:   combat.monsterPoisoned  || false,
+        monsterStunRounds: combat.monsterStunRounds || 0,
+        monsterDiseased:   combat.monsterDiseased   || false,
+        warlordStacks:     combat.warlordStacks      || 0,
+      };
+      const depth = req.session.forestDepth || 0;
+      return res.json(getForestCombatScreen(player, monster, log, false, false, round + 1, newHistory, depth));
+    }
+
     req.session.combat = null;
     req.session.forestDepth = 0;
     req.session.wildernessMode = null;
@@ -1039,7 +1235,7 @@ async function forest_deeper({ player, req, res, pendingMessages }) {
     gold: Math.floor(baseMonster.gold * depthMult),
     exp: Math.floor(baseMonster.exp * depthMult),
   };
-  req.session.combat = { monster, round: 1, history: [] };
+  req.session.combat = { monster, round: 1, history: [], warlordStacks: req.session.warlordStacks || 0 };
   return res.json({ ...getForestEncounterScreen(player, monster, depth), pendingMessages: [`\`@You press deeper into the forest... Depth ${depth}. The shadows thicken.`] });
 }
 

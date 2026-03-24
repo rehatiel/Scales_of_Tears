@@ -806,6 +806,65 @@ function getPerksForClass(classId) {
   return (CLASS_PERKS[classId] || []).map(id => ({ id, ...PERKS[id] }));
 }
 
+// ── Specialisation (skill tree) system ────────────────────────────────────────
+// Players choose one of two paths at level 6 (one-time, permanent).
+// Passive stat bonuses (def_bonus, str_bonus, hp_bonus) are applied on selection.
+// Active effects are checked during combat via hasSpec().
+
+const SPECIALIZATIONS = {
+  // Dread Knight (class 1)
+  berserker:    { class: 1, name: 'Berserker',     desc: 'Each round costs 3% max HP, but all attacks deal +50% damage. Pure aggression.' },
+  warlord:      { class: 1, name: 'Warlord',       desc: 'Each kill builds Intimidation (max 3 stacks). Each stack adds +10% damage to the next fight.' },
+  // Warrior (class 2)
+  guardian:     { class: 2, name: 'Guardian',      desc: '+30 permanent Defense. Shield Slam stun chance increases to 60%.', effect: 'def_bonus', value: 30 },
+  champion:     { class: 2, name: 'Champion',      desc: '+20 permanent Strength. Guaranteed critical hit when you drop below 35% HP.', effect: 'str_bonus', value: 20 },
+  // Rogue (class 3)
+  assassin:     { class: 3, name: 'Assassin',      desc: 'Shadow Step ambush is always a critical hit. +15% base crit chance on all attacks.' },
+  trickster:    { class: 3, name: 'Trickster',     desc: '30% chance to dodge all incoming damage each round. Dodges trigger a counter-attack.' },
+  // Mage (class 4)
+  conjurer:     { class: 4, name: 'Conjurer',      desc: 'A shadow minion fights beside you, dealing 15% of your Strength as bonus damage each round.' },
+  enchanter:    { class: 4, name: 'Enchanter',     desc: '25% chance each fight to charm the enemy — it flees for full gold and exp without combat.' },
+  // Ranger (class 5)
+  beastmaster:  { class: 5, name: 'Beastmaster',   desc: 'Animal Bond companion deals double damage. 20% chance per round the companion intercepts monster attacks.' },
+  strider:      { class: 5, name: 'Strider',       desc: 'You always strike first in combat. +10% flee chance.' },
+  // Paladin (class 6)
+  inquisitor:   { class: 6, name: 'Inquisitor',    desc: 'Triple damage vs undead (×6 with Consecrate). 15% stun chance on every hit.' },
+  templar:      { class: 6, name: 'Templar',       desc: 'Each kill grants +1 Knights and Merchants rep. Divine Smite heals 35% HP instead of 20%.' },
+  // Druid (class 7)
+  shapeshifter: { class: 7, name: 'Shapeshifter',  desc: 'Shapeshift grants +20 additional max HP. You are immune to poison in combat.', effect: 'hp_bonus', value: 20 },
+  stormcaller:  { class: 7, name: 'Stormcaller',   desc: 'Regrowth also zaps the enemy for 3% of your max HP as lightning damage each round.' },
+  // Necromancer (class 8)
+  lichborn:     { class: 8, name: 'Lichborn',      desc: 'Once per day, instead of dying, you survive with 1 HP. Death does not claim you easily.' },
+  plague_doctor:{ class: 8, name: 'Plague Doctor', desc: 'Poisoned Blade ticks twice per round. Attacks have a 25% chance to disease enemies, reducing their damage by 15%.' },
+  // Elementalist (class 9)
+  invoker:      { class: 9, name: 'Invoker',       desc: 'Elemental Fury deals double damage, but always costs 15% max HP — even with Elemental Mastery.' },
+  arcanist:     { class: 9, name: 'Arcanist',      desc: 'Power moves have a 35% chance to trigger a free second cast at half power.' },
+  // Monk (class 10)
+  iron_fist:    { class: 10, name: 'Iron Fist',    desc: 'All attacks deal +25% damage. Pressure Points stuns last 2 rounds instead of 1.' },
+  wind_walker:  { class: 10, name: 'Wind Walker',  desc: 'Ki Shield block chance increased to 40%. Blocked attacks trigger a counter-strike.' },
+};
+
+const CLASS_SPECS = {
+  1:  ['berserker',    'warlord'],
+  2:  ['guardian',     'champion'],
+  3:  ['assassin',     'trickster'],
+  4:  ['conjurer',     'enchanter'],
+  5:  ['beastmaster',  'strider'],
+  6:  ['inquisitor',   'templar'],
+  7:  ['shapeshifter', 'stormcaller'],
+  8:  ['lichborn',     'plague_doctor'],
+  9:  ['invoker',      'arcanist'],
+  10: ['iron_fist',    'wind_walker'],
+};
+
+function getSpecsForClass(classId) {
+  return (CLASS_SPECS[classId] || []).map(id => ({ id, ...SPECIALIZATIONS[id] }));
+}
+
+function hasSpec(player, specId) {
+  return (player.specialization || '') === specId;
+}
+
 // ── Named enemy name generation ───────────────────────────────────────────────
 
 const NAMED_ENEMY_POOL = {
@@ -994,6 +1053,7 @@ module.exports = {
   expForLevel, expForNextLevel, EXP_TABLE,
   CLASS_NAMES, CLASS_POWER_MOVES, LEVEL_UP_GAINS,
   PERKS, CLASS_PERKS, getPerksForClass, hasPerk,
+  SPECIALIZATIONS, CLASS_SPECS, getSpecsForClass, hasSpec,
   NAMED_ENEMY_POOL, generateNamedEnemyName, pickKillTitle,
   NAMED_ITEMS, getNamedItemDrop,
   HUNT_MONSTER_POOL, HUNT_RANK_REWARDS, HUNT_PRIZE_ITEMS,

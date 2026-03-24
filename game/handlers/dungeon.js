@@ -147,7 +147,7 @@ async function advanceDungeonRoom(player, req, res, killLog) {
       player = await getPlayer(player.id);
       await addNews(`\`$${player.handle}\`% has advanced to level \`$${levelUp.newLevel}\`%!`);
       return res.json({
-        ...getLevelUpScreen(player, levelUp.newLevel, levelUp.hpGain, levelUp.strGain, levelUp.perkPoint),
+        ...getLevelUpScreen(player, levelUp.newLevel, levelUp.hpGain, levelUp.strGain, levelUp.perkPoint, levelUp.specPoint),
         pendingMessages: [...(killLog || []).map(l => l.text || l), ...dropMsgs],
       });
     }
@@ -230,7 +230,7 @@ async function dungeon_event({ player, param, req, res, pendingMessages }) {
       player = await getPlayer(player.id);
       await addNews(`\`$${player.handle}\`% has advanced to level \`$${levelUp.newLevel}\`%!`);
       return res.json({
-        ...getLevelUpScreen(player, levelUp.newLevel, levelUp.hpGain, levelUp.strGain, levelUp.perkPoint),
+        ...getLevelUpScreen(player, levelUp.newLevel, levelUp.hpGain, levelUp.strGain, levelUp.perkPoint, levelUp.specPoint),
         pendingMessages: msgs,
       });
     }

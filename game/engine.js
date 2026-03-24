@@ -1,5 +1,5 @@
 // Screen generation engine for SoT
-const { WEAPONS, ARMORS, expForNextLevel, CLASS_NAMES, CLASS_POWER_MOVES, MONSTER_TEMPLATES, getWeaponByNum, getArmorByNum, TOWNS, SOCIAL_SPACES, SHOP_OWNERS, getPerksForClass, PERKS, NAMED_ITEMS } = require('./data');
+const { WEAPONS, ARMORS, expForNextLevel, CLASS_NAMES, CLASS_POWER_MOVES, MONSTER_TEMPLATES, getWeaponByNum, getArmorByNum, TOWNS, SOCIAL_SPACES, SHOP_OWNERS, getPerksForClass, PERKS, NAMED_ITEMS, getSpecsForClass } = require('./data');
 const { MONSTER_ART } = require('./forest_events');
 const { getQuestName, getQuestStepText, getAlignmentLabel } = require('./quests');
 const { getBannerOverride } = require('../db');
@@ -742,11 +742,13 @@ function getTownScreen(player) {
     player.level >= 12 ? `${c.red}  [D]${c.white} ${(player.times_won || 0) > 0 ? 'Return to the Lair' : 'Challenge the Red Dragon'}` : '',
     (player.level >= 12 && (player.times_won || 0) >= 1) ? `${c.magenta}  [J]${c.white} Ascend ${c.dgray}(Prestige — reset to level 1, carry your power forward)` : '',
     (player.perk_points || 0) > 0 ? `${c.magenta}  [E]${c.white} Choose a Perk ${c.magenta}✦ (${player.perk_points} point${player.perk_points > 1 ? 's' : ''} available!)` : '',
+    player.spec_pending ? `${c.cyan}  [S]${c.white} Choose Your Specialisation ${c.cyan}✦ (your path awaits!)` : '',
     `${c.yellow}  [Y]${c.white} Town Crier${c.dgray} (post an announcement)`,
     `${c.cyan}  [V]${c.white} World Map / Travel${c.dgray} (${town.connections.length} route${town.connections.length !== 1 ? 's' : ''} from here)`,
     factionInTown ? `${c.brown}  [K]${c.white} ${factionInTown.houseName}${c.dgray} (${factionInTown.shortName})` : '',
     invaders.length > 0 ? `${c.red}  [Z]${c.white} Fight ${invaders[0].given_name}${invaders[0].title ? ', ' + invaders[0].title : ''} at the gate` : '',
     showVeilNpc ? `${veilStep.color}  [Q]${c.white} ${veilStep.label}  ${c.dgray}⚡ Quest` : '',
+    (townId === 'silverkeep' || townId === 'ironhold') ? `${c.cyan}  [0]${c.white} The Arena${c.dgray} (formal duels, spectator betting)` : '',
     `${c.dgray}  [L]${c.gray} Logout`,
     '',
   ].filter(l => l !== undefined && l !== '');
@@ -772,6 +774,7 @@ function getTownScreen(player) {
     { key: 'L', label: 'Logout', action: 'logout' },
   ];
   if ((player.perk_points || 0) > 0) choices.splice(choices.findIndex(ch => ch.key === 'Y'), 0, { key: 'E', label: 'Choose a Perk', action: 'perk_select' });
+  if (player.spec_pending) choices.splice(choices.findIndex(ch => ch.key === 'Y'), 0, { key: 'S', label: 'Choose Specialisation', action: 'spec_select' });
   if (factionInTown) choices.splice(choices.findIndex(ch => ch.key === 'L'), 0, { key: 'K', label: factionInTown.houseName, action: 'faction_house' });
   if (player.level >= 12) choices.splice(choices.findIndex(ch => ch.key === 'Y'), 0, { key: 'D', label: (player.times_won || 0) > 0 ? 'Return to the Lair' : 'Challenge Dragon', action: 'dragon' });
   if (player.level >= 12 && (player.times_won || 0) >= 1) choices.splice(choices.findIndex(ch => ch.key === 'L'), 0, { key: 'J', label: 'Ascend (Prestige)', action: 'prestige_confirm' });
@@ -780,6 +783,8 @@ function getTownScreen(player) {
     { key: 'Z', label: `Fight ${invaders[0].given_name}`, action: 'town_invader_fight' });
   if (showVeilNpc) choices.splice(choices.findIndex(ch => ch.key === 'L'), 0,
     { key: 'Q', label: veilStep.label, action: veilStep.action });
+  if (townId === 'silverkeep' || townId === 'ironhold') choices.splice(choices.findIndex(ch => ch.key === 'L'), 0,
+    { key: '0', label: 'The Arena', action: 'arena_lobby' });
 
   return { screen: 'town', ...buildScreen(town.name, lines, choices) };
 }
@@ -1393,7 +1398,10 @@ function getTrainingScreen(player) {
   ]);
 }
 
-function getTavernScreen(player, otherPlayers) {
+function getTavernScreen(player, otherPlayers, onlineIds, bountyTargetIds) {
+  const onlineSet = new Set(onlineIds || []);
+  const bountySet = new Set(bountyTargetIds || []);
+
   const lines = [
     ...renderBanner('tavern'),
     `${c.white}  The tavern is dimly lit, filled with the smell of ale`,
@@ -1412,8 +1420,10 @@ function getTavernScreen(player, otherPlayers) {
     others.slice(0, 15).forEach((p, i) => {
       const col = p.dead ? c.dgray : (p.times_won > 0 ? c.yellow : c.white);
       const prestigeTag = (p.prestige_level || 0) > 0 ? `${c.magenta}✦${p.prestige_level} ` : '';
+      const onlineDot = onlineSet.has(p.id) ? `${c.green}●${c.white}` : `${c.dgray}·${c.white}`;
+      const bountyMark = bountySet.has(p.id) ? `${c.red}⚑ ` : '';
       const status = p.dead ? `${c.red}(dead)` : (p.times_won > 0 ? `${c.yellow}(King x${p.times_won})` : '');
-      lines.push(`${c.yellow}  ${pad(i + 1, 4)}${col}${pad(p.handle, 22)}${pad(p.level, 8)}${pad(CLASS_NAMES[p.class], 14)}${prestigeTag}${status}`);
+      lines.push(`${c.yellow}  ${pad(i + 1, 3)} ${onlineDot}${bountyMark}${col}${pad(p.handle, 20)}${pad(p.level, 8)}${pad(CLASS_NAMES[p.class], 14)}${prestigeTag}${status}`);
     });
   }
 
@@ -1423,28 +1433,28 @@ function getTavernScreen(player, otherPlayers) {
   const drinksLeft = 3 - (player.drinks_today || 0);
   lines.push(`${c.gray}  Your stamina: ${stam > 6 ? c.green : stam > 3 ? c.yellow : c.red}${stam}${c.gray}/10`);
   lines.push('');
+  lines.push(`${c.yellow}  [P]${c.white} Select a Player         ${c.dgray}(enter their # to interact)`);
   lines.push(`${c.yellow}  [D]${c.white} Order a Drink           ${drinksLeft > 0 ? c.dgreen + '(restores stamina, ' + drinksLeft + ' left today)' : c.dgray + '(no more drinks today)'}`);
   lines.push(`${c.yellow}  [G]${c.white} Try Your Luck           ${c.dgray}(dice gamble)`);
-  lines.push(`${c.yellow}  [R]${c.white} Hear Rumours            ${c.dgray}(free — learn what lurks outside)`);
+  lines.push(`${c.yellow}  [R]${c.white} Hear Rumours            ${c.dgray}(free)`);
   lines.push(`${c.yellow}  [B]${c.white} Buy the House a Round   ${c.dgray}(50 gold — +1 charm)`);
-  lines.push(`${c.yellow}  [A]${c.white} Challenge a Player      ${c.dgray}(enter their number)`);
-  if (player.class === 1) {
-    lines.push(`${c.red}  [I]${c.white} Intimidate a player     ${c.dgray}(Dread Knight only)`);
-  }
+  lines.push(`${c.yellow}  [M]${c.white} Speak to Hrok           ${c.dgray}(mail & messages)`);
+  lines.push(`${c.yellow}  [W]${c.white} Wanted Board            ${c.dgray}(bounties)`);
+  lines.push(`${c.yellow}  [O]${c.white} Who's Online            ${c.dgray}(active in last 15 min)`);
   lines.push(`${c.yellow}  [L]${c.white} Leave the Tavern`);
 
   const drinksRemain = 3 - (player.drinks_today || 0);
   const tavernChoices = [
+    { key: 'P', label: 'Select Player', action: 'tavern_player', needsInput: true, inputLabel: 'Player number:', inputType: 'number' },
     { key: 'D', label: 'Order a Drink', action: 'tavern_drink', disabled: drinksRemain === 0 },
     { key: 'G', label: 'Try Your Luck', action: 'tavern_gamble', needsInput: true, inputLabel: 'How much gold do you bet? (min 10)', inputType: 'number' },
     { key: 'R', label: 'Hear Rumours', action: 'tavern_rumours' },
     { key: 'B', label: 'Buy a Round', action: 'tavern_buyround' },
-    { key: 'A', label: 'Attack Player', action: 'tavern_attack', needsInput: true, inputLabel: 'Player number to attack:', inputType: 'number', disabled: player.human_fights_left === 0 },
+    { key: 'M', label: 'Speak to Hrok', action: 'tavern_mail_hub' },
+    { key: 'W', label: 'Wanted Board', action: 'tavern_bounty_board' },
+    { key: 'O', label: "Who's Online", action: 'tavern_online' },
     { key: 'L', label: 'Leave', action: 'town' },
   ];
-  if (player.class === 1) {
-    tavernChoices.splice(tavernChoices.findIndex(c => c.key === 'A'), 0, { key: 'I', label: 'Intimidate', action: 'tavern_intimidate', needsInput: true, inputLabel: 'Player number to intimidate:', inputType: 'number', disabled: player.human_fights_left === 0 });
-  }
 
   return buildScreen('The Rusted Flagon', lines, tavernChoices);
 }
@@ -1852,7 +1862,7 @@ function getDragonScreen(player) {
   ]);
 }
 
-function getLevelUpScreen(player, newLevel, hpGain, strGain, perkPoint = false) {
+function getLevelUpScreen(player, newLevel, hpGain, strGain, perkPoint = false, specPoint = false) {
   const cls = CLASS_NAMES[player.class];
   const lines = [
     ...renderBanner('master'),
@@ -1866,14 +1876,17 @@ function getLevelUpScreen(player, newLevel, hpGain, strGain, perkPoint = false) 
     `${c.cyan}  +1 Skill Point (${player.skill_points + 1} total)`,
     '',
     newLevel === 12 ? `${c.red}  You are now powerful enough to challenge the Red Dragon!` : '',
-    perkPoint ? `${c.magenta}  ✦ A new perk is available — choose your power!` : '',
+    perkPoint  ? `${c.magenta}  ✦ A new perk is available — choose your power!` : '',
+    specPoint  ? `${c.cyan}  ✦ You have reached level 6 — choose your specialisation path!` : '',
     '',
-    perkPoint ? `${c.yellow}  [P]${c.white} Choose a Perk` : '',
+    perkPoint  ? `${c.yellow}  [P]${c.white} Choose a Perk` : '',
+    specPoint  ? `${c.cyan}  [S]${c.white} Choose Your Specialisation` : '',
     `${c.yellow}  [T]${c.white} Return to Town`,
   ].filter(l => l !== undefined && l !== '');
 
   const choices = [];
-  if (perkPoint) choices.push({ key: 'P', label: 'Choose a Perk', action: 'perk_select' });
+  if (perkPoint) choices.push({ key: 'P', label: 'Choose a Perk',           action: 'perk_select' });
+  if (specPoint) choices.push({ key: 'S', label: 'Choose Specialisation',   action: 'spec_select' });
   choices.push({ key: 'T', label: 'Return to Town', action: 'town' });
 
   return buildScreen('Level Up!', lines, choices);
@@ -1910,6 +1923,32 @@ function getPerkSelectionScreen(player) {
   lines.push(`${c.dgray}  Perk points remaining: ${player.perk_points || 0}`);
 
   return buildScreen('Choose a Perk', lines, choices);
+}
+
+// ── Specialisation Selection Screen ──────────────────────────────────────────
+function getSpecSelectionScreen(player) {
+  const classSpecs = getSpecsForClass(player.class);
+  const keys = ['A', 'B'];
+  const lines = [
+    ...renderBanner('master'),
+    `${c.cyan}  ── Choose Your Specialisation ──`,
+    '',
+    `${c.white}  At level 6, your path diverges. Choose one specialisation — this choice is permanent.`,
+    `${c.dgray}  Each path unlocks unique combat abilities that define how you fight.`,
+    '',
+  ];
+
+  const choices = [];
+  classSpecs.forEach((spec, i) => {
+    const key = keys[i];
+    lines.push(`${c.yellow}  [${key}]${c.white} ${c.cyan}${spec.name}${c.white} — ${spec.desc}`);
+    choices.push({ key, label: spec.name, action: 'choose_spec', param: spec.id });
+  });
+
+  lines.push('');
+  lines.push(`${c.dgray}  Choose wisely — you may not change this later.`);
+
+  return buildScreen('Choose a Specialisation', lines, choices);
 }
 
 // ── Forest Event Screen ───────────────────────────────────────────────────────
@@ -2861,6 +2900,363 @@ function getRuinsScreen(player, ruin) {
   return buildScreen(ruin.name, lines, choices);
 }
 
+// ── Social: Tavern player action screen ───────────────────────────────────────
+
+function getTavernPlayerScreen(player, target, hasArena, bounties) {
+  const titleDisplay = target.active_title ? ` ${getActiveTitleDisplay({ active_title: target.active_title })}` : '';
+  const specLabel = target.specialization ? ` (${target.specialization.replace(/_/g, ' ')})` : '';
+  const bountiesOnTarget = (bounties || []).filter(b => b.target_id === target.id);
+  const bountyTotal = bountiesOnTarget.reduce((s, b) => s + b.gold, 0);
+
+  const lines = [
+    ...renderBanner('tavern'),
+    `${c.yellow}  ─── ${target.handle}${titleDisplay} ───`,
+    '',
+    `${c.gray}  Class: ${c.white}${CLASS_NAMES[target.class] || '?'}${specLabel}`,
+    `${c.gray}  Level: ${c.yellow}${target.level}`,
+    target.prestige_level > 0 ? `${c.magenta}  Prestige: ✦${target.prestige_level}` : '',
+    bountyTotal > 0 ? `${c.red}  ⚑ Wanted: ${c.yellow}${fmt(bountyTotal)} gold bounty on this player!` : '',
+    '',
+    `${c.yellow}  [A]${c.white} Attack             ${player.human_fights_left > 0 ? c.dgray + '(costs 1 human fight)' : c.red + '(no fights left)'}`,
+    `${c.yellow}  [I]${c.white} Inspect            ${c.dgray}(view their public profile)`,
+    `${c.yellow}  [M]${c.white} Send a Message     ${c.dgray}(delivered via Hrok)`,
+    `${c.yellow}  [U]${c.white} Post a Bounty      ${c.dgray}(50 gold minimum)`,
+    player.class === 1 ? `${c.red}  [Z]${c.white} Intimidate         ${c.dgray}(Dread Knight only)` : '',
+    hasArena ? `${c.cyan}  [C]${c.white} Arena Challenge    ${c.dgray}(no death penalty)` : '',
+    '',
+    `${c.yellow}  [L]${c.white} Back to Tavern`,
+  ].filter(l => l !== undefined && l !== '');
+
+  const choices = [
+    { key: 'A', label: 'Attack', action: 'tavern_attack', param: String(target.id), disabled: player.human_fights_left === 0 },
+    { key: 'I', label: 'Inspect', action: 'tavern_inspect', param: String(target.id) },
+    { key: 'M', label: 'Send Message', action: 'tavern_mail_compose', param: String(target.id) },
+    { key: 'U', label: 'Post Bounty', action: 'tavern_bounty_post', param: String(target.id) },
+    { key: 'L', label: 'Back', action: 'tavern' },
+  ];
+  if (player.class === 1) {
+    choices.splice(1, 0, { key: 'Z', label: 'Intimidate', action: 'tavern_intimidate', param: String(target.id), disabled: player.human_fights_left === 0 });
+  }
+  if (hasArena) {
+    choices.splice(choices.length - 1, 0, { key: 'C', label: 'Arena Challenge', action: 'tavern_arena_challenge', param: String(target.id) });
+  }
+
+  return buildScreen(`${target.handle}`, lines, choices);
+}
+
+// ── Social: Player inspect screen ─────────────────────────────────────────────
+
+function getPlayerInspectScreen(viewer, target) {
+  const titleDisplay = target.active_title ? ` ${getActiveTitleDisplay({ active_title: target.active_title })}` : '';
+  const specLabel = target.specialization ? ` — ${target.specialization.replace(/_/g, ' ')}` : '';
+
+  // Faction standings (public)
+  const factionLines = [];
+  const factions = [
+    { key: 'rep_knights', name: "Knights' Order" },
+    { key: 'rep_guild',   name: "Thieves' Guild" },
+    { key: 'rep_druids',  name: 'Circle of Druids' },
+    { key: 'rep_necromancers', name: 'Necromancer Cabal' },
+    { key: 'rep_merchants', name: "Merchants' League" },
+  ];
+  for (const f of factions) {
+    const val = target[f.key] || 0;
+    if (Math.abs(val) >= 10) {
+      const label = val >= 50 ? 'Allied' : val >= 10 ? 'Friendly' : val <= -50 ? 'Hostile' : 'Unfriendly';
+      const col = val > 0 ? c.green : c.red;
+      factionLines.push(`${c.dgray}    ${pad(f.name, 22)} ${col}${label}`);
+    }
+  }
+
+  // Flavor text — based on their stats
+  const flavors = [];
+  if (target.kills >= 10) flavors.push(`${c.dgray}  You notice dried blood on their knuckles — this one has seen many fights.`);
+  if (target.is_vampire) flavors.push(`${c.dgray}  Their skin is pale and cold to look upon. They avoid the torchlight.`);
+  if (Number(target.alignment) >= 50) flavors.push(`${c.dgray}  There is a quiet dignity about them — someone who tries to do right.`);
+  if (Number(target.alignment) <= -50) flavors.push(`${c.dgray}  A shadow hangs about them. Even the barflies edge away.`);
+  if (target.prestige_level > 0) flavors.push(`${c.dgray}  You recognise the look of someone who has walked this path before.`);
+  if (!flavors.length) flavors.push(`${c.dgray}  They meet your gaze briefly, then look away.`);
+
+  const lastSeenStr = target.last_seen
+    ? (() => {
+        const ago = Math.floor((Date.now() - new Date(target.last_seen).getTime()) / 60000);
+        if (ago < 2) return 'just now';
+        if (ago < 60) return `${ago} minutes ago`;
+        const hours = Math.floor(ago / 60);
+        if (hours < 24) return `${hours} hour${hours > 1 ? 's' : ''} ago`;
+        return `${Math.floor(hours / 24)} day${Math.floor(hours / 24) > 1 ? 's' : ''} ago`;
+      })()
+    : 'unknown';
+
+  const lines = [
+    ...renderBanner('tavern'),
+    `${c.yellow}  You study ${target.handle} and notice...`,
+    '',
+    `${c.gray}  Name:   ${c.white}${target.handle}${titleDisplay}`,
+    `${c.gray}  Class:  ${c.white}${CLASS_NAMES[target.class] || '?'}${specLabel}`,
+    `${c.gray}  Level:  ${c.yellow}${target.level}`,
+    target.prestige_level > 0 ? `${c.magenta}  Prestige Rank: ✦${target.prestige_level}` : '',
+    `${c.gray}  Last seen: ${c.dgray}${lastSeenStr}`,
+    '',
+    ...flavors,
+  ];
+
+  if (factionLines.length) {
+    lines.push('');
+    lines.push(`${c.gray}  Known allegiances:`);
+    lines.push(...factionLines);
+  }
+
+  lines.push('');
+  lines.push(`${c.yellow}  [L]${c.white} Back`);
+
+  return buildScreen(`Inspecting: ${target.handle}`, lines.filter(l => l !== ''), [
+    { key: 'L', label: 'Back', action: 'tavern_player', param: String(target.id) },
+  ]);
+}
+
+// ── Social: Mail screens ───────────────────────────────────────────────────────
+
+function getMailHubScreen(player, unreadCount) {
+  const lines = [
+    ...renderBanner('tavern'),
+    `${c.brown}  Hrok reaches under the bar and drops a battered wooden box.`,
+    `${c.brown}  "Any letters for ya, any you want to send — I'm yer man."`,
+    '',
+    unreadCount > 0
+      ? `${c.yellow}  You have ${c.cyan}${unreadCount}${c.yellow} unread message${unreadCount > 1 ? 's' : ''}!`
+      : `${c.dgray}  Your inbox is empty.`,
+    '',
+    `${c.yellow}  [I]${c.white} Read Incoming Mail`,
+    `${c.yellow}  [S]${c.white} View Sent Messages`,
+    `${c.yellow}  [L]${c.white} Leave`,
+  ];
+  return buildScreen("Hrok's Delivery Box", lines, [
+    { key: 'I', label: 'Read Mail', action: 'tavern_mail_inbox' },
+    { key: 'S', label: 'View Sent', action: 'tavern_mail_sent' },
+    { key: 'L', label: 'Leave', action: 'tavern' },
+  ]);
+}
+
+function getMailInboxScreen(player, mails) {
+  const lines = [
+    ...renderBanner('tavern'),
+    `${c.yellow}  Incoming Messages:`,
+    divider('─', 55),
+  ];
+
+  if (!mails.length) {
+    lines.push(`${c.dgray}  No messages yet.`);
+  } else {
+    mails.slice(0, 20).forEach((m, i) => {
+      const readMark = m.read ? c.dgray : c.cyan;
+      const date = new Date(m.sent_at).toLocaleDateString();
+      lines.push(`${c.yellow}  ${pad(i + 1, 4)}${readMark}${m.read ? '' : '● '}${c.white}${pad(m.sender_handle, 18)}${c.dgray}${date}`);
+    });
+  }
+  lines.push('');
+  lines.push(`${c.yellow}  [1-${Math.min(mails.length, 20)}]${c.white} Read a message`);
+  lines.push(`${c.yellow}  [L]${c.white} Back`);
+
+  const choices = mails.slice(0, 20).map((m, i) => ({
+    key: String(i + 1), label: `From ${m.sender_handle}`, action: 'tavern_mail_read', param: String(m.id),
+  }));
+  choices.push({ key: 'L', label: 'Back', action: 'tavern_mail_hub' });
+
+  return buildScreen('Inbox', lines, choices);
+}
+
+function getMailReadScreen(player, mail) {
+  const date = new Date(mail.sent_at).toLocaleDateString();
+  const lines = [
+    ...renderBanner('tavern'),
+    `${c.yellow}  From: ${c.white}${mail.sender_handle || '???'}`,
+    `${c.dgray}  Sent: ${date}`,
+    divider('─', 55),
+    '',
+    `${c.white}  ${mail.message}`,
+    '',
+    divider('─', 55),
+    `${c.yellow}  [R]${c.white} Reply`,
+    `${c.yellow}  [L]${c.white} Back to Inbox`,
+  ];
+  return buildScreen('Message', lines, [
+    { key: 'R', label: 'Reply', action: 'tavern_mail_compose', param: String(mail.from_id) },
+    { key: 'L', label: 'Back', action: 'tavern_mail_inbox' },
+  ]);
+}
+
+function getMailSentScreen(player, mails) {
+  const lines = [
+    ...renderBanner('tavern'),
+    `${c.yellow}  Sent Messages:`,
+    divider('─', 55),
+  ];
+
+  if (!mails.length) {
+    lines.push(`${c.dgray}  You haven't sent any messages.`);
+  } else {
+    mails.slice(0, 20).forEach((m, i) => {
+      const date = new Date(m.sent_at).toLocaleDateString();
+      const readMark = m.read ? `${c.dgreen}✓` : `${c.dgray}○`;
+      lines.push(`${c.yellow}  ${pad(i + 1, 4)}${c.white}${pad(m.recipient_handle, 18)}${c.dgray}${date}  ${readMark}`);
+    });
+  }
+  lines.push('');
+  lines.push(`${c.yellow}  [L]${c.white} Back`);
+
+  return buildScreen('Sent Mail', lines, [
+    { key: 'L', label: 'Back', action: 'tavern_mail_hub' },
+  ]);
+}
+
+function getMailComposeScreen(player, targetHandle) {
+  const lines = [
+    ...renderBanner('tavern'),
+    `${c.yellow}  Write a message to ${c.white}${targetHandle}${c.yellow}:`,
+    '',
+    `${c.dgray}  (Max 280 characters. Delivered via Hrok when they next visit.)`,
+    '',
+    `${c.yellow}  [S]${c.white} Send Message`,
+    `${c.yellow}  [L]${c.white} Cancel`,
+  ];
+  return buildScreen(`Write to ${targetHandle}`, lines, [
+    { key: 'S', label: 'Send', action: 'tavern_mail_send', needsInput: true, inputLabel: `Message to ${targetHandle} (max 280 chars):`, inputType: 'text' },
+    { key: 'L', label: 'Cancel', action: 'tavern' },
+  ]);
+}
+
+function getBountyPostScreen(player, target) {
+  const lines = [
+    ...renderBanner('tavern'),
+    `${c.red}  Post a Bounty on ${c.white}${target.handle}${c.red}:`,
+    '',
+    `${c.dgray}  Anyone who kills them in the tavern collects the gold.`,
+    `${c.dgray}  Minimum bounty: ${c.yellow}50 gold${c.dgray}. Your purse: ${c.yellow}${fmt(Number(player.gold))} gold${c.dgray}.`,
+    '',
+    `${c.yellow}  [C]${c.white} Post Bounty (enter amount)`,
+    `${c.yellow}  [L]${c.white} Back`,
+  ];
+  return buildScreen(`Bounty: ${target.handle}`, lines, [
+    { key: 'C', label: 'Post Bounty', action: 'tavern_bounty_confirm', needsInput: true, inputLabel: `Bounty amount (min 50 gold, you have ${fmt(Number(player.gold))}):`, inputType: 'number' },
+    { key: 'L', label: 'Back', action: 'tavern_player', param: String(target.id) },
+  ]);
+}
+
+// ── Social: Bounty board screen ────────────────────────────────────────────────
+
+function getBountyBoardScreen(player, bounties) {
+  const lines = [
+    ...renderBanner('tavern'),
+    `${c.red}  ─── Wanted Board ───`,
+    `${c.dgray}  Gold offered for the heads of these individuals.`,
+    divider('─', 55),
+    `${c.yellow}  ${pad('Posted by', 18)}${pad('Target', 18)}${pad('Gold', 10)}`,
+    divider('─', 55),
+  ];
+
+  if (!bounties.length) {
+    lines.push(`${c.dgray}  No active bounties at this time.`);
+  } else {
+    bounties.forEach(b => {
+      lines.push(`${c.white}  ${pad(b.poster_handle, 18)}${c.red}${pad(b.target_handle, 18)}${c.yellow}${fmt(b.gold)}`);
+    });
+  }
+
+  lines.push('');
+  lines.push(`${c.dgray}  Kill a wanted player in the tavern to collect their bounty.`);
+  lines.push('');
+  lines.push(`${c.yellow}  [L]${c.white} Back to Tavern`);
+
+  return buildScreen('Wanted Board', lines, [
+    { key: 'L', label: 'Back', action: 'tavern' },
+  ]);
+}
+
+// ── Social: Arena lobby screen ─────────────────────────────────────────────────
+
+function getArenaLobbyScreen(player, pendingChallenges, townName) {
+  const challengesForMe = pendingChallenges.filter(c => c.defender_id === player.id);
+
+  const lines = [
+    `${c.cyan}  ─── ${townName} Arena ───`,
+    `${c.dgray}  Formal duels — no death, no gear loss. Just honour.`,
+    '',
+  ];
+
+  if (challengesForMe.length) {
+    lines.push(`${c.yellow}  Challenges awaiting your response:`);
+    challengesForMe.forEach((ch, i) => {
+      lines.push(`${c.white}  [${i + 1}] ${ch.challenger_handle} challenges you to a duel!`);
+    });
+    lines.push('');
+  } else {
+    lines.push(`${c.dgray}  No pending challenges.`);
+    lines.push('');
+  }
+
+  lines.push(`${c.yellow}  [L]${c.white} Leave`);
+
+  const choices = challengesForMe.slice(0, 9).map((ch, i) => ({
+    key: String(i + 1),
+    label: `Accept from ${ch.challenger_handle}`,
+    action: 'arena_accept',
+    param: String(ch.id),
+  }));
+  choices.push({ key: 'L', label: 'Leave', action: 'town' });
+
+  return buildScreen(`${townName} Arena`, lines, choices);
+}
+
+// ── Social: Arena betting screen ──────────────────────────────────────────────
+
+function getArenaBettingScreen(player, challenge) {
+  const lines = [
+    `${c.cyan}  ─── Arena Wager ───`,
+    '',
+    `${c.white}  ${challenge.challenger_handle} ${c.dgray}vs.${c.white} ${challenge.defender_handle}`,
+    `${c.gray}  Current pool: ${c.yellow}${Number(challenge.bet_pool).toLocaleString()} gold`,
+    '',
+    `${c.dgray}  Winners split the losers' stakes. Your stake is returned if you win.`,
+    '',
+    `${c.yellow}  [A]${c.white} Bet on ${challenge.challenger_handle}`,
+    `${c.yellow}  [B]${c.white} Bet on ${challenge.defender_handle}`,
+    `${c.yellow}  [L]${c.white} Never mind`,
+  ];
+  return buildScreen('Place a Bet', lines, [
+    { key: 'A', label: `Bet on ${challenge.challenger_handle}`, action: 'arena_bet_challenger', needsInput: true, inputLabel: 'Amount to bet (min 10 gold):', inputType: 'number' },
+    { key: 'B', label: `Bet on ${challenge.defender_handle}`, action: 'arena_bet_defender', needsInput: true, inputLabel: 'Amount to bet (min 10 gold):', inputType: 'number' },
+    { key: 'L', label: 'Never mind', action: 'tavern' },
+  ]);
+}
+
+// ── Social: Who's Online screen ────────────────────────────────────────────────
+
+function getWhoIsOnlineScreen(player, onlinePlayers) {
+  const lines = [
+    ...renderBanner('tavern'),
+    `${c.yellow}  Active adventurers (last 15 minutes):`,
+    divider('─', 55),
+  ];
+
+  if (!onlinePlayers.length) {
+    lines.push(`${c.dgray}  No other players are currently active.`);
+  } else {
+    onlinePlayers.slice(0, 20).forEach(p => {
+      const town = TOWNS[p.current_town]?.name || p.current_town || '?';
+      const titleDisp = p.active_title ? ` ${getActiveTitleDisplay({ active_title: p.active_title })}` : '';
+      lines.push(`${c.green}  ●${c.white} ${pad(p.handle + titleDisp, 28)}${c.dgray}${town}`);
+    });
+  }
+
+  lines.push('');
+  lines.push(`${c.yellow}  [L]${c.white} Back to Tavern`);
+
+  return buildScreen("Who's Online", lines, [
+    { key: 'L', label: 'Back', action: 'tavern' },
+  ]);
+}
+
 module.exports = {
   getTownScreen, getForestEncounterScreen, getForestCombatScreen,
   getWeaponShopScreen, getArmorShopScreen, getInnScreen, getBankScreen,
@@ -2874,7 +3270,7 @@ module.exports = {
   getSocialStormwatchScreen, getSocialOldKarthScreen, getSocialAshenfallScreen,
   getSocialBrackenHollowScreen, getSocialMirefenScreen, getSocialFrostmereScreen,
   getNewsScreen, getCharacterScreen, getCharacterGearScreen, getCharacterRecordsScreen, getCharacterFactionsScreen, getSetupScreen, getDragonScreen,
-  getLevelUpScreen, getPerkSelectionScreen, getForestEventScreen, getRescueOpportunityScreen,
+  getLevelUpScreen, getPerkSelectionScreen, getSpecSelectionScreen, getForestEventScreen, getRescueOpportunityScreen,
   getNearDeathWaitingScreen, getNpcRescueScreen, getNearDeathScreen,
   getCrierScreen,
   getHerbalistScreen, getInnHealerScreen, getAbductionDungeonScreen, getAbductionFightScreen, getAbductionEscapeScreen,
@@ -2886,4 +3282,7 @@ module.exports = {
   setWorldEventCache, setInvaderCache,
   renderBanner,
   LOCATION_BANNERS,
+  getTavernPlayerScreen, getPlayerInspectScreen,
+  getMailHubScreen, getMailInboxScreen, getMailReadScreen, getMailSentScreen, getMailComposeScreen, getBountyPostScreen,
+  getBountyBoardScreen, getArenaLobbyScreen, getArenaBettingScreen, getWhoIsOnlineScreen,
 };

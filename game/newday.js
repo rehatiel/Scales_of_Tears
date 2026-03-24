@@ -382,6 +382,8 @@ function checkLevelUp(player) {
   const newHpMax      = player.hit_max + hpGain;
   const newSkillPoints = (player.skill_points || 0) + 1;
   const perkPoint     = PERK_LEVELS.has(newLevel);
+  // Specialisation choice unlocks at level 6 (one-time, only if not already chosen)
+  const specPoint     = newLevel === 6 && !(player.specialization || '');
 
   return {
     newLevel,
@@ -389,6 +391,7 @@ function checkLevelUp(player) {
     strGain,
     newSkillPoints,
     perkPoint,
+    specPoint,
     updates: {
       level:          newLevel,
       hit_max:        newHpMax,
@@ -396,7 +399,8 @@ function checkLevelUp(player) {
       strength:       player.strength + strGain,
       skill_points:   newSkillPoints,
       skill_uses_left: Math.min(newSkillPoints, 10),
-      ...(perkPoint ? { perk_points: (player.perk_points || 0) + 1 } : {}),
+      ...(perkPoint  ? { perk_points:  (player.perk_points || 0) + 1 } : {}),
+      ...(specPoint  ? { spec_pending: true }                          : {}),
     },
   };
 }

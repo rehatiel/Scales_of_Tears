@@ -1,7 +1,7 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
-const { pool, getAllPlayers, getRecentNews, addNews, updatePlayer, TODAY, getBannerOverride, setBanner, deleteBanner, getAllBanners, loadBanners } = require('../db');
+const { pool, getAllPlayers, getRecentNews, addNews, updatePlayer, TODAY, getBannerOverride, setBanner, deleteBanner, getAllBanners, loadBanners, getWorldState, setWorldState } = require('../db');
 const { runNewDay } = require('../game/newday');
 const { LOCATION_BANNERS } = require('../game/engine');
 
@@ -84,14 +84,13 @@ router.put('/players/:id', ar(async (req, res) => {
   const safe = {};
   for (const [k, v] of Object.entries(fields)) {
     if (!EDITABLE_FIELDS.has(k)) continue;
+    if (v === null || v === undefined) continue; // skip nulls; don't overwrite with null
     if (INTEGER_FIELDS.has(k)) {
-      if (!Number.isInteger(v) && !(typeof v === 'number' && Number.isFinite(v)))
+      if (!Number.isFinite(Number(v)))
         return res.status(400).json({ error: `Field "${k}" must be a number` });
       safe[k] = Math.trunc(Number(v));
     } else {
-      if (typeof v !== 'string')
-        return res.status(400).json({ error: `Field "${k}" must be a string` });
-      safe[k] = v;
+      safe[k] = String(v);
     }
   }
   if (!Object.keys(safe).length) return res.status(400).json({ error: 'No valid fields' });
@@ -402,6 +401,22 @@ router.post('/restore', ar(async (req, res) => {
   } finally {
     client.release();
   }
+}));
+
+// ── Server settings ───────────────────────────────────────────────────────────
+// Currently: registration_open (1 = open, 0 = closed)
+
+router.get('/settings', ar(async (req, res) => {
+  const regOpen = await getWorldState('registration_open');
+  res.json({ registration_open: regOpen !== '0' }); // default open
+}));
+
+router.put('/settings', ar(async (req, res) => {
+  const { registration_open } = req.body;
+  if (typeof registration_open !== 'boolean')
+    return res.status(400).json({ error: 'registration_open must be a boolean.' });
+  await setWorldState('registration_open', registration_open ? '1' : '0');
+  res.json({ ok: true, registration_open });
 }));
 
 module.exports = router;

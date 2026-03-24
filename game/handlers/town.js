@@ -1,12 +1,12 @@
 const { getPlayer, updatePlayer, addNews, getHallOfKings, getRecentNews, getRetiredPlayersInTown, getActiveWorldEvent, getActiveHunts, getAllPlayers } = require('../../db');
-const { WEAPONS, ARMORS, TOWNS, SHOP_OWNERS, getWeaponByNum, getArmorByNum, PERKS, getPerksForClass, hasPerk } = require('../data');
+const { WEAPONS, ARMORS, TOWNS, SHOP_OWNERS, getWeaponByNum, getArmorByNum, PERKS, getPerksForClass, hasPerk, SPECIALIZATIONS, getSpecsForClass } = require('../data');
 const { checkLevelUp } = require('../newday');
 const { getEventDef } = require('../world_events');
 const {
   getTownScreen, getWeaponShopScreen, getArmorShopScreen, getInnScreen, getInnHealerScreen,
   getHerbalistScreen, getBankScreen, getMasterScreen, getTrainingScreen, getGardenScreen,
   getBardScreen, getNewsScreen, getCharacterScreen, getCharacterGearScreen, getCharacterRecordsScreen, getCharacterFactionsScreen, getCrierScreen, getLevelUpScreen,
-  getPerkSelectionScreen,
+  getPerkSelectionScreen, getSpecSelectionScreen,
 } = require('../engine');
 const {
   parseWounds, healerWoundCost, healerInfectionCost, healerCanTreat,
@@ -683,6 +683,50 @@ async function choose_perk({ player, param, req, res, pendingMessages }) {
   return res.json({ ...getTownScreen(player), pendingMessages: [...pendingMessages, ...msgs] });
 }
 
+// ── SPECIALISATION ────────────────────────────────────────────────────────────
+
+async function spec_select({ player, req, res, pendingMessages }) {
+  if (!player.spec_pending)
+    return res.json({ ...getTownScreen(player), pendingMessages: ['`7You have no specialisation to choose.'] });
+  return res.json({ ...getSpecSelectionScreen(player), pendingMessages });
+}
+
+async function choose_spec({ player, param, req, res, pendingMessages }) {
+  if (!player.spec_pending)
+    return res.json({ ...getTownScreen(player), pendingMessages: ['`7You have no specialisation to choose.'] });
+  if (player.specialization)
+    return res.json({ ...getTownScreen(player), pendingMessages: ['`@You have already chosen a specialisation.'] });
+
+  const specId = param;
+  const spec = SPECIALIZATIONS[specId];
+  if (!spec) return res.json({ ...getSpecSelectionScreen(player), pendingMessages: ['`@Unknown specialisation.'] });
+
+  const classSpecs = getSpecsForClass(player.class);
+  if (!classSpecs.some(s => s.id === specId))
+    return res.json({ ...getSpecSelectionScreen(player), pendingMessages: ['`@That specialisation is not available for your class.'] });
+
+  const updates = { specialization: specId, spec_pending: false };
+
+  // Immediate stat bonuses
+  if (spec.effect === 'def_bonus') updates.defense   = player.defense   + spec.value;
+  if (spec.effect === 'str_bonus') updates.strength  = player.strength  + spec.value;
+  if (spec.effect === 'hp_bonus') {
+    updates.hit_max    = player.hit_max    + spec.value;
+    updates.hit_points = Math.min(player.hit_max + spec.value, player.hit_points + spec.value);
+  }
+
+  await updatePlayer(player.id, updates);
+  player = await getPlayer(player.id);
+
+  const msgs = [
+    `\`!You have chosen the path of \`$${spec.name}\`!!`,
+    `\`%${spec.desc}`,
+    `\`7Your specialisation is permanent — embrace your path.`,
+  ];
+
+  return res.json({ ...getTownScreen(player), pendingMessages: [...pendingMessages, ...msgs] });
+}
+
 // ── QUEST HANDLERS ─────────────────────────────────────────────────────────────
 
 async function merchant_help({ player, req, res, pendingMessages }) {
@@ -704,7 +748,7 @@ async function merchant_help({ player, req, res, pendingMessages }) {
     await updatePlayer(player.id, levelUp.updates);
     player = await getPlayer(player.id);
     await addNews(`\`$${player.handle}\`% has advanced to level \`$${levelUp.newLevel}\`%!`);
-    return res.json({ ...getLevelUpScreen(player, levelUp.newLevel, levelUp.hpGain, levelUp.strGain, levelUp.perkPoint), pendingMessages: [
+    return res.json({ ...getLevelUpScreen(player, levelUp.newLevel, levelUp.hpGain, levelUp.strGain, levelUp.perkPoint, levelUp.specPoint), pendingMessages: [
       ...pendingMessages,
       '`0You heave the merchant onto his horse and walk him back to town.',
       '`#He grips your hand, speechless with relief.',
@@ -760,6 +804,8 @@ module.exports = {
   herbalist_infection,
   perk_select,
   choose_perk,
+  spec_select,
+  choose_spec,
   merchant_help,
   merchant_loot,
 };
