@@ -748,7 +748,7 @@ function getTownScreen(player) {
     factionInTown ? `${c.brown}  [K]${c.white} ${factionInTown.houseName}${c.dgray} (${factionInTown.shortName})` : '',
     invaders.length > 0 ? `${c.red}  [Z]${c.white} Fight ${invaders[0].given_name}${invaders[0].title ? ', ' + invaders[0].title : ''} at the gate` : '',
     showVeilNpc ? `${veilStep.color}  [Q]${c.white} ${veilStep.label}  ${c.dgray}⚡ Quest` : '',
-    (townId === 'silverkeep' || townId === 'ironhold') ? `${c.cyan}  [0]${c.white} The Arena${c.dgray} (formal duels, spectator betting)` : '',
+    (town.id === 'silverkeep' || town.id === 'ironhold') ? `${c.cyan}  [0]${c.white} The Arena${c.dgray} (formal duels, spectator betting)` : '',
     `${c.dgray}  [L]${c.gray} Logout`,
     '',
   ].filter(l => l !== undefined && l !== '');
