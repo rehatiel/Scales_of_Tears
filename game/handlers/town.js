@@ -31,6 +31,17 @@ async function inn_rest({ player, req, res, pendingMessages }) {
     return res.json({ ...getInnScreen(player, sleeperCount), pendingMessages: ['`7You are already at full health!'] });
   await updatePlayer(player.id, { gold: Number(player.gold) - cost, hit_points: player.hit_max });
   player = await getPlayer(player.id);
+  try {
+    const { checkSecrets } = require('../secrets');
+    const secret = await checkSecrets(player, 'inn');
+    if (secret) {
+      if (secret.damage > 0) {
+        await updatePlayer(player.id, { hit_points: Math.max(1, player.hit_points - secret.damage) });
+        player = await getPlayer(player.id);
+      }
+      return res.json({ ...getInnScreen(player, sleeperCount), pendingMessages: ['`0You sleep peacefully and wake fully restored!', ...secret.lines] });
+    }
+  } catch { /* non-critical */ }
   return res.json({ ...getInnScreen(player, sleeperCount), pendingMessages: ['`0You sleep peacefully and wake fully restored!'] });
 }
 
@@ -73,8 +84,17 @@ async function inn_retire({ player, req, res, pendingMessages }) {
     return res.json({ ...screen, pendingMessages });
   }
 
+  const SLEEP_MESSAGES = [
+    'You find a quiet corner, pull a rough blanket over yourself, and drift off to sleep. Your dreams are filled with blood, gold, and glory yet to come.',
+    'The candles gutter out one by one. You close your eyes and sink into a deep sleep, dreaming of the challenges tomorrow will bring.',
+    'The innkeeper snuffs the last lantern. Somewhere outside, a wolf howls at the moon. You are already asleep, dreaming of battle.',
+    'You stretch out on the straw mattress and stare at the rafters until your eyes grow heavy. Sleep takes you quickly, and with it, dreams of fortune and steel.',
+    'The fire burns low. The other patrons fall quiet. You drift off to sleep, and in your dreams, the dragon waits — but so do you.',
+    'You sink into the warmest sleep you\'ve had in weeks. Tomorrow will be hard. Tonight, you dream of victory.',
+  ];
+  const sleepMsg = SLEEP_MESSAGES[Math.floor(Math.random() * SLEEP_MESSAGES.length)];
   req.session.destroy();
-  return res.json({ screen: 'login', title: '', lines: [], choices: [], pendingMessages: ['`7You find a quiet corner and drift off to sleep. The inn grows dark around you.'] });
+  return res.json({ screen: 'login', campLogout: true, sleepMessage: sleepMsg, title: '', lines: [], choices: [] });
 }
 
 async function inn_wake({ player, req, res, pendingMessages }) {
@@ -161,6 +181,17 @@ async function inn_use_bandage({ player, req, res, pendingMessages }) {
 // ── BANK ──────────────────────────────────────────────────────────────────────
 
 async function bank({ player, req, res, pendingMessages }) {
+  try {
+    const { checkSecrets } = require('../secrets');
+    const secret = await checkSecrets(player, 'bank');
+    if (secret) {
+      if (secret.damage > 0) {
+        await updatePlayer(player.id, { hit_points: Math.max(1, player.hit_points - secret.damage) });
+        player = await getPlayer(player.id);
+      }
+      return res.json({ ...getBankScreen(player), pendingMessages: [...pendingMessages, ...secret.lines] });
+    }
+  } catch { /* non-critical */ }
   return res.json({ ...getBankScreen(player), pendingMessages });
 }
 

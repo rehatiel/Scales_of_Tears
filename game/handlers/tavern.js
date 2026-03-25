@@ -1,19 +1,22 @@
 const {
   pool, getPlayer, updatePlayer, getPlayersInTown, addNews,
-  sendMail, getInboxMail, getSentMail, markMailRead, getUnreadMailCount,
+  sendMail, getInboxMail, getSentMail, markMailRead, getUnreadMailCount, getAllPlayers,
   getOnlinePlayers, postBounty, getAllActiveBounties, collectBounties,
   createArenaChallenge, getPendingChallengesForPlayer, getArenaChallenge, updateArenaChallenge,
   placeBet, resolveArenaBets, getOpenArenaChallenge,
+  createPvpSession,
 } = require('../../db');
 const { getRandomMonster, TOWNS } = require('../data');
-const { resolvePvP } = require('../combat');
+const { resolvePvP, resolvePvPRound } = require('../combat');
 const {
   getTavernScreen, getTavernDrinkScreen, getTavernEncounterScreen,
   getTavernPlayerScreen, getPlayerInspectScreen,
-  getMailHubScreen, getMailInboxScreen, getMailReadScreen, getMailSentScreen, getMailComposeScreen, getBountyPostScreen,
+  getMailHubScreen, getMailRosterScreen, getMailInboxScreen, getMailReadScreen, getMailSentScreen, getMailComposeScreen, getBountyPostScreen,
   getBountyBoardScreen, getArenaLobbyScreen, getArenaBettingScreen, getWhoIsOnlineScreen,
+  getPvPCombatScreen, getPvPChallengeScreen,
 } = require('../engine');
 const { pickEncounter, RESOLVERS } = require('../tavern_events');
+const { pushToast } = require('../sse');
 const { checkLevelUp } = require('../newday');
 const { buildTitleAward } = require('../titles');
 
@@ -60,6 +63,19 @@ async function tavern({ player, req, res, pendingMessages }) {
   if (unread > 0) {
     msgs.push(`\`!Hrok slides a note across the bar: "Got ${unread} message${unread > 1 ? 's' : ''} for ya."`);
   }
+
+  // Secret event check
+  try {
+    const { checkSecrets } = require('../secrets');
+    const secret = await checkSecrets(player, 'tavern');
+    if (secret) {
+      if (secret.damage > 0) {
+        await updatePlayer(player.id, { hit_points: Math.max(1, player.hit_points - secret.damage) });
+        player = await getPlayer(player.id);
+      }
+      return res.json({ ...(await tavernScreen(player)), pendingMessages: [...msgs, ...secret.lines] });
+    }
+  } catch { /* non-critical */ }
 
   return res.json({ ...(await tavernScreen(player)), pendingMessages: msgs });
 }
@@ -120,59 +136,42 @@ async function tavern_attack({ player, param, req, res, pendingMessages }) {
     return res.json({ ...(await tavernScreen(player)), pendingMessages: ['`@Invalid target.'] });
   if (target.id === player.id)
     return res.json({ ...(await tavernScreen(player)), pendingMessages: ['`@You cannot attack yourself.'] });
+  if (player.human_fights_left <= 0)
+    return res.json({ ...(await tavernScreen(player)), pendingMessages: ['`@No human fights left today!'] });
+  if (target.dead)
+    return res.json({ ...(await tavernScreen(player)), pendingMessages: [`\`7${target.handle} is already dead.`] });
 
-  const client = await pool.connect();
-  let attackerWon, log, freshPlayer, fullTarget, msgs;
-  try {
-    await client.query('BEGIN');
-    const [idA, idB] = [player.id, target.id].sort((a, b) => a - b);
-    await client.query('SELECT id FROM players WHERE id = $1 FOR UPDATE', [idA]);
-    await client.query('SELECT id FROM players WHERE id = $1 FOR UPDATE', [idB]);
+  const fullTarget = await getPlayer(target.id);
+  if (!fullTarget || fullTarget.dead)
+    return res.json({ ...(await tavernScreen(player)), pendingMessages: ['`@That player is no longer available.'] });
 
-    const { rows: [fp] } = await client.query('SELECT * FROM players WHERE id = $1', [player.id]);
-    const { rows: [ft] } = await client.query('SELECT * FROM players WHERE id = $1', [target.id]);
-    freshPlayer = fp;
-    fullTarget  = ft;
+  // Vampire: Hypnosis — pre-combat instant-win check (before fight counter is spent)
+  if (player.is_vampire) {
+    const hypChance = Math.min(0.50, (player.charm || 10) / 60);
+    if (Math.random() < hypChance) {
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const [idA, idB] = [player.id, fullTarget.id].sort((a, b) => a - b);
+        await client.query('SELECT id FROM players WHERE id = $1 FOR UPDATE', [idA]);
+        await client.query('SELECT id FROM players WHERE id = $1 FOR UPDATE', [idB]);
+        const stolen = Math.floor(Number(fullTarget.gold) * 0.25);
+        const expGain = fullTarget.level * 100;
+        await client.query('UPDATE players SET human_fights_left = $1, kills = $2, gold = $3, exp = $4, last_killed_by = $5 WHERE id = $6',
+          [player.human_fights_left - 1, player.kills + 1, Number(player.gold) + stolen, Number(player.exp) + expGain, fullTarget.id, player.id]);
+        await client.query('UPDATE players SET dead = 1, hit_points = 0, gold = $1, last_killed_by = $2 WHERE id = $3',
+          [Math.max(0, Number(fullTarget.gold) - stolen), player.id, fullTarget.id]);
+        await client.query('COMMIT');
 
-    if (freshPlayer.id === fullTarget.id) {
-      await client.query('ROLLBACK');
-      return res.json({ ...(await tavernScreen(player)), pendingMessages: ['`@You cannot attack yourself.'] });
-    }
-    if (freshPlayer.human_fights_left <= 0) {
-      await client.query('ROLLBACK');
-      return res.json({ ...(await tavernScreen(player)), pendingMessages: ['`@No human fights left today!'] });
-    }
-    if (fullTarget.dead) {
-      await client.query('ROLLBACK');
-      return res.json({ ...(await tavernScreen(player)), pendingMessages: [`\`7${fullTarget.handle} is already dead.`] });
-    }
-
-    // Vampire: Hypnosis
-    if (freshPlayer.is_vampire) {
-      const hypChance = Math.min(0.50, (freshPlayer.charm || 10) / 60);
-      if (Math.random() < hypChance) {
-        attackerWon = true;
-        msgs = [
+        await addNews(`\`#${player.handle}\`% mesmerised \`@${fullTarget.handle}\`% with a vampiric gaze and claimed their gold!`);
+        const msgs = [
           `\`#Your eyes meet ${fullTarget.handle}'s. Your gaze holds them — they cannot move.`,
           `\`#${fullTarget.handle} stands helpless as your will overwhelms theirs.`,
           '`#Hypnosis succeeds. They never had a chance.',
+          `\`$You take ${stolen.toLocaleString()} gold. +${expGain.toLocaleString()} exp.`,
         ];
-        await client.query('UPDATE players SET human_fights_left = $1 WHERE id = $2',
-          [freshPlayer.human_fights_left - 1, freshPlayer.id]);
-        const stolen = Math.floor(Number(fullTarget.gold) * 0.25);
-        const expGain = fullTarget.level * 100;
-        await client.query('UPDATE players SET kills = $1, gold = $2, exp = $3, last_killed_by = $4 WHERE id = $5',
-          [freshPlayer.kills + 1, Number(freshPlayer.gold) + stolen, Number(freshPlayer.exp) + expGain, fullTarget.id, freshPlayer.id]);
-        await client.query('UPDATE players SET dead = 1, gold = $1, last_killed_by = $2 WHERE id = $3',
-          [Math.max(0, Number(fullTarget.gold) - stolen), freshPlayer.id, fullTarget.id]);
-        msgs.push(`\`$You take ${stolen.toLocaleString()} gold. +${expGain.toLocaleString()} exp.`);
-        await client.query('COMMIT');
-        await addNews(`\`#${freshPlayer.handle}\`% mesmerised \`@${fullTarget.handle}\`% with a vampiric gaze and claimed their gold!`);
-
-        // Collect bounties
-        const bountyGold = await collectBounties(freshPlayer.id, fullTarget.id);
+        const bountyGold = await collectBounties(player.id, fullTarget.id);
         if (bountyGold > 0) msgs.push(`\`$You collect a bounty of ${bountyGold.toLocaleString()} gold!`);
-
         player = await getPlayer(player.id);
         const hypLevelUp = checkLevelUp(player);
         if (hypLevelUp) {
@@ -182,84 +181,79 @@ async function tavern_attack({ player, param, req, res, pendingMessages }) {
           msgs.push(`\`$LEVEL UP! You are now level ${hypLevelUp.newLevel}!`);
         }
         return res.json({ ...(await tavernScreen(player)), pendingMessages: msgs });
+      } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+      } finally {
+        client.release();
       }
     }
-
-    ({ attackerWon, log } = resolvePvP(freshPlayer, fullTarget));
-    msgs = [...log.slice(-5)];
-
-    await client.query('UPDATE players SET human_fights_left = $1 WHERE id = $2',
-      [freshPlayer.human_fights_left - 1, freshPlayer.id]);
-
-    if (attackerWon) {
-      const stolen = Math.floor(Number(fullTarget.gold) * 0.25);
-      let expGain = fullTarget.level * 100;
-
-      // Revenge bonus: +50% if target was last killer
-      const isRevenge = freshPlayer.last_killed_by === fullTarget.id;
-      if (isRevenge) {
-        expGain = Math.floor(expGain * 1.5);
-        stolen; // gold bonus doesn't apply separately
-        msgs.push('`$Revenge! +50% EXP bonus for settling the score.');
-      }
-
-      await client.query(
-        'UPDATE players SET kills = $1, gold = $2, exp = $3, last_killed_by = $4 WHERE id = $5',
-        [freshPlayer.kills + 1, Number(freshPlayer.gold) + stolen, Number(freshPlayer.exp) + expGain, fullTarget.id, freshPlayer.id]
-      );
-      await client.query(
-        'UPDATE players SET dead = 1, gold = $1, last_killed_by = $2 WHERE id = $3',
-        [Math.max(0, Number(fullTarget.gold) - stolen), freshPlayer.id, fullTarget.id]
-      );
-      msgs.push(`\`$You defeated ${fullTarget.handle} and stole ${stolen.toLocaleString()} gold! +${expGain.toLocaleString()} exp.`);
-    } else {
-      const hpLost = Math.floor(freshPlayer.hit_points * 0.5);
-      await client.query('UPDATE players SET hit_points = $1 WHERE id = $2',
-        [Math.max(1, freshPlayer.hit_points - hpLost), freshPlayer.id]);
-      msgs.push(`\`@You were defeated! You lost ${hpLost} HP.`);
-    }
-
-    await client.query('COMMIT');
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    client.release();
   }
 
-  if (attackerWon) {
-    await addNews(`\`@${freshPlayer.handle}\`% defeated \`@${fullTarget.handle}\`% in the tavern and stole gold!`);
+  await updatePlayer(player.id, { human_fights_left: player.human_fights_left - 1 });
+  player = await getPlayer(player.id);
 
-    // Collect bounties after commit
-    const bountyGold = await collectBounties(freshPlayer.id, fullTarget.id);
-    if (bountyGold > 0) {
-      msgs.push(`\`$You collect a bounty of ${bountyGold.toLocaleString()} gold!`);
-      await addNews(`\`$${freshPlayer.handle}\`% collected a bounty on \`@${fullTarget.handle}\`%!`);
-    }
+  const onlinePlayers = await getOnlinePlayers(player.id);
+  const isOnline = onlinePlayers.some(p => p.id === fullTarget.id);
 
-    player = await getPlayer(player.id);
-    const pvpLevelUp = checkLevelUp(player);
-    if (pvpLevelUp) {
-      await updatePlayer(player.id, pvpLevelUp.updates);
-      player = await getPlayer(player.id);
-      await addNews(`\`$${player.handle}\`% has reached level \`$${pvpLevelUp.newLevel}\`%!`);
-      msgs.push(`\`$LEVEL UP! You are now level ${pvpLevelUp.newLevel}!`);
-    }
-    if (player.kills >= 10) {
-      const titleAward = buildTitleAward(player, 'widowmaker');
-      if (titleAward) {
-        await updatePlayer(player.id, titleAward);
-        player = await getPlayer(player.id);
-        msgs.push('`@You have earned the title: `$the Widowmaker`@. The tavern falls silent.');
-        await addNews(`\`@${player.handle}\`% has earned the title \`$the Widowmaker\`% — their tenth kill.`);
-      }
-    }
-  } else {
-    await addNews(`\`@${freshPlayer.handle}\`% was defeated by \`$${fullTarget.handle}\`% in the tavern!`);
-    player = await getPlayer(player.id);
+  // ── ONLINE target → real-time session ─────────────────────────────────────
+  if (isOnline) {
+    const { pickChallengeMsg } = require('./pvp_session');
+    const challengeMsg = pickChallengeMsg(player.handle, fullTarget.handle);
+    const session = await createPvpSession({
+      challenger_id:         player.id,
+      defender_id:           fullTarget.id,
+      challenger_hp:         player.hit_points,
+      defender_hp:           fullTarget.hit_points,
+      challenger_skill_uses: player.skill_uses_left || 0,
+      defender_skill_uses:   fullTarget.skill_uses_left || 0,
+      challenge_msg:         challengeMsg,
+    });
+    req.session.livePvpId = session.id;
+    const { getPvPSessionWaitingScreen } = require('../engine');
+    const { push: ssePush } = require('../sse');
+    const initLog = [
+      challengeMsg,
+      `\`7Waiting for ${fullTarget.handle} to accept...`,
+    ];
+    // Push challenge screen to defender immediately via SSE
+    try {
+      ssePush(fullTarget.id, {
+        ...getPvPChallengeScreen(fullTarget, session, player.handle),
+        pendingMessages: [],
+      });
+    } catch {}
+    return res.json({
+      ...getPvPSessionWaitingScreen(player, session, fullTarget.handle, initLog, []),
+      pendingMessages,
+    });
   }
 
-  return res.json({ ...(await tavernScreen(player)), pendingMessages: msgs });
+  // ── OFFLINE target → AI turn-based combat (session-only) ─────────────────
+  req.session.pvpCombat = {
+    targetId:        fullTarget.id,
+    handle:          fullTarget.handle,
+    weapon_name:     fullTarget.weapon_name || 'steel',
+    class:           fullTarget.class,
+    currentHp:       fullTarget.hit_points,
+    maxHp:           fullTarget.hit_points,
+    strength:        fullTarget.strength,
+    defense:         fullTarget.defense,
+    level:           fullTarget.level,
+    perks:           fullTarget.perks,
+    specialization:  fullTarget.specialization,
+    skill_uses_left: fullTarget.skill_uses_left || 0,
+    is_vampire:      fullTarget.is_vampire || false,
+    charm:           fullTarget.charm || 0,
+    round: 1,
+    history: [],
+  };
+
+  const initLog = [
+    { type: 'challenge', text: `\`!You draw your weapon and face ${fullTarget.handle}!` },
+    { type: 'status',    text: '`7They are offline — their skills will fight for them.' },
+  ];
+  return res.json({ ...getPvPCombatScreen(player, req.session.pvpCombat, initLog, false, false, false, false, 1, []), pendingMessages });
 }
 
 async function tavern_intimidate({ player, param, req, res, pendingMessages }) {
@@ -503,6 +497,11 @@ async function tavern_mail_read({ player, param, req, res, pendingMessages }) {
   return res.json({ ...getMailReadScreen(player, mail), pendingMessages });
 }
 
+async function tavern_mail_new({ player, req, res, pendingMessages }) {
+  const allPlayers = await getAllPlayers();
+  return res.json({ ...getMailRosterScreen(player, allPlayers), pendingMessages });
+}
+
 async function tavern_mail_compose({ player, param, req, res, pendingMessages }) {
   const targetId = parseInt(param);
   if (!targetId) return res.json({ ...(await tavernScreen(player)), pendingMessages: ['`@No target selected.'] });
@@ -524,6 +523,8 @@ async function tavern_mail_send({ player, param, req, res, pendingMessages }) {
 
   await sendMail(player.id, targetId, message);
   delete req.session.mailTargetId;
+  // Notify recipient immediately if they're online
+  pushToast(targetId, `\`0You have a new message from \`7${player.handle}\`0. Check the tavern mailbox.`);
   player = await getPlayer(player.id);
 
   return res.json({ ...(await tavernScreen(player)), pendingMessages: [
@@ -564,6 +565,7 @@ async function tavern_bounty_confirm({ player, param, req, res, pendingMessages 
   delete req.session.bountyTargetId;
 
   await addNews(`\`@A bounty of \`$${gold.toLocaleString()}\`@ gold has been placed on \`@${target.handle}\`%!`);
+  pushToast(targetId, `\`@A bounty of \`$${gold.toLocaleString()}\`@ gold has been placed on your head!`);
   player = await getPlayer(player.id);
 
   return res.json({ ...(await tavernScreen(player)), pendingMessages: [
@@ -602,6 +604,7 @@ async function tavern_arena_challenge({ player, param, req, res, pendingMessages
 
   const challenge = await createArenaChallenge(player.id, targetId, town);
   await addNews(`\`!${player.handle}\`% has challenged \`$${target.handle}\`% to an arena duel!`);
+  pushToast(targetId, `\`!${player.handle}\`% has challenged you to an arena duel! Visit the tavern arena to accept. (Challenge #${challenge.id})`);
 
   return res.json({ ...(await tavernScreen(player)), pendingMessages: [
     `\`!You challenge ${target.handle} to a duel in the arena!`,
@@ -703,6 +706,172 @@ async function _placeBetFor(player, param, side, req, res, pendingMessages) {
   ]});
 }
 
+// ── Interactive PvP (turn-based duel) ─────────────────────────────────────────
+
+async function pvp_combat({ player, action, req, res, pendingMessages }) {
+  const pvpState = req.session.pvpCombat;
+  if (!pvpState)
+    return res.json({ ...(await tavernScreen(player)), pendingMessages: ['`7The duel has already ended.'] });
+
+  // Map action to combat verb; validate power move availability
+  const act = { pvp_attack: 'attack', pvp_run: 'run', pvp_power: 'power' }[action] || 'attack';
+
+  if (act === 'power') {
+    if ((player.skill_uses_left || 0) <= 0)
+      return res.json({
+        ...getPvPCombatScreen(player, pvpState, [], false, false, false, false, pvpState.round, pvpState.history),
+        pendingMessages: [...pendingMessages, '`@No power uses left!'],
+      });
+    await updatePlayer(player.id, { skill_uses_left: player.skill_uses_left - 1 });
+    player = await getPlayer(player.id);
+  }
+
+  const { playerDamage, defenderDamage, fled, defenderFled, log } = resolvePvPRound(player, pvpState, act);
+
+  const round       = pvpState.round;
+  const newTargetHp = Math.max(0, pvpState.currentHp - playerDamage);
+  const newPlayerHp = Math.max(0, player.hit_points - defenderDamage);
+  const newHistory  = [...pvpState.history, ...log].slice(-30);
+
+  // Attacker fled
+  if (fled) {
+    req.session.pvpCombat = null;
+    return res.json({
+      ...getPvPCombatScreen(player, pvpState, log, false, false, true, false, round, pvpState.history),
+      pendingMessages,
+    });
+  }
+
+  // Defender fled
+  if (defenderFled) {
+    req.session.pvpCombat = null;
+    pvpState.currentHp = newTargetHp;
+    return res.json({
+      ...getPvPCombatScreen(player, pvpState, log, false, false, false, true, round, pvpState.history),
+      pendingMessages,
+    });
+  }
+
+  // Target defeated
+  if (newTargetHp <= 0) {
+    req.session.pvpCombat = null;
+    const fullTarget = await getPlayer(pvpState.targetId);
+    const msgs = [...pendingMessages];
+
+    if (fullTarget && !fullTarget.dead) {
+      const stolen = Math.floor(Number(fullTarget.gold) * 0.25);
+      let expGain = pvpState.level * 100;
+      const isRevenge = player.last_killed_by === pvpState.targetId;
+      if (isRevenge) expGain = Math.floor(expGain * 1.5);
+
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const [idA, idB] = [player.id, pvpState.targetId].sort((a, b) => a - b);
+        await client.query('SELECT id FROM players WHERE id = $1 FOR UPDATE', [idA]);
+        await client.query('SELECT id FROM players WHERE id = $1 FOR UPDATE', [idB]);
+        await client.query(
+          'UPDATE players SET kills = $1, gold = $2, exp = $3, last_killed_by = $4, hit_points = $5 WHERE id = $6',
+          [player.kills + 1, Number(player.gold) + stolen, Number(player.exp) + expGain, pvpState.targetId, newPlayerHp, player.id]
+        );
+        await client.query(
+          'UPDATE players SET dead = 1, hit_points = 0, gold = $1, last_killed_by = $2 WHERE id = $3',
+          [Math.max(0, Number(fullTarget.gold) - stolen), player.id, pvpState.targetId]
+        );
+        await client.query('COMMIT');
+      } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+      } finally {
+        client.release();
+      }
+
+      await addNews(`\`@${player.handle}\`% slew \`@${pvpState.handle}\`% in a duel and claimed their gold!`);
+      const bountyGold = await collectBounties(player.id, pvpState.targetId);
+      if (bountyGold > 0) msgs.push(`\`$You collect a bounty of ${bountyGold.toLocaleString()} gold!`);
+      if (isRevenge) msgs.push('`$Revenge! +50% EXP bonus.');
+      msgs.push(`\`$You defeat ${pvpState.handle} and steal ${stolen.toLocaleString()} gold! +${expGain.toLocaleString()} exp.`);
+
+      player = await getPlayer(player.id);
+      const lvlUp = checkLevelUp(player);
+      if (lvlUp) {
+        await updatePlayer(player.id, lvlUp.updates);
+        player = await getPlayer(player.id);
+        await addNews(`\`$${player.handle}\`% has reached level \`$${lvlUp.newLevel}\`%!`);
+        msgs.push(`\`$LEVEL UP! You are now level ${lvlUp.newLevel}!`);
+      }
+      if (player.kills >= 10) {
+        const titleAward = buildTitleAward(player, 'widowmaker');
+        if (titleAward) {
+          await updatePlayer(player.id, titleAward);
+          player = await getPlayer(player.id);
+          msgs.push('`@You have earned the title: `$the Widowmaker`@. The tavern falls silent.');
+          await addNews(`\`@${player.handle}\`% has earned the title \`$the Widowmaker\`% — their tenth kill.`);
+        }
+      }
+    }
+
+    pvpState.currentHp = 0;
+    return res.json({ ...getPvPCombatScreen(player, pvpState, log, true, false, false, false, round, pvpState.history), pendingMessages: msgs });
+  }
+
+  // Player defeated
+  if (newPlayerHp <= 0) {
+    req.session.pvpCombat = null;
+    const fullTarget = await getPlayer(pvpState.targetId);
+    const stolen  = Math.floor(Number(player.gold) * 0.25);
+    const expGain = pvpState.level * 100;
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const [idA, idB] = [player.id, pvpState.targetId].sort((a, b) => a - b);
+      await client.query('SELECT id FROM players WHERE id = $1 FOR UPDATE', [idA]);
+      await client.query('SELECT id FROM players WHERE id = $1 FOR UPDATE', [idB]);
+      await client.query(
+        'UPDATE players SET dead = 1, hit_points = 0, gold = $1, last_killed_by = $2 WHERE id = $3',
+        [Math.max(0, Number(player.gold) - stolen), pvpState.targetId, player.id]
+      );
+      if (fullTarget && !fullTarget.dead) {
+        await client.query(
+          'UPDATE players SET kills = $1, gold = $2, exp = $3, last_killed_by = $4 WHERE id = $5',
+          [fullTarget.kills + 1, Number(fullTarget.gold) + stolen, Number(fullTarget.exp) + expGain, player.id, pvpState.targetId]
+        );
+      }
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+
+    await addNews(`\`@${pvpState.handle}\`% slew \`@${player.handle}\`% in a duel!`);
+    player = await getPlayer(player.id);
+    pvpState.currentHp = newTargetHp;
+    return res.json({
+      ...getPvPCombatScreen(player, pvpState, log, false, true, false, false, round, pvpState.history),
+      pendingMessages,
+    });
+  }
+
+  // Combat continues
+  pvpState.currentHp = newTargetHp;
+  pvpState.round     = round + 1;
+  pvpState.history   = newHistory;
+  await updatePlayer(player.id, { hit_points: newPlayerHp });
+  player = await getPlayer(player.id);
+
+  return res.json({
+    ...getPvPCombatScreen(player, pvpState, log, false, false, false, false, round + 1, newHistory),
+    pendingMessages,
+  });
+}
+
+const pvp_attack = pvp_combat;
+const pvp_run    = pvp_combat;
+const pvp_power  = pvp_combat;
+
 module.exports = {
   tavern,
   players: tavern,
@@ -717,6 +886,7 @@ module.exports = {
   tavern_buyround,
   tavern_encounter,
   tavern_mail_hub,
+  tavern_mail_new,
   tavern_mail_inbox,
   tavern_mail_sent,
   tavern_mail_read,
@@ -732,4 +902,7 @@ module.exports = {
   arena_bet,
   arena_bet_challenger,
   arena_bet_defender,
+  pvp_attack,
+  pvp_run,
+  pvp_power,
 };

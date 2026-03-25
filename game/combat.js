@@ -200,4 +200,152 @@ function resolvePvP(attacker, defender) {
   return { attackerWon: aHp > 0, log, attackerHpLeft: aHp, defenderHpLeft: dHp };
 }
 
-module.exports = { resolveRound, resolvePvP };
+// ── PvP hit helpers ────────────────────────────────────────────────────────────
+// Both take a player-like object (real player or pvpState snapshot)
+
+function _pvpAttackerHit(attacker, defenderDef, defenderHandle, action, log) {
+  const { hasPerk, hasSpec, CLASS_POWER_MOVES } = require('./data');
+  const isPower = action === 'power';
+  let raw = rollAttack(attacker.strength);
+
+  if (isPower) {
+    const move = CLASS_POWER_MOVES[attacker.class];
+    if (move) {
+      raw = Math.floor(raw * move.damageMult);
+      log.push({ type: 'power_move', text: `\`!You unleash ${move.name} on ${defenderHandle}!` });
+    }
+  }
+
+  const critChance = 0.08
+    + (hasPerk(attacker, 'hunters_eye') ? 0.08 : 0)
+    + (hasSpec(attacker, 'assassin')    ? 0.15 : 0);
+  const isCrit = !isPower && Math.random() < critChance;
+  if (isCrit) raw = Math.floor(raw * 2.2);
+
+  // Vampire: chance to disorient, boosting this hit
+  if (attacker.is_vampire && !isPower && Math.random() < Math.min(0.30, (attacker.charm || 10) / 100)) {
+    raw = Math.floor(raw * 2.0);
+    log.push({ type: 'vampire', text: `\`#Your gaze locks onto ${defenderHandle} — their will crumbles!` });
+  }
+
+  const dmg = Math.max(1, applyDefense(raw, defenderDef));
+
+  if (isPower) {
+    log.push({ type: 'player_attack', text: `You deal \`$${dmg}\`% damage to ${defenderHandle}!` });
+  } else if (isCrit) {
+    log.push({ type: 'player_crit', text: `\`$** CRITICAL HIT! **\`% You deal \`$${dmg}\`% damage to ${defenderHandle}!` });
+  } else {
+    log.push({ type: 'player_attack', text: `You strike ${defenderHandle} with your ${attacker.weapon_name || 'weapon'} for \`$${dmg}\`7 damage!` });
+  }
+  return dmg;
+}
+
+function _pvpDefenderHit(pvpState, attackerDef, attackerHandle, action, log) {
+  const { hasPerk, hasSpec, CLASS_POWER_MOVES } = require('./data');
+  const isPower = action === 'power';
+  let raw = rollAttack(pvpState.strength);
+
+  if (isPower) {
+    const move = CLASS_POWER_MOVES[pvpState.class];
+    if (move) {
+      raw = Math.floor(raw * move.damageMult);
+      log.push({ type: 'power_move', text: `\`@${pvpState.handle} unleashes ${move.name}!` });
+    }
+  }
+
+  const critChance = 0.08
+    + (hasPerk(pvpState, 'hunters_eye') ? 0.08 : 0)
+    + (hasSpec(pvpState, 'assassin')    ? 0.15 : 0);
+  const isCrit = !isPower && Math.random() < critChance;
+  if (isCrit) raw = Math.floor(raw * 2.2);
+
+  // Vampire defender: drain chance
+  if (pvpState.is_vampire && !isPower && Math.random() < 0.25) {
+    raw = Math.floor(raw * 1.5);
+    log.push({ type: 'vampire', text: `\`#${pvpState.handle} drains your life force!` });
+  }
+
+  const dmg = Math.max(1, applyDefense(raw, attackerDef));
+
+  if (isPower) {
+    log.push({ type: 'defender_attack', text: `${pvpState.handle} deals \`@${dmg}\`% damage to you!` });
+  } else if (isCrit) {
+    log.push({ type: 'defender_crit', text: `\`@** CRITICAL HIT! **\`% ${pvpState.handle} deals \`@${dmg}\`% damage to you!` });
+  } else {
+    log.push({ type: 'defender_attack', text: `${pvpState.handle} retaliates with ${pvpState.weapon_name || 'steel'} for \`@${dmg}\`7 damage!` });
+  }
+  return dmg;
+}
+
+// Resolve one round of interactive PvP combat.
+// attackerAction: 'attack' | 'power' | 'run'  (attacker's chosen action)
+// Defender AI picks its own action each round using pvpState stats + perks/specs.
+// Mutates pvpState.skill_uses_left when defender uses a power move.
+// Returns { playerDamage, defenderDamage, fled, defenderFled, log }
+function resolvePvPRound(player, pvpState, attackerAction) {
+  const { hasPerk, hasSpec } = require('./data');
+  const log = [];
+
+  // ── Attacker flees ──────────────────────────────────────────────────────────
+  if (attackerAction === 'run') {
+    let fleeChance = 0.40;
+    if (player.class === 3) fleeChance += 0.15;
+    if (player.is_vampire) fleeChance = 0.95;
+    if (hasPerk(player, 'foresight')) fleeChance += 0.20;
+    if (hasSpec(player, 'strider'))   fleeChance += 0.10;
+    fleeChance = Math.min(0.90, fleeChance);
+
+    if (Math.random() < fleeChance) {
+      const txt = player.is_vampire
+        ? '`#You dissolve into shadow and vanish from the duel!'
+        : `\`7You disengage and slip away from ${pvpState.handle}!`;
+      log.push({ type: 'flee_success', text: txt });
+      return { playerDamage: 0, defenderDamage: 0, fled: true, defenderFled: false, log };
+    }
+    log.push({ type: 'flee_fail', text: `\`7You try to escape, but ${pvpState.handle} cuts you off!` });
+    const dDmg = _pvpDefenderHit(pvpState, player.defense, player.handle, 'attack', log);
+    return { playerDamage: 0, defenderDamage: dDmg, fled: false, defenderFled: false, log };
+  }
+
+  // ── AI: pick defender action ────────────────────────────────────────────────
+  const defHpRatio = pvpState.currentHp / Math.max(1, pvpState.maxHp);
+  let defAction = 'attack';
+  if (!pvpState.is_vampire && defHpRatio < 0.25 && Math.random() < 0.40) {
+    defAction = 'run';
+  } else if ((pvpState.skill_uses_left || 0) > 0 && Math.random() < 0.35) {
+    defAction = 'power';
+  }
+
+  // ── Defender tries to flee ──────────────────────────────────────────────────
+  if (defAction === 'run') {
+    let defFleeChance = 0.40;
+    if (pvpState.class === 3) defFleeChance += 0.15;
+    if (hasPerk(pvpState, 'foresight')) defFleeChance += 0.20;
+    defFleeChance = Math.min(0.85, defFleeChance);
+
+    if (Math.random() < defFleeChance) {
+      log.push({ type: 'defender_flee', text: `\`7${pvpState.handle} turns and flees the duel!` });
+      // Attacker still lands their hit on the fleeing defender
+      const pDmg = _pvpAttackerHit(player, pvpState.defense, pvpState.handle, attackerAction, log);
+      return { playerDamage: pDmg, defenderDamage: 0, fled: false, defenderFled: true, log };
+    }
+    log.push({ type: 'defender_flee_fail', text: `\`7${pvpState.handle} tries to flee but you block the escape!` });
+    defAction = 'attack';
+  }
+
+  // ── Attacker strikes ────────────────────────────────────────────────────────
+  const playerDamage = _pvpAttackerHit(player, pvpState.defense, pvpState.handle, attackerAction, log);
+
+  // ── Defender retaliates if still standing ───────────────────────────────────
+  let defenderDamage = 0;
+  if (pvpState.currentHp - playerDamage > 0) {
+    defenderDamage = _pvpDefenderHit(pvpState, player.defense, player.handle, defAction, log);
+    if (defAction === 'power') {
+      pvpState.skill_uses_left = Math.max(0, (pvpState.skill_uses_left || 0) - 1);
+    }
+  }
+
+  return { playerDamage, defenderDamage, fled: false, defenderFled: false, log };
+}
+
+module.exports = { resolveRound, resolvePvP, resolvePvPRound };

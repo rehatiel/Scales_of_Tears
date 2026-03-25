@@ -122,12 +122,18 @@ router.post('/players/:id/password', ar(async (req, res) => {
   res.json({ ok: true });
 }));
 
-// POST /api/admin/players/:id/ban — ban or unban a player
+// POST /api/admin/players/:id/ban — ban or unban (bans the whole account)
 router.post('/players/:id/ban', ar(async (req, res) => {
   const { id } = req.params;
   const { banned } = req.body;
+  const r = await pool.query('SELECT account_id FROM players WHERE id = $1', [id]);
+  const accountId = r.rows[0]?.account_id;
+  if (accountId) {
+    const { setBanAccount } = require('../db');
+    await setBanAccount(accountId, !!banned);
+  }
   await pool.query('UPDATE players SET banned = $1 WHERE id = $2', [banned ? 1 : 0, id]);
-  console.log(`[ADMIN] POST /players/${id}/ban — banned=${!!banned}`);
+  console.log(`[ADMIN] POST /players/${id}/ban — banned=${!!banned} (accountId=${accountId})`);
   res.json({ ok: true, banned: !!banned });
 }));
 

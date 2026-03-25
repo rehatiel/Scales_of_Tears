@@ -8,10 +8,13 @@ const {
   getAbductionDungeonScreen, getInnScreen,
   setWorldEventCache, setInvaderCache,
 } = require('../game/engine');
-const { getActiveWorldEvent, getInvadingEnemies } = require('../db');
+const { getActiveWorldEvent, getInvadingEnemies, getActivePvpSessionForPlayer, getCharactersForAccount, createCharacterForAccount } = require('../db');
+const { getCharSelectScreen, getSetupScreen: _getSetupScreen } = require('../game/engine');
 const { getEventDef } = require('../game/world_events');
 const { parseWounds, infectionLabel } = require('../game/wounds');
 const { getStartingRepUpdates } = require('../game/factions');
+
+const { register, unregister } = require('../game/sse');
 
 const router = express.Router();
 const ar = fn => (req, res, next) => fn(req, res, next).catch(next);
@@ -62,12 +65,17 @@ const HANDLERS = {
   ...require('../game/handlers/prestige'),
   ...require('../game/handlers/titles'),
   ...require('../game/handlers/veilborn'),
+  ...require('../game/handlers/pvp_session'),
+  ...require('../game/handlers/characters'),
 };
 
 // Auth guard
+// Allow through if: (a) playerId is set, or (b) accountId is set and route supports account-only access
+const ACCOUNT_ONLY_PATHS = new Set(['/state', '/stream', '/action']);
 router.use((req, res, next) => {
-  if (!req.session.playerId) return res.status(401).json({ error: 'Not logged in.' });
-  next();
+  if (req.session.playerId) return next();
+  if (req.session.accountId && ACCOUNT_ONLY_PATHS.has(req.path)) return next();
+  return res.status(401).json({ error: 'Not logged in.' });
 });
 
 // Inject player status into every JSON response
@@ -140,6 +148,18 @@ router.post('/setup', ar(async (req, res) => {
 
 // ── Restore state on page load ────────────────────────────────────────────────
 router.get('/state', ar(async (req, res) => {
+  // Account logged in but no character selected yet → show char select
+  if (!req.session.playerId && req.session.accountId) {
+    const chars = await getCharactersForAccount(req.session.accountId);
+    if (chars.length === 0) {
+      // First ever character — create slot 1 and go to setup
+      const newId = await createCharacterForAccount(req.session.accountId, 1);
+      req.session.playerId = newId;
+      return res.json(getSetupScreen('name'));
+    }
+    return res.json(getCharSelectScreen(chars, null, 3));
+  }
+
   const player = await getPlayer(req.session.playerId);
   if (!player) return res.status(401).json({ error: 'Player not found.' });
   if (!player.setup_complete) return res.json(getSetupScreen('name'));
@@ -156,8 +176,86 @@ router.get('/state', ar(async (req, res) => {
   return res.json(getTownScreen(player));
 }));
 
+// ── SSE stream ────────────────────────────────────────────────────────────────
+// Opened once by the client on login; kept alive for the duration of the session.
+// The server pushes full screen objects whenever PvP state changes for this player.
+router.get('/stream', (req, res) => {
+  if (!req.session.playerId) return res.status(401).end();
+  const playerId = req.session.playerId;
+
+  res.set({
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+  res.flushHeaders();
+
+  register(playerId, res);
+
+  const heartbeat = setInterval(() => {
+    try { res.write(': heartbeat\n\n'); } catch {}
+  }, 25000);
+
+  req.on('close', () => {
+    clearInterval(heartbeat);
+    unregister(playerId);
+  });
+});
+
+// ── PvP session polling (legacy fallback) ─────────────────────────────────────
+router.get('/events', ar(async (req, res) => {
+  const player = await getPlayer(req.session.playerId);
+  if (!player) return res.status(401).json({ error: 'Not logged in.' });
+
+  const sessionId = req.session.livePvpId;
+  if (!sessionId) {
+    // If the player isn't tracking a session, nothing to poll
+    return res.json({});
+  }
+
+  const { getPvpSession } = require('../db');
+  let session;
+  try { session = await getPvpSession(sessionId); } catch { return res.json({}); }
+  if (!session) {
+    req.session.livePvpId = null;
+    return res.json({});
+  }
+
+  const isChallenger = session.challenger_id === player.id;
+  const myRole = isChallenger ? 'challenger' : 'defender';
+
+  // Return a new screen when:
+  // 1. Session became active and it's now their turn (or not their turn → still waiting but show updated HP)
+  // 2. Session is complete
+  // 3. Session became active from pending (defender accepted / declined)
+  // Detect state changes by comparing updated_at to what the client last saw
+  const lastSeen = req.session.livePvpLastSeen || '';
+  const updatedAt = session.updated_at ? String(session.updated_at) : '';
+  const changed = updatedAt !== lastSeen;
+
+  if (!changed) return res.json({});
+
+  // State changed — record it and deliver the new screen
+  req.session.livePvpLastSeen = updatedAt;
+  return HANDLERS.pvp_sess_check({ player, action: 'pvp_sess_check', param: null, req, res, pendingMessages: [] });
+}));
+
 // ── Main action dispatcher ────────────────────────────────────────────────────
 router.post('/action', ar(async (req, res) => {
+  // Account logged in but no character selected — only allow char management actions
+  if (!req.session.playerId && req.session.accountId) {
+    const action = typeof req.body.action === 'string' ? req.body.action : '';
+    const CHAR_ACTIONS = new Set(['char_select_slot', 'char_new']);
+    if (!CHAR_ACTIONS.has(action)) {
+      const chars = await getCharactersForAccount(req.session.accountId);
+      return res.json(getCharSelectScreen(chars, null, 3));
+    }
+    const handler = HANDLERS[action];
+    if (handler) return handler({ action, player: null, param: req.body.param, req, res, pendingMessages: [] });
+    return res.status(400).json({ error: 'Unknown action.' });
+  }
+
   let player = await getPlayer(req.session.playerId);
   if (!player) return res.status(401).json({ error: 'Player not found.' });
   if (!player.setup_complete) return res.json(getSetupScreen('name'));
@@ -190,6 +288,19 @@ router.post('/action', ar(async (req, res) => {
 
   const action = typeof req.body.action === 'string' ? req.body.action.slice(0, 64) : '';
   const param  = req.body.param == null ? null : String(req.body.param).slice(0, 256);
+
+  // Live PvP challenge interruption — if someone challenged this player, redirect them
+  const PVP_SESS_ACTIONS = new Set(['pvp_sess_check','pvp_sess_accept','pvp_sess_decline','pvp_sess_withdraw','pvp_sess_attack','pvp_sess_power','pvp_sess_run']);
+  if (!PVP_SESS_ACTIONS.has(action)) {
+    try {
+      const liveSess = await getActivePvpSessionForPlayer(player.id);
+      if (liveSess) {
+        if (!req.session.livePvpId) req.session.livePvpId = liveSess.id;
+        const handler = HANDLERS.pvp_sess_check;
+        if (handler) return handler({ action: 'pvp_sess_check', player, param: null, req, res, pendingMessages });
+      }
+    } catch { /* pvp_sessions table may not exist yet — safe to skip */ }
+  }
   const NEAR_DEATH_ALLOWED = ['near_death_wait', 'near_death_accept', 'town', 'logout'];
   const CAPTIVE_ALLOWED    = ['captive_wait', 'captive_buy_freedom', 'captive_escape', 'logout'];
   const CAMPING_ALLOWED    = ['camp_wait', 'road_turn_back', 'road_encounter_fight', 'road_encounter_run', 'road_encounter_power', 'logout'];
@@ -233,6 +344,17 @@ router.post('/action', ar(async (req, res) => {
           pendingMessages = [...pendingMessages, `\`@${inv.given_name} prowls the gates — you take \`@${dmg}\`@ damage forcing your way through!`];
         }
       }
+      try {
+        const { checkSecrets } = require('../game/secrets');
+        const secret = await checkSecrets(player, 'town');
+        if (secret) {
+          if (secret.damage > 0) {
+            await updatePlayer(player.id, { hit_points: Math.max(1, player.hit_points - secret.damage) });
+            player = await getPlayer(player.id);
+          }
+          return res.json({ ...getTownScreen(player), pendingMessages: [...pendingMessages, ...secret.lines] });
+        }
+      } catch { /* non-critical */ }
       return res.json({ ...getTownScreen(player), pendingMessages });
     }
 

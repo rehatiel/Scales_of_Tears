@@ -749,6 +749,7 @@ function getTownScreen(player) {
     invaders.length > 0 ? `${c.red}  [Z]${c.white} Fight ${invaders[0].given_name}${invaders[0].title ? ', ' + invaders[0].title : ''} at the gate` : '',
     showVeilNpc ? `${veilStep.color}  [Q]${c.white} ${veilStep.label}  ${c.dgray}⚡ Quest` : '',
     (town.id === 'silverkeep' || town.id === 'ironhold') ? `${c.cyan}  [0]${c.white} The Arena${c.dgray} (formal duels, spectator betting)` : '',
+    `${c.dgray}  [\\]${c.gray} Switch Character`,
     `${c.dgray}  [L]${c.gray} Logout`,
     '',
   ].filter(l => l !== undefined && l !== '');
@@ -771,6 +772,7 @@ function getTownScreen(player) {
     { key: 'C', label: 'Character', action: 'character' },
     { key: 'Y', label: 'Town Crier', action: 'crier' },
     { key: 'V', label: 'World Map / Travel', action: 'world_map' },
+    { key: '\\', label: 'Switch Character', action: 'char_switch' },
     { key: 'L', label: 'Logout', action: 'logout' },
   ];
   if ((player.perk_points || 0) > 0) choices.splice(choices.findIndex(ch => ch.key === 'Y'), 0, { key: 'E', label: 'Choose a Perk', action: 'perk_select' });
@@ -921,6 +923,251 @@ function getForestCombatScreen(player, monster, roundLog, won, dead, round = 1, 
     { key: 'A', label: 'Attack!', action: 'forest_attack' },
     { key: 'R', label: 'Run Away!', action: 'forest_run' },
     { key: 'P', label: `${move.name}!`, action: 'forest_power', disabled: !hasSkills },
+  ]);
+}
+
+function getPvPCombatScreen(player, pvpTarget, roundLog, won, lost, fled, defenderFled, round, history) {
+  const lines = [
+    ...renderBanner('tavern'),
+    '',
+  ];
+
+  if (history && history.length > 0) {
+    history.slice(-6).forEach(entry => lines.push(`${c.dgray}  ${entry.text}`));
+    lines.push('');
+  }
+
+  roundLog.forEach(entry => lines.push(`  ${entry.text}`));
+  lines.push('');
+
+  if (lost) {
+    lines.push(`${c.red}  ╔══════════════════════════════════╗`);
+    lines.push(`${c.red}  ║      *** YOU HAVE DIED! ***      ║`);
+    lines.push(`${c.red}  ╚══════════════════════════════════╝`);
+    lines.push(`${c.white}  ${pvpTarget.handle} has slain you in a duel!`);
+    lines.push(`${c.gray}  You will be reincarnated tomorrow...`);
+    lines.push('');
+    return buildScreen('You Have Died', lines, [{ key: 'T', label: 'Return to Town', action: 'town' }]);
+  }
+
+  if (won) {
+    lines.push(`${c.yellow}  ╔══════════════════════════════════╗`);
+    lines.push(`${c.yellow}  ║        *** VICTORY! ***          ║`);
+    lines.push(`${c.yellow}  ╚══════════════════════════════════╝`);
+    lines.push(`${c.white}  ${pvpTarget.handle} has been defeated!`);
+    lines.push('');
+    return buildScreen('Victory!', lines, [{ key: 'T', label: 'Return to Town', action: 'town' }]);
+  }
+
+  if (fled) {
+    lines.push(`${c.gray}  You slip away from the duel.`);
+    lines.push('');
+    return buildScreen('Fled', lines, [{ key: 'T', label: 'Return to Town', action: 'town' }]);
+  }
+
+  if (defenderFled) {
+    lines.push(`${c.dgray}  ${pvpTarget.handle} has fled the duel.`);
+    lines.push('');
+    return buildScreen('Duel Ended', lines, [{ key: 'T', label: 'Return to Town', action: 'town' }]);
+  }
+
+  // Combat continues — HP bars + choices
+  const eBar = hpBar(pvpTarget.currentHp, pvpTarget.maxHp);
+  const pBar = hpBar(player.hit_points, player.hit_max);
+  const move = CLASS_POWER_MOVES[player.class];
+  const skillLeft = player.skill_uses_left || 0;
+
+  lines.push(divider('─', 50));
+  lines.push(`${c.gray}  Round ${c.yellow}${round}`);
+  lines.push(`${c.red}  ⚔  ${pvpTarget.handle}`);
+  lines.push(`${c.gray}  HP  ${eBar}  ${hpColor(pvpTarget.currentHp, pvpTarget.maxHp)}${fmt(pvpTarget.currentHp)}${c.gray}/${c.white}${fmt(pvpTarget.maxHp)}`);
+  lines.push(`${c.cyan}  🛡  ${player.handle}`);
+  lines.push(`${c.gray}  HP  ${pBar}  ${hpColor(player.hit_points, player.hit_max)}${fmt(player.hit_points)}${c.gray}/${c.white}${fmt(player.hit_max)}`);
+  lines.push(divider('─', 50));
+  lines.push('');
+  lines.push(`${c.yellow}  [A]${c.white} Attack!`);
+  lines.push(`${c.yellow}  [R]${c.white} Run Away!`);
+  if (move) {
+    lines.push(skillLeft > 0
+      ? `${c.yellow}  [P]${c.white} ${move.name}! ${c.dgray}(${skillLeft} use${skillLeft !== 1 ? 's' : ''} left)`
+      : `${c.dgray}  [P] ${move.name} ${c.dgray}(no uses left)`);
+  }
+
+  return buildScreen('Duel', lines, [
+    { key: 'A', label: 'Attack!',   action: 'pvp_attack' },
+    { key: 'R', label: 'Run Away!', action: 'pvp_run' },
+    { key: 'P', label: move ? `${move.name}!` : 'Power', action: 'pvp_power', disabled: !move || skillLeft === 0 },
+  ]);
+}
+
+// ── Real-time PvP session screens ─────────────────────────────────────────────
+
+// Screen shown to the ACTIVE player (whose turn it is)
+function getPvPSessionScreen(player, session, opponentHandle, roundLog, history, won, lost, fled, opponentFled) {
+  const isChallenger = session.challenger_id === player.id;
+  const myHp     = isChallenger ? session.challenger_hp : session.defender_hp;
+  const myMax    = isChallenger ? session.challenger_max_hp : session.defender_max_hp;
+  const oppHp    = isChallenger ? session.defender_hp : session.challenger_hp;
+  const oppMax   = isChallenger ? session.defender_max_hp : session.challenger_max_hp;
+  const mySkill  = isChallenger ? session.challenger_skill_uses : session.defender_skill_uses;
+
+  const lines = [
+    ...renderBanner('tavern'),
+    '',
+  ];
+
+  if (history && history.length > 0) {
+    history.slice(-4).forEach(entry => lines.push(`${c.dgray}  ${entry}`));
+    lines.push('');
+  }
+
+  if (roundLog && roundLog.length > 0) {
+    roundLog.forEach(entry => lines.push(`  ${entry}`));
+    lines.push('');
+  }
+
+  if (lost) {
+    lines.push(`${c.red}  ╔══════════════════════════════════╗`);
+    lines.push(`${c.red}  ║      *** YOU HAVE DIED! ***      ║`);
+    lines.push(`${c.red}  ╚══════════════════════════════════╝`);
+    lines.push(`${c.white}  ${opponentHandle} has slain you in a live duel!`);
+    lines.push(`${c.gray}  You will be reincarnated tomorrow...`);
+    lines.push('');
+    return buildScreen('You Have Died', lines, [{ key: 'T', label: 'Return to Town', action: 'town' }]);
+  }
+
+  if (won) {
+    lines.push(`${c.yellow}  ╔══════════════════════════════════╗`);
+    lines.push(`${c.yellow}  ║        *** VICTORY! ***          ║`);
+    lines.push(`${c.yellow}  ╚══════════════════════════════════╝`);
+    lines.push(`${c.white}  You have slain ${opponentHandle} in a live duel!`);
+    lines.push('');
+    return buildScreen('Victory!', lines, [{ key: 'T', label: 'Return to Town', action: 'town' }]);
+  }
+
+  if (fled) {
+    lines.push(`${c.gray}  You slip away from the duel.`);
+    lines.push('');
+    return buildScreen('Fled', lines, [{ key: 'T', label: 'Return to Town', action: 'town' }]);
+  }
+
+  if (opponentFled) {
+    lines.push(`${c.dgray}  ${opponentHandle} has fled the duel!`);
+    lines.push('');
+    return buildScreen('Duel Ended', lines, [{ key: 'T', label: 'Return to Town', action: 'town' }]);
+  }
+
+  const move     = CLASS_POWER_MOVES[player.class];
+  const oppBar   = hpBar(oppHp, oppMax);
+  const myBar    = hpBar(myHp, myMax);
+
+  lines.push(divider('─', 50));
+  lines.push(`${c.gray}  Round ${c.yellow}${session.round}  ${c.gray}— ${c.cyan}YOUR TURN`);
+  lines.push(`${c.red}  ⚔  ${opponentHandle}`);
+  lines.push(`${c.gray}  HP  ${oppBar}  ${hpColor(oppHp, oppMax)}${fmt(oppHp)}${c.gray}/${c.white}${fmt(oppMax)}`);
+  lines.push(`${c.cyan}  🛡  ${player.handle}`);
+  lines.push(`${c.gray}  HP  ${myBar}  ${hpColor(myHp, myMax)}${fmt(myHp)}${c.gray}/${c.white}${fmt(myMax)}`);
+  lines.push(divider('─', 50));
+
+  const choices = [
+    { key: 'A', label: 'Attack!',   action: 'pvp_sess_attack' },
+    { key: 'R', label: 'Run Away!', action: 'pvp_sess_run' },
+    { key: 'P', label: move ? `${move.name}!` : 'Power', action: 'pvp_sess_power', disabled: !move || mySkill === 0 },
+  ];
+
+  lines.push('');
+  lines.push(`${c.yellow}  [A]${c.white} Attack!`);
+  lines.push(`${c.yellow}  [R]${c.white} Run Away!`);
+  if (move) {
+    lines.push(mySkill > 0
+      ? `${c.yellow}  [P]${c.white} ${move.name}! ${c.dgray}(${mySkill} use${mySkill !== 1 ? 's' : ''} left)`
+      : `${c.dgray}  [P] ${move.name} ${c.dgray}(no uses left)`);
+  }
+
+  return { ...buildScreen('Live Duel', lines, choices), _poll: false };
+}
+
+// Screen shown to the player who is WAITING for their opponent to act
+function getPvPSessionWaitingScreen(player, session, opponentHandle, roundLog, history) {
+  const isChallenger = session.challenger_id === player.id;
+  const isPending    = session.status === 'pending';
+  const myHp     = isChallenger ? session.challenger_hp : session.defender_hp;
+  const myMax    = isChallenger ? session.challenger_max_hp : session.defender_max_hp;
+  const oppHp    = isChallenger ? session.defender_hp : session.challenger_hp;
+  const oppMax   = isChallenger ? session.defender_max_hp : session.challenger_max_hp;
+
+  // Seconds remaining on the deadline
+  const secsLeft = session.turn_deadline
+    ? Math.max(0, Math.ceil((new Date(session.turn_deadline) - Date.now()) / 1000))
+    : null;
+
+  const lines = [
+    ...renderBanner('tavern'),
+    '',
+  ];
+
+  if (history && history.length > 0) {
+    history.slice(-4).forEach(entry => lines.push(`${c.dgray}  ${entry}`));
+    lines.push('');
+  }
+
+  if (roundLog && roundLog.length > 0) {
+    roundLog.forEach(entry => lines.push(`  ${entry}`));
+    lines.push('');
+  }
+
+  lines.push(divider('─', 50));
+
+  if (isPending) {
+    lines.push(`${c.yellow}  ⚔  Challenge sent to ${c.white}${opponentHandle}${c.yellow}...`);
+    lines.push('');
+    lines.push(`${c.dgray}  Waiting for them to accept or decline.`);
+    if (secsLeft !== null) {
+      const urgency = secsLeft <= 15 ? c.red : c.dgray;
+      lines.push(`${urgency}  Auto-cancels in ${secsLeft}s if ignored.`);
+    }
+  } else {
+    lines.push(`${c.gray}  Round ${c.yellow}${session.round}  ${c.dgray}— waiting for ${c.yellow}${opponentHandle}${c.dgray}...`);
+    lines.push(`${c.red}  ⚔  ${opponentHandle}`);
+    lines.push(`${c.gray}  HP  ${hpBar(oppHp, oppMax)}  ${hpColor(oppHp, oppMax)}${fmt(oppHp)}${c.gray}/${c.white}${fmt(oppMax)}`);
+    lines.push(`${c.cyan}  🛡  ${player.handle}`);
+    lines.push(`${c.gray}  HP  ${hpBar(myHp, myMax)}  ${hpColor(myHp, myMax)}${fmt(myHp)}${c.gray}/${c.white}${fmt(myMax)}`);
+    if (secsLeft !== null) {
+      const urgency = secsLeft <= 15 ? c.red : c.dgray;
+      lines.push(`${urgency}  ${opponentHandle} has ${secsLeft}s to act or forfeit.`);
+    }
+  }
+
+  lines.push(divider('─', 50));
+
+  // Challenger can withdraw while still pending; anyone can do nothing during active wait
+  const choices = isPending && isChallenger
+    ? [{ key: 'W', label: 'Withdraw Challenge', action: 'pvp_sess_withdraw' }]
+    : [];
+
+  return { ...buildScreen('Live Duel — Waiting', lines, choices), _poll: true };
+}
+
+// Pending challenge notification screen (defender sees this)
+function getPvPChallengeScreen(player, session, challengerHandle) {
+  const lines = [
+    ...renderBanner('tavern'),
+    '',
+    `${c.red}  ⚔  CHALLENGE RECEIVED!`,
+    '',
+    `${c.yellow}  ${challengerHandle}${c.white} has challenged you to a duel!`,
+  ];
+  if (session.challenge_msg) {
+    lines.push('');
+    lines.push(`${c.dgray}  "${session.challenge_msg}"`);
+  }
+  lines.push('');
+  lines.push(`${c.gray}  Will you accept the duel?`);
+  lines.push('');
+
+  return buildScreen('Challenge!', lines, [
+    { key: 'A', label: 'Accept!',  action: 'pvp_sess_accept' },
+    { key: 'D', label: 'Decline',  action: 'pvp_sess_decline' },
   ]);
 }
 
@@ -1408,9 +1655,9 @@ function getTavernScreen(player, otherPlayers, onlineIds, bountyTargetIds) {
     `${c.white}  and the sound of quiet conversation...`,
     '',
     `${c.yellow}  Players in the Realm:`,
-    divider('─', 55),
-    `${c.yellow}  ${pad('#', 4)}${pad('Name', 22)}${pad('Level', 8)}${pad('Class', 16)}Status`,
-    divider('─', 55),
+    divider('─', 62),
+    `${c.yellow}  ${pad('#', 4)}${pad('Name', 22)}${pad('Level', 8)}${pad('Class', 16)}   Status`,
+    divider('─', 62),
   ];
 
   const others = otherPlayers.filter(p => p.id !== player.id && p.setup_complete);
@@ -1420,10 +1667,10 @@ function getTavernScreen(player, otherPlayers, onlineIds, bountyTargetIds) {
     others.slice(0, 15).forEach((p, i) => {
       const col = p.dead ? c.dgray : (p.times_won > 0 ? c.yellow : c.white);
       const prestigeTag = (p.prestige_level || 0) > 0 ? `${c.magenta}✦${p.prestige_level} ` : '';
-      const onlineDot = onlineSet.has(p.id) ? `${c.green}●${c.white}` : `${c.dgray}·${c.white}`;
+      const statusDot = p.dead ? `${c.dgray}●` : (onlineSet.has(p.id) ? `${c.green}●` : `${c.red}●`);
       const bountyMark = bountySet.has(p.id) ? `${c.red}⚑ ` : '';
-      const status = p.dead ? `${c.red}(dead)` : (p.times_won > 0 ? `${c.yellow}(King x${p.times_won})` : '');
-      lines.push(`${c.yellow}  ${pad(i + 1, 3)} ${onlineDot}${bountyMark}${col}${pad(p.handle, 20)}${pad(p.level, 8)}${pad(CLASS_NAMES[p.class], 14)}${prestigeTag}${status}`);
+      const statusTag = p.dead ? `${c.red}(dead)` : (p.times_won > 0 ? `${c.yellow}(King x${p.times_won})` : '');
+      lines.push(`${c.yellow}  ${pad(i + 1, 3)} ${bountyMark}${col}${pad(p.handle, 22)}${pad(p.level, 8)}${pad(CLASS_NAMES[p.class], 16)}   ${statusDot}${c.white} ${prestigeTag}${statusTag}`);
     });
   }
 
@@ -1767,7 +2014,7 @@ function getSetupScreen(step) {
       '',
       `${c.yellow}  What is your warrior's name?`,
       `${c.dgray}  (2-20 characters)`,
-    ], [], { needsInput: true, inputLabel: 'Your warrior name:', inputAction: 'setup_name' });
+    ], [], { screen: 'setup', needsInput: true, inputLabel: 'Your warrior name:', inputAction: 'setup_name' });
   }
 
   if (step === 'sex') {
@@ -2903,36 +3150,76 @@ function getRuinsScreen(player, ruin) {
 // ── Social: Tavern player action screen ───────────────────────────────────────
 
 function getTavernPlayerScreen(player, target, hasArena, bounties) {
-  const titleDisplay = target.active_title ? ` ${getActiveTitleDisplay({ active_title: target.active_title })}` : '';
-  const specLabel = target.specialization ? ` (${target.specialization.replace(/_/g, ' ')})` : '';
+  const titleDisplay = target.active_title ? getActiveTitleDisplay({ active_title: target.active_title }) : '';
+  const className    = CLASS_NAMES[target.class] || '?';
+  const specLabel    = target.specialization
+    ? `${c.dgray} · ${c.white}${target.specialization.replace(/_/g, ' ')} spec`
+    : '';
   const bountiesOnTarget = (bounties || []).filter(b => b.target_id === target.id);
   const bountyTotal = bountiesOnTarget.reduce((s, b) => s + b.gold, 0);
 
+  // Online check: last_seen within 15 minutes
+  const isOnline = target.last_seen
+    && (Date.now() - new Date(target.last_seen).getTime()) < 15 * 60 * 1000;
+  const onlineDot = isOnline ? `${c.green}● Online${c.white}` : `${c.red}● Offline${c.white}`;
+
+  // HP bar (public info)
+  const hp    = target.hit_points || 0;
+  const hpMax = target.hit_max    || hp || 1;
+  const hpBarStr = hpBar(hp, hpMax);
+  const hpCol    = hpColor(hp, hpMax);
+
+  // Prestige / king / dead status badge
+  const badges = [];
+  if (target.dead)              badges.push(`${c.red}✝ Dead`);
+  if (target.prestige_level > 0) badges.push(`${c.magenta}✦${target.prestige_level} Prestige`);
+  if (target.times_won > 0)    badges.push(`${c.yellow}♛ King ×${target.times_won}`);
+  if (target.is_vampire)       badges.push(`${c.magenta}⚰ Vampire`);
+  const badgeStr = badges.length ? `  ${badges.join(`  `)}` : '';
+
+  // Alignment hint
+  const ali = Number(target.alignment || 0);
+  const aliStr = ali >= 50  ? `${c.green}  ☀ Honourable`
+               : ali <= -50 ? `${c.red}  ☠ Dishonourable`
+               : '';
+
+  const nameLine = titleDisplay
+    ? `${c.white}  ${target.handle}  ${c.dgray}·  ${c.yellow}${titleDisplay}`
+    : `${c.white}  ${target.handle}`;
+
+  const fightsNote = player.human_fights_left > 0
+    ? `${c.dgray}(${player.human_fights_left} fight${player.human_fights_left !== 1 ? 's' : ''} left today)`
+    : `${c.red}(no fights left)`;
+
   const lines = [
     ...renderBanner('tavern'),
-    `${c.yellow}  ─── ${target.handle}${titleDisplay} ───`,
+    divider('═', 50),
+    nameLine,
+    `${c.dgray}  ${className}${specLabel}${badgeStr}${aliStr}`,
+    divider('═', 50),
     '',
-    `${c.gray}  Class: ${c.white}${CLASS_NAMES[target.class] || '?'}${specLabel}`,
-    `${c.gray}  Level: ${c.yellow}${target.level}`,
-    target.prestige_level > 0 ? `${c.magenta}  Prestige: ✦${target.prestige_level}` : '',
-    bountyTotal > 0 ? `${c.red}  ⚑ Wanted: ${c.yellow}${fmt(bountyTotal)} gold bounty on this player!` : '',
+    `${c.gray}  Status  ${c.white}${onlineDot}${c.gray}       Level  ${c.yellow}${target.level}${target.prestige_level > 0 ? `  ${c.magenta}✦${target.prestige_level}` : ''}`,
+    `${c.gray}  HP      ${hpBarStr}  ${hpCol}${fmt(hp)}${c.gray}/${c.white}${fmt(hpMax)}`,
+    target.kills > 0 ? `${c.gray}  Kills   ${c.red}${target.kills}` : '',
+    bountyTotal > 0  ? `${c.red}  ⚑ Wanted — ${c.yellow}${fmt(bountyTotal)} gold bounty on this player!` : '',
     '',
-    `${c.yellow}  [A]${c.white} Attack             ${player.human_fights_left > 0 ? c.dgray + '(costs 1 human fight)' : c.red + '(no fights left)'}`,
-    `${c.yellow}  [I]${c.white} Inspect            ${c.dgray}(view their public profile)`,
-    `${c.yellow}  [M]${c.white} Send a Message     ${c.dgray}(delivered via Hrok)`,
-    `${c.yellow}  [U]${c.white} Post a Bounty      ${c.dgray}(50 gold minimum)`,
-    player.class === 1 ? `${c.red}  [Z]${c.white} Intimidate         ${c.dgray}(Dread Knight only)` : '',
-    hasArena ? `${c.cyan}  [C]${c.white} Arena Challenge    ${c.dgray}(no death penalty)` : '',
-    '',
+    divider('─', 50),
+    `${c.yellow}  [A]${c.white} Attack          ${fightsNote}`,
+    `${c.yellow}  [I]${c.white} Inspect         ${c.dgray}(public profile)`,
+    `${c.yellow}  [M]${c.white} Send Message    ${c.dgray}(via Hrok)`,
+    `${c.yellow}  [U]${c.white} Post Bounty     ${c.dgray}(50 gold min)`,
+    player.class === 1 ? `${c.red}  [Z]${c.white} Intimidate      ${c.dgray}(Dread Knight)` : null,
+    hasArena           ? `${c.cyan}  [C]${c.white} Arena Challenge ${c.dgray}(no death penalty)` : null,
+    divider('─', 50),
     `${c.yellow}  [L]${c.white} Back to Tavern`,
-  ].filter(l => l !== undefined && l !== '');
+  ].filter(l => l != null && l !== '');
 
   const choices = [
-    { key: 'A', label: 'Attack', action: 'tavern_attack', param: String(target.id), disabled: player.human_fights_left === 0 },
-    { key: 'I', label: 'Inspect', action: 'tavern_inspect', param: String(target.id) },
-    { key: 'M', label: 'Send Message', action: 'tavern_mail_compose', param: String(target.id) },
-    { key: 'U', label: 'Post Bounty', action: 'tavern_bounty_post', param: String(target.id) },
-    { key: 'L', label: 'Back', action: 'tavern' },
+    { key: 'A', label: 'Attack',          action: 'tavern_attack',        param: String(target.id), disabled: player.human_fights_left === 0 },
+    { key: 'I', label: 'Inspect',         action: 'tavern_inspect',        param: String(target.id) },
+    { key: 'M', label: 'Send Message',    action: 'tavern_mail_compose',   param: String(target.id) },
+    { key: 'U', label: 'Post Bounty',     action: 'tavern_bounty_post',    param: String(target.id) },
+    { key: 'L', label: 'Back',            action: 'tavern' },
   ];
   if (player.class === 1) {
     choices.splice(1, 0, { key: 'Z', label: 'Intimidate', action: 'tavern_intimidate', param: String(target.id), disabled: player.human_fights_left === 0 });
@@ -2941,7 +3228,7 @@ function getTavernPlayerScreen(player, target, hasArena, bounties) {
     choices.splice(choices.length - 1, 0, { key: 'C', label: 'Arena Challenge', action: 'tavern_arena_challenge', param: String(target.id) });
   }
 
-  return buildScreen(`${target.handle}`, lines, choices);
+  return buildScreen(target.handle, lines, choices);
 }
 
 // ── Social: Player inspect screen ─────────────────────────────────────────────
@@ -3027,15 +3314,55 @@ function getMailHubScreen(player, unreadCount) {
       ? `${c.yellow}  You have ${c.cyan}${unreadCount}${c.yellow} unread message${unreadCount > 1 ? 's' : ''}!`
       : `${c.dgray}  Your inbox is empty.`,
     '',
+    `${c.yellow}  [N]${c.white} New Message`,
     `${c.yellow}  [I]${c.white} Read Incoming Mail`,
     `${c.yellow}  [S]${c.white} View Sent Messages`,
     `${c.yellow}  [L]${c.white} Leave`,
   ];
   return buildScreen("Hrok's Delivery Box", lines, [
-    { key: 'I', label: 'Read Mail', action: 'tavern_mail_inbox' },
-    { key: 'S', label: 'View Sent', action: 'tavern_mail_sent' },
-    { key: 'L', label: 'Leave', action: 'tavern' },
+    { key: 'N', label: 'New Message', action: 'tavern_mail_new' },
+    { key: 'I', label: 'Read Mail',   action: 'tavern_mail_inbox' },
+    { key: 'S', label: 'View Sent',   action: 'tavern_mail_sent' },
+    { key: 'L', label: 'Leave',       action: 'tavern' },
   ]);
+}
+
+function getMailRosterScreen(player, allPlayers) {
+  const others = allPlayers.filter(p => p.id !== player.id);
+
+  const lines = [
+    ...renderBanner('tavern'),
+    `${c.brown}  Hrok squints at his ledger. "Pick yer recipient."`,
+    '',
+    divider('─', 55),
+    `${c.yellow}  ${pad('#', 4)}${pad('Name', 20)}${pad('Level', 8)}Class`,
+    divider('─', 55),
+  ];
+
+  if (!others.length) {
+    lines.push(`${c.dgray}  No other players in the realm yet.`);
+  } else {
+    others.slice(0, 30).forEach((p, i) => {
+      const onlineDot = '';
+      lines.push(
+        `${c.yellow}  ${pad(i + 1, 4)}${c.white}${pad(p.handle, 20)}` +
+        `${c.dgray}${pad(p.level, 8)}${c.gray}${CLASS_NAMES[p.class] || '?'}`
+      );
+    });
+  }
+
+  lines.push('');
+  lines.push(`${c.yellow}  [L]${c.white} Back`);
+
+  const choices = others.slice(0, 30).map((p, i) => ({
+    key: String(i + 1),
+    label: p.handle,
+    action: 'tavern_mail_compose',
+    param: String(p.id),
+  }));
+  choices.push({ key: 'L', label: 'Back', action: 'tavern_mail_hub' });
+
+  return buildScreen('Send to whom?', lines, choices);
 }
 
 function getMailInboxScreen(player, mails) {
@@ -3257,6 +3584,103 @@ function getWhoIsOnlineScreen(player, onlinePlayers) {
   ]);
 }
 
+// ── Character select screen ────────────────────────────────────────────────────
+const SLOT_KEYS = { 1: '1', 2: '2', 3: '3' };
+
+function getCharSelectScreen(characters, activePlayerId, totalSlots = 3) {
+  const bySlot = {};
+  for (const c of characters) bySlot[c.slot] = c;
+
+  const lines = [
+    '`$  ╔══════════════════════════════════════════════╗',
+    '`$  ║          SELECT YOUR CHARACTER               ║',
+    '`$  ╚══════════════════════════════════════════════╝',
+    '',
+  ];
+
+  const choices = [];
+
+  for (let slot = 1; slot <= totalSlots; slot++) {
+    const char = bySlot[slot];
+    const key = String(slot);
+    if (!char) {
+      lines.push(`\`8  [${key}] — Empty Slot —`);
+      choices.push({ key, label: `Slot ${slot} — Create New`, action: 'char_new', param: String(slot) });
+    } else if (!char.setup_complete) {
+      lines.push(`\`7  [${key}] — Character in progress (slot ${slot})`);
+      choices.push({ key, label: `Slot ${slot} — Continue Setup`, action: 'char_select_slot', param: String(char.id) });
+    } else {
+      const cls   = CLASS_NAMES[char.class] || 'Unknown';
+      const loc   = char.current_town ? char.current_town.charAt(0).toUpperCase() + char.current_town.slice(1) : 'Dawnmark';
+      const hp    = `${char.hit_points}/${char.hit_max}`;
+      const gold  = Number(char.gold).toLocaleString();
+      const isActive = char.id === activePlayerId;
+      const badge = isActive ? ' `0[active]' : '';
+      lines.push(`\`%  [${key}] \`!${char.handle.padEnd(18)}\`8 ${cls.padEnd(14)} Lv ${String(char.level).padStart(2)}`);
+      lines.push(`\`8      HP ${hp.padEnd(8)} Gold ${gold.padStart(8)}  ${loc}${badge}`);
+      lines.push('');
+      choices.push({ key, label: `${char.handle} — ${cls} Lv ${char.level}`, action: 'char_select_slot', param: String(char.id) });
+    }
+  }
+
+  lines.push('');
+  lines.push('`8  [D] Delete a character');
+
+  choices.push({ key: 'D', label: 'Delete a character', action: 'char_delete_menu' });
+
+  return { screen: 'char_select', title: 'Characters', lines, choices };
+}
+
+function getCharDeleteMenuScreen(characters, activePlayerId) {
+  const deletable = characters.filter(c => c.id !== activePlayerId && c.setup_complete);
+
+  const lines = [
+    '`@  Delete a character',
+    '`8  ──────────────────────────────────────────────',
+    '`7  Deleted characters cannot be recovered.',
+    '',
+  ];
+  const choices = [];
+
+  if (!deletable.length) {
+    lines.push('`8  No characters available to delete.');
+    lines.push('`8  (You cannot delete your currently active character.)');
+  } else {
+    for (let i = 0; i < deletable.length; i++) {
+      const char = deletable[i];
+      const key = String(i + 1);
+      const cls = CLASS_NAMES[char.class] || 'Unknown';
+      lines.push(`\`@  [${key}] ${char.handle} — ${cls} Lv ${char.level}`);
+      choices.push({ key, label: `Delete ${char.handle}`, action: 'char_delete', param: String(char.id) });
+    }
+  }
+
+  lines.push('');
+  choices.push({ key: 'B', label: 'Back', action: 'char_switch' });
+
+  return { screen: 'char_delete_menu', title: 'Delete Character', lines, choices };
+}
+
+function getCharDeleteConfirmScreen(char) {
+  const cls = CLASS_NAMES[char.class] || 'Unknown';
+  return {
+    screen: 'char_delete_confirm',
+    title: 'Confirm Delete',
+    lines: [
+      '`@  Are you sure?',
+      '',
+      `\`%  ${char.handle} — ${cls} Lv ${char.level}`,
+      '`@  This character will be permanently deleted.',
+      '`8  There is no undo.',
+      '',
+    ],
+    choices: [
+      { key: 'Y', label: 'Yes, delete permanently', action: 'char_delete_confirm', param: String(char.id) },
+      { key: 'N', label: 'No, go back',             action: 'char_switch' },
+    ],
+  };
+}
+
 module.exports = {
   getTownScreen, getForestEncounterScreen, getForestCombatScreen,
   getWeaponShopScreen, getArmorShopScreen, getInnScreen, getBankScreen,
@@ -3283,6 +3707,9 @@ module.exports = {
   renderBanner,
   LOCATION_BANNERS,
   getTavernPlayerScreen, getPlayerInspectScreen,
-  getMailHubScreen, getMailInboxScreen, getMailReadScreen, getMailSentScreen, getMailComposeScreen, getBountyPostScreen,
+  getMailHubScreen, getMailRosterScreen, getMailInboxScreen, getMailReadScreen, getMailSentScreen, getMailComposeScreen, getBountyPostScreen,
   getBountyBoardScreen, getArenaLobbyScreen, getArenaBettingScreen, getWhoIsOnlineScreen,
+  getPvPCombatScreen,
+  getPvPSessionScreen, getPvPSessionWaitingScreen, getPvPChallengeScreen,
+  getCharSelectScreen, getCharDeleteMenuScreen, getCharDeleteConfirmScreen,
 };

@@ -590,4 +590,127 @@ async function getOpenArenaChallenge(challengeId) {
   return rows[0] || null;
 }
 
-module.exports = { pool, initDb, getPlayer, getPlayerByUsername, updatePlayer, claimNewDay, createPlayer, getAllPlayers, getPlayersInTown, getRetiredPlayersInTown, getNearDeathPlayers, getCaptivePlayers, getRecentNews, addNews, getHallOfKings, addToHallOfKings, TODAY, getBannerOverride, setBanner, deleteBanner, getAllBanners, loadBanners, getActiveNamedEnemiesForLevel, createNamedEnemy, updateNamedEnemy, getNamedEnemy, getAllUndefeatedNamedEnemies, getUndefeatedNamedEnemiesWithKills, getInvadingEnemies, getActiveWorldEvent, triggerWorldEvent, expireWorldEvents, getWorldState, setWorldState, getActiveHunts, generateWeeklyHunts, incrementHuntKill, getWeeklyHuntLeaderboard, sendMail, getInboxMail, getSentMail, markMailRead, getUnreadMailCount, getOnlinePlayers, postBounty, getBountiesOnTarget, getAllActiveBounties, collectBounties, createArenaChallenge, getPendingChallengesForPlayer, getArenaChallenge, updateArenaChallenge, placeBet, getArenaSpectators, resolveArenaBets, getOpenArenaChallenge };
+// ── Real-time PvP sessions ─────────────────────────────────────────────────────
+
+async function createPvpSession(data) {
+  const deadline = new Date(Date.now() + 60000).toISOString();
+  const { rows } = await pool.query(
+    `INSERT INTO pvp_sessions
+       (challenger_id, defender_id, current_turn,
+        challenger_hp, defender_hp, challenger_max_hp, defender_max_hp,
+        challenger_skill_uses, defender_skill_uses,
+        challenge_msg, status, turn_deadline)
+     VALUES ($1,$2,'challenger',$3,$4,$5,$6,$7,$8,$9,'pending',$10) RETURNING *`,
+    [
+      data.challenger_id, data.defender_id,
+      data.challenger_hp, data.defender_hp,
+      data.challenger_hp, data.defender_hp,
+      data.challenger_skill_uses, data.defender_skill_uses,
+      data.challenge_msg || null,
+      deadline,
+    ]
+  );
+  return rows[0];
+}
+
+async function getPvpSession(id) {
+  const { rows } = await pool.query('SELECT * FROM pvp_sessions WHERE id = $1', [id]);
+  return rows[0] || null;
+}
+
+// Get the active (pending or active) session where this player is either challenger or defender
+async function getActivePvpSessionForPlayer(playerId) {
+  const { rows } = await pool.query(
+    `SELECT * FROM pvp_sessions
+     WHERE status IN ('pending','active')
+       AND (challenger_id = $1 OR defender_id = $1)
+     ORDER BY id DESC LIMIT 1`,
+    [playerId]
+  );
+  return rows[0] || null;
+}
+
+async function updatePvpSession(id, fields) {
+  const allowed = new Set([
+    'current_turn','challenger_hp','defender_hp','challenger_skill_uses',
+    'defender_skill_uses','round','log','status','winner_id','turn_deadline',
+  ]);
+  const keys = Object.keys(fields).filter(k => allowed.has(k));
+  if (!keys.length) return;
+  const set = keys.map((k, i) => `${k} = $${i + 1}`).join(', ');
+  // JSONB fields must be serialised — pg driver sends plain arrays as PG arrays otherwise
+  const values = keys.map(k => (k === 'log' ? JSON.stringify(fields[k]) : fields[k]));
+  await pool.query(
+    `UPDATE pvp_sessions SET ${set}, updated_at = NOW() WHERE id = $${keys.length + 1}`,
+    [...values, id]
+  );
+}
+
+async function completePvpSession(id, winnerId) {
+  await pool.query(
+    `UPDATE pvp_sessions SET status='complete', winner_id=$1, updated_at=NOW() WHERE id=$2`,
+    [winnerId, id]
+  );
+}
+
+// ── Accounts (multi-character) ────────────────────────────────────────────────
+
+async function getAccountByUsername(username) {
+  const r = await pool.query('SELECT * FROM accounts WHERE LOWER(username) = LOWER($1)', [username]);
+  return r.rows[0] || null;
+}
+
+async function getAccountById(id) {
+  const r = await pool.query('SELECT * FROM accounts WHERE id = $1', [id]);
+  return r.rows[0] || null;
+}
+
+async function createAccount(username, passwordHash) {
+  const r = await pool.query(
+    'INSERT INTO accounts (username, password_hash) VALUES ($1, $2) RETURNING id',
+    [username, passwordHash]
+  );
+  return r.rows[0].id;
+}
+
+async function getCharactersForAccount(accountId) {
+  const r = await pool.query(
+    'SELECT * FROM players WHERE account_id = $1 ORDER BY slot',
+    [accountId]
+  );
+  return r.rows;
+}
+
+async function createCharacterForAccount(accountId, slot) {
+  // Username must be unique; account-linked characters use an internal placeholder
+  // that can never conflict with real handles (real usernames are 2-20 chars, no leading __)
+  const placeholder = `__acct_${accountId}_${slot}`;
+  const r = await pool.query(
+    `INSERT INTO players (account_id, slot, username, password_hash)
+     VALUES ($1, $2, $3, '')
+     RETURNING id`,
+    [accountId, slot, placeholder]
+  );
+  return r.rows[0].id;
+}
+
+async function setBanAccount(accountId, banned) {
+  await pool.query('UPDATE accounts SET banned = $1 WHERE id = $2', [banned, accountId]);
+}
+
+// ── Player secrets ─────────────────────────────────────────────────────────────
+
+async function getSeenSecrets(playerId) {
+  const r = await pool.query('SELECT secret_id FROM player_secrets WHERE player_id = $1', [playerId]);
+  return r.rows.map(row => row.secret_id);
+}
+
+async function recordSecret(playerId, secretId) {
+  await pool.query(
+    'INSERT INTO player_secrets (player_id, secret_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+    [playerId, secretId]
+  );
+}
+
+module.exports = { pool, initDb, getPlayer, getPlayerByUsername, updatePlayer, claimNewDay, createPlayer, getAllPlayers, getPlayersInTown, getRetiredPlayersInTown, getNearDeathPlayers, getCaptivePlayers, getRecentNews, addNews, getHallOfKings, addToHallOfKings, TODAY, getBannerOverride, setBanner, deleteBanner, getAllBanners, loadBanners, getActiveNamedEnemiesForLevel, createNamedEnemy, updateNamedEnemy, getNamedEnemy, getAllUndefeatedNamedEnemies, getUndefeatedNamedEnemiesWithKills, getInvadingEnemies, getActiveWorldEvent, triggerWorldEvent, expireWorldEvents, getWorldState, setWorldState, getActiveHunts, generateWeeklyHunts, incrementHuntKill, getWeeklyHuntLeaderboard, sendMail, getInboxMail, getSentMail, markMailRead, getUnreadMailCount, getOnlinePlayers, postBounty, getBountiesOnTarget, getAllActiveBounties, collectBounties, createArenaChallenge, getPendingChallengesForPlayer, getArenaChallenge, updateArenaChallenge, placeBet, getArenaSpectators, resolveArenaBets, getOpenArenaChallenge, createPvpSession, getPvpSession, getActivePvpSessionForPlayer, updatePvpSession, completePvpSession, getSeenSecrets, recordSecret,
+  getAccountByUsername, getAccountById, createAccount, getCharactersForAccount, createCharacterForAccount, setBanAccount };

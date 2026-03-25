@@ -66,6 +66,7 @@ function showGame() {
   authScreen.classList.add('hidden');
   setupScreen.classList.add('hidden');
   gameScreen.classList.remove('hidden');
+  openSse();
 }
 
 // ── Status bar ────────────────────────────────────────────────────────────────
@@ -102,9 +103,15 @@ let loadingEl = null;
 
 function renderScreen(data) {
   if (!data) return;
+  if (data.screen === 'setup') {
+    showSetup();
+    return;
+  }
+
   if (data.screen === 'login') {
+    closeSse();
     if (data.campLogout) {
-      authNotice.textContent = 'You have settled in for the night. Log back in when a new day comes.';
+      authNotice.textContent = data.sleepMessage || 'You have settled in for the night. Log back in when a new day comes.';
       authNotice.classList.remove('hidden');
     } else {
       authNotice.classList.add('hidden');
@@ -170,6 +177,43 @@ function renderScreen(data) {
   if (data.needsInput) {
     showInput(data.inputLabel || 'Enter:', data.inputAction, '', data.inputType || 'text', data.inputParam || '');
   }
+
+}
+
+// ── SSE connection ─────────────────────────────────────────────────────────────
+let _sse = null;
+
+function openSse() {
+  if (_sse) return;
+  _sse = new EventSource('/api/game/stream');
+  _sse.onmessage = (e) => {
+    try {
+      const data = JSON.parse(e.data);
+      if (data && data.toast !== undefined) showToast(data.toast);
+      else if (data && data.lines !== undefined) renderScreen(data);
+    } catch {}
+  };
+  // EventSource auto-reconnects on error; nothing extra needed
+}
+
+function closeSse() {
+  if (_sse) { _sse.close(); _sse = null; }
+}
+
+// ── Toast notifications ───────────────────────────────────────────────────────
+function showToast(message) {
+  const container = document.getElementById('toast-container');
+  if (!container) return;
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.innerHTML = parseLine(message);
+  container.appendChild(el);
+  // Trigger CSS transition
+  requestAnimationFrame(() => el.classList.add('toast-visible'));
+  setTimeout(() => {
+    el.classList.remove('toast-visible');
+    el.addEventListener('transitionend', () => el.remove(), { once: true });
+  }, 5000);
 }
 
 function showInput(label, action, param, type = 'text', inputParam = '') {
@@ -206,7 +250,7 @@ async function sendAction(action, param = '') {
       body: JSON.stringify(body),
     });
     if (loadingEl) { loadingEl.remove(); loadingEl = null; }
-    if (res.status === 401) { showAuth(); return; }
+    if (res.status === 401) { closeSse(); showAuth(); return; }
     renderScreen(await res.json());
   } catch {
     if (loadingEl) { loadingEl.remove(); loadingEl = null; }

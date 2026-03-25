@@ -1135,6 +1135,20 @@ async function forest_combat({ action, player, req, res, pendingMessages }) {
       if (zone) return res.json(getWildernessVictoryScreen(player, monster, log, round, history, zone));
     }
     const depth = req.session.forestDepth || 0;
+
+    // Secret event check (fires rarely, adds lines to combat log)
+    try {
+      const { checkSecrets } = require('../secrets');
+      const secret = await checkSecrets(player, 'forest');
+      if (secret) {
+        if (secret.damage > 0) {
+          await updatePlayer(player.id, { hit_points: Math.max(1, player.hit_points - secret.damage) });
+          player = await getPlayer(player.id);
+        }
+        return res.json({ ...getForestCombatScreen(player, monster, log, true, false, round, history, depth), pendingMessages: secret.lines });
+      }
+    } catch { /* non-critical */ }
+
     return res.json(getForestCombatScreen(player, monster, log, true, false, round, history, depth));
   }
 

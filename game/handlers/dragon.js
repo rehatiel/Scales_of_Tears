@@ -1,4 +1,5 @@
 const { pool, getPlayer, updatePlayer, addNews, setWorldState, TODAY } = require('../../db');
+const { checkSecrets } = require('../secrets');
 const { buildTitleAward } = require('../titles');
 const { RED_DRAGON, getChampionDragon } = require('../data');
 const { resolveRound } = require('../combat');
@@ -100,6 +101,15 @@ async function dragon_fight({ action, player, req, res, pendingMessages }) {
       ? '`$  *** YOU ARE NOW KING OF THE REALM! ***'
       : `\`$  *** ${dragonDef.name.toUpperCase()} FALLS FOR THE ${newTimesWon}${ordinal(newTimesWon)} TIME ***`;
 
+    // On first kill, always fire the Veilborn vision secret
+    let dragonSecretLines = [];
+    if (isFirstKill) {
+      try {
+        const secret = await checkSecrets(player, 'dragon');
+        if (secret) dragonSecretLines = secret.lines;
+      } catch { /* non-critical */ }
+    }
+
     return res.json({
       screen: 'dragon_win', title: 'Victory!',
       lines: [
@@ -120,7 +130,7 @@ async function dragon_fight({ action, player, req, res, pendingMessages }) {
         { key: 'J', label: 'Ascend (Prestige)', action: 'prestige_confirm' },
         { key: 'T', label: 'Return to Town', action: 'town' },
       ],
-      pendingMessages: [],
+      pendingMessages: dragonSecretLines,
     });
   }
 

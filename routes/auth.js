@@ -1,6 +1,9 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
-const { getPlayerByUsername, createPlayer, updatePlayer, TODAY, getWorldState, getUnreadMailCount } = require('../db');
+const {
+  getAccountByUsername, createAccount, getCharactersForAccount, createCharacterForAccount,
+  getPlayer, updatePlayer, TODAY, getWorldState, getUnreadMailCount,
+} = require('../db');
 const { runNewDay } = require('../game/newday');
 
 const router = express.Router();
@@ -39,18 +42,21 @@ router.post('/register', async (req, res) => {
   if (!checkAuthRate(req, res)) return;
   const regOpen = await getWorldState('registration_open');
   if (regOpen === '0') return res.status(403).json({ error: 'New registrations are currently closed.' });
+
   const { username, password } = req.body;
   if (!username || !password) return res.status(400).json({ error: 'Username and password required.' });
   if (username.length < 2 || username.length > 20) return res.status(400).json({ error: 'Username must be 2–20 characters.' });
   if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters.' });
 
-  const existing = await getPlayerByUsername(username);
+  const existing = await getAccountByUsername(username);
   if (existing) return res.status(400).json({ error: 'That username is already taken.' });
 
   const hash = await bcrypt.hash(password, 10);
-  const id = await createPlayer(username, hash);
+  const accountId = await createAccount(username, hash);
+  const playerId = await createCharacterForAccount(accountId, 1);
 
-  req.session.playerId = id;
+  req.session.accountId = accountId;
+  req.session.playerId = playerId;
   res.json({ ok: true });
 });
 
@@ -59,27 +65,48 @@ router.post('/login', async (req, res) => {
   const { username, password } = req.body;
   if (!username || !password) return res.status(400).json({ error: 'Username and password required.' });
 
-  const player = await getPlayerByUsername(username);
-  if (!player) return res.status(401).json({ error: 'Invalid username or password.' });
+  const account = await getAccountByUsername(username);
+  if (!account) return res.status(401).json({ error: 'Invalid username or password.' });
 
-  const valid = await bcrypt.compare(password, player.password_hash);
+  const valid = await bcrypt.compare(password, account.password_hash);
   if (!valid) return res.status(401).json({ error: 'Invalid username or password.' });
 
-  if (player.banned) return res.status(403).json({ error: 'This account has been banned.' });
+  if (account.banned) return res.status(403).json({ error: 'This account has been banned.' });
 
-  req.session.playerId = player.id;
+  const accountId = account.id;
+  req.session.accountId = accountId;
 
-  let newDayMessages = [];
-  const today = TODAY();
-  if (player.setup_complete && player.last_day < today) {
-    const { updates, messages } = await runNewDay(player);
-    await updatePlayer(player.id, updates);
-    newDayMessages = messages;
+  const characters = await getCharactersForAccount(account.id);
+  const complete = characters.filter(c => c.setup_complete);
+
+  // Auto-select if exactly one complete character; otherwise let /state handle the char select screen
+  let playerId = null;
+  if (complete.length === 1) {
+    playerId = complete[0].id;
+  } else if (characters.length === 1) {
+    playerId = characters[0].id;
   }
 
-  await updatePlayer(player.id, { last_seen: new Date().toISOString() });
-  const unreadMail = player.setup_complete ? await getUnreadMailCount(player.id) : 0;
-  res.json({ ok: true, setup_complete: !!player.setup_complete, newDayMessages, unreadMail });
+  req.session.playerId = playerId;
+
+  let newDayMessages = [];
+  let unreadMail = 0;
+
+  if (playerId) {
+    const player = await getPlayer(playerId);
+    if (player) {
+      const today = TODAY();
+      if (player.setup_complete && player.last_day < today) {
+        const { updates, messages } = await runNewDay(player);
+        await updatePlayer(playerId, updates);
+        newDayMessages = messages;
+      }
+      await updatePlayer(playerId, { last_seen: new Date().toISOString() });
+      unreadMail = player.setup_complete ? await getUnreadMailCount(playerId) : 0;
+    }
+  }
+
+  res.json({ ok: true, setup_complete: playerId ? !!(characters.find(c => c.id === playerId)?.setup_complete) : false, newDayMessages, unreadMail });
 });
 
 router.post('/logout', (req, res) => {
@@ -88,11 +115,18 @@ router.post('/logout', (req, res) => {
 });
 
 router.get('/me', async (req, res) => {
-  if (!req.session.playerId) return res.status(401).json({ error: 'Not logged in.' });
-  const { getPlayer } = require('../db');
-  const player = await getPlayer(req.session.playerId);
+  if (!req.session.accountId && !req.session.playerId) return res.status(401).json({ error: 'Not logged in.' });
+
+  // Support both old sessions (playerId only) and new (accountId + playerId)
+  const pid = req.session.playerId;
+  if (!pid) return res.json({ ok: true, username: '', setup_complete: false });
+
+  const player = await getPlayer(pid);
   if (!player) return res.status(401).json({ error: 'Player not found.' });
-  res.json({ ok: true, username: player.username, setup_complete: !!player.setup_complete });
+
+  const { getAccountById } = require('../db');
+  const account = req.session.accountId ? await getAccountById(req.session.accountId) : null;
+  res.json({ ok: true, username: account ? account.username : player.username, setup_complete: !!player.setup_complete });
 });
 
 // GET /api/auth/impersonate/:token — one-time admin impersonation
