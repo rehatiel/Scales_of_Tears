@@ -616,6 +616,84 @@ const LOCATION_BANNERS = {
     colors: ['dgray','dgray','dgray','dgray','dgray','dgray','dgray'],
   },
 
+  // ── District banners ──────────────────────────────────────────────────────
+
+  market: {
+    lines: [
+      '`6╔══════════════════════════════════════════════════════════╗',
+      '`6║  `7▐█▌ `6╔═══╗ `7▐█▌ `6╔═══╗ `7▐█▌ `6╔═══╗ `7▐█▌ `6╔═══╗ `7▐█▌`6         ║',
+      '`6║  `7│ │ `6║`$███`6║ `7│ │ `6║`$███`6║ `7│ │ `6║`$███`6║ `7│ │ `6║`$███`6║ `7│ │`6         ║',
+      '`6║  `7└─┘ `6╚═══╝ `7└─┘ `6╚═══╝ `7└─┘ `6╚═══╝ `7└─┘ `6╚═══╝ `7└─┘`6         ║',
+      '`6╠══════════════════════════════════════════════════════════╣',
+      '`6║    `$T H E   M A R K E T`6                                  ║',
+      '`6╚══════════════════════════════════════════════════════════╝',
+    ],
+    colors: ['brown','brown','brown','brown','brown','brown','brown'],
+  },
+
+  training: {
+    lines: [
+      '`8╔══════════════════════════════════════════════════════════╗',
+      '`8║  `7⚔  `8╔══╦══╗`7  TRAINING GROUNDS  `8╔══╦══╗  `7⚔`8              ║',
+      '`8║     `7║  ║  ║`8                  `7║  ║  ║`8               ║',
+      '`8║     `7╠══╬══╣`8                  `7╠══╬══╣`8               ║',
+      '`8║     `7║  ║  ║`8                  `7║  ║  ║`8               ║',
+      '`8╠══════════════════════════════════════════════════════════╣',
+      '`8╚══════════════════════════════════════════════════════════╝',
+    ],
+    colors: ['dgray','dgray','dgray','dgray','dgray','dgray','dgray'],
+  },
+
+  social: {
+    lines: [
+      '`3╔══════════════════════════════════════════════════════════╗',
+      '`3║  `7╔═══════╗`3  `7╔══════╗`3  `7╔═══════╗`3  `7╔══════╗`3            ║',
+      '`3║  `7║NOTICES║`3  `7║ MAIL ║`3  `7║RECORDS║`3  `7║ HALL ║`3            ║',
+      '`3║  `7╚═══════╝`3  `7╚══════╝`3  `7╚═══════╝`3  `7╚══════╝`3            ║',
+      '`3╠══════════════════════════════════════════════════════════╣',
+      '`3║    `!S O C I A L   H A L L`3                               ║',
+      '`3╚══════════════════════════════════════════════════════════╝',
+    ],
+    colors: ['dcyan','dcyan','dcyan','dcyan','dcyan','dcyan','dcyan'],
+  },
+
+};
+
+const DISTRICT_FLAVOR = {
+  market: {
+    default:    'The smell of steel, leather, and coin fills the air.',
+    ironhold:   'The forges burn day and night. Every blade here has seen war.',
+    duskveil:   'Merchants keep their faces hidden. Prices are negotiable.',
+    graveport:  'Salt-crusted wares from a dozen ports. Some still smell of the sea.',
+    ashenfall:  'Goods forged in volcanic heat. The quality shows.',
+    frostmere:  'Furs, bone tools, and weapons heavy enough to split ice.',
+    velmora:    'The finest wares money can buy — at the finest prices.',
+    silverkeep: 'Scales are watched carefully here. Fair prices, no haggling.',
+  },
+  gates: {
+    default:    'The gates stand open. The world beyond holds danger — and glory.',
+    ironhold:   'Beyond the iron walls, the Siege Fields stretch to the horizon.',
+    graveport:  'The Drowned Marsh begins where the cobblestones end.',
+    ashenfall:  'The Scorched Wastes shimmer in the heat beyond the walls.',
+    frostmere:  'Ice wind cuts through the gate. The Frozen Tundra lies beyond.',
+    dawnmark:   'The Dark Forest begins where the last torchlight fades.',
+    duskveil:   'No guards at the gate. No questions asked about what you carry.',
+  },
+  training: {
+    default:    'The clang of steel and the grunt of effort. Warriors are made here.',
+    ironhold:   'Veterans train in full armour. The standard here is unforgiving.',
+    thornreach: 'Forest fighters\' techniques — quick, dirty, and effective.',
+    silverkeep: 'Discipline and form above all. The Knights set the standard.',
+    duskveil:   'No official training hall. The lessons here leave scars.',
+  },
+  social: {
+    default:    'News, rumours, and the threads that hold a community together.',
+    velmora:    'The notice boards here are thick with intrigue and opportunity.',
+    duskveil:   'Whispered conversations. No one looks directly at anyone else.',
+    graveport:  'Sailors\' tales and ghost stories. Half of them might be true.',
+    silverkeep: 'Records are kept meticulously. Reputations matter here.',
+    dawnmark:   'A modest hall, but well-used. Everyone knows everyone\'s business.',
+  },
 };
 
 function renderBanner(key) {
@@ -678,32 +756,22 @@ function getStatusBar(player) {
 }
 
 function getTownScreen(player) {
-  const stam = player.stamina ?? player.fights_left ?? 10;
-  const trainLeft = 5 - (player.training_today || 0);
-  const town   = TOWNS[player.current_town || 'dawnmark'] || TOWNS.dawnmark;
-  const social = SOCIAL_SPACES[town.id] || SOCIAL_SPACES.dawnmark;
+  const stam    = player.stamina ?? player.fights_left ?? 10;
+  const town    = TOWNS[player.current_town || 'dawnmark'] || TOWNS.dawnmark;
+  const social  = SOCIAL_SPACES[town.id] || SOCIAL_SPACES.dawnmark;
   const { FACTIONS } = require('./factions');
   const factionInTown = Object.values(FACTIONS).find(f => f.homeTown === town.id) || null;
 
-  const { WILDERNESS_ZONES } = require('./wilderness');
-  const { RUINS } = require('./ruins');
-  const zone = WILDERNESS_ZONES[town.id] || null;
-  const ruin = RUINS[town.id] || null;
-  const visitedRuins = JSON.parse(player.ruins_visited || '[]');
-  const ruinVisited = ruin ? visitedRuins.includes(ruin.id) : false;
-
-  // Veilborn quest NPC — appears in the right town at each step
   const VEILBORN_STEPS = {
-    1: { town: 'dawnmark',   action: 'veilborn_scholar',   label: 'Speak to Scholar Voss',              color: c.cyan },
-    2: { town: 'ironhold',   action: 'veilborn_ironhold',  label: 'Report to Captain Ralen',            color: c.cyan },
-    3: { town: 'stormwatch', action: 'veilborn_stormwatch',label: 'Seek the Archivist',                 color: c.cyan },
-    4: { town: 'graveport',  action: 'veilborn_graveport', label: 'Board the ghost ship',               color: c.red  },
-    5: { town: 'ashenfall',  action: 'veilborn_ashenfall', label: 'Forge the Warden\'s Seal',           color: c.yellow },
-    6: { town: 'dawnmark',   action: 'veilborn_final',     label: 'Confront The Veilborn',              color: c.red  },
+    1: { town: 'dawnmark',   action: 'veilborn_scholar',    label: 'Speak to Scholar Voss',    color: c.cyan },
+    2: { town: 'ironhold',   action: 'veilborn_ironhold',   label: 'Report to Captain Ralen',  color: c.cyan },
+    3: { town: 'stormwatch', action: 'veilborn_stormwatch', label: 'Seek the Archivist',       color: c.cyan },
+    4: { town: 'graveport',  action: 'veilborn_graveport',  label: 'Board the ghost ship',     color: c.red  },
+    5: { town: 'ashenfall',  action: 'veilborn_ashenfall',  label: 'Forge the Warden\'s Seal', color: c.yellow },
+    6: { town: 'dawnmark',   action: 'veilborn_final',      label: 'Confront The Veilborn',    color: c.red  },
   };
   const veilStep = player.quest_id === 'wardens_fall' && player.quest_step <= 6
-    ? VEILBORN_STEPS[player.quest_step]
-    : null;
+    ? VEILBORN_STEPS[player.quest_step] : null;
   const showVeilNpc = veilStep && (town.id === veilStep.town);
 
   const worldEvent = _worldEventCache;
@@ -715,80 +783,152 @@ function getTownScreen(player) {
     worldEvent ? `${c.red}  ⚡ WORLD EVENT: ${c.yellow}${worldEvent.name}  ${c.dgray}${worldEvent.tagline}` : '',
     worldEvent?.effects?.combatNote ? `${c.dgray}  ${worldEvent.effects.combatNote}` : '',
     invaders.length > 0
-      ? `${c.red}  ☠ WARNING: ${c.yellow}${invaders[0].given_name}${invaders[0].title ? ', ' + invaders[0].title : ''}${c.red} threatens this town! Fight your way in!`
+      ? `${c.red}  ☠ WARNING: ${c.yellow}${invaders[0].given_name}${invaders[0].title ? ', ' + invaders[0].title : ''}${c.red} threatens this town!`
       : '',
     '',
     `${c.gray}  ${c.dgray}⚑ ${c.yellow}${town.name}  ${c.dgray}— ${c.gray}${town.tagline}`,
     '',
-    `${c.yellow}  What would you like to do?`,
-    '',
-    zone
-      ? `${c.yellow}  [F]${c.white} Explore ${zone.name}${stam === 0 ? c.dgray + '  (exhausted)' : c.green + '  (' + stam + ' stamina remaining)'}`
-      : `${c.yellow}  [F]${c.white} Enter the Forest${stam === 0 ? c.dgray + '  (exhausted — rest at the tavern)' : c.green + '  (' + stam + ' stamina remaining)'}`,
-    ruin ? `${c.cyan}  [U]${c.white} Explore the Ruins${c.dgray}  (${ruin.name})${ruinVisited ? c.dgray + ' — visited today' : ''}` : '',
-    `${c.yellow}  [X]${c.white} Training Grounds${trainLeft > 0 ? c.dgreen + '  (' + trainLeft + ' session' + (trainLeft !== 1 ? 's' : '') + ' left)' : c.dgray + '  (fully trained today)'}`,
-    `${c.yellow}  [W]${c.white} Visit the Weapon Shop`,
-    `${c.yellow}  [A]${c.white} Visit the Armour Shop`,
-    `${c.yellow}  [I]${c.white} Go to the Inn${player.antidote_owned ? c.dgreen + '  (you have an antidote)' : ''}`,
-    `${c.dgreen}  [H]${c.white} Visit the Herbalist${c.dgray}`,
-    `${c.yellow}  [B]${c.white} Visit the Bank`,
-    `${c.yellow}  [M]${c.white} Seek the Master (Aldric)`,
-    `${c.yellow}  [T]${c.white} Go to the Tavern`,
+    `${c.yellow}  [T]${c.white} Tavern`,
+    `${c.yellow}  [I]${c.white} The Inn${player.antidote_owned ? c.dgreen + '  (you have an antidote)' : ''}`,
+    `${c.yellow}  [B]${c.white} The Bank`,
     `${c.yellow}  [G]${c.white} ${social.name}`,
-    `${c.yellow}  [R]${c.white} Speak to the Bard`,
-    `${c.yellow}  [N]${c.white} View the Daily News`,
-    `${c.yellow}  [P]${c.white} View Other Players`,
-    `${c.yellow}  [C]${c.white} View Your Character`,
-    player.level >= 12 ? `${c.red}  [D]${c.white} ${(player.times_won || 0) > 0 ? 'Return to the Lair' : 'Challenge the Red Dragon'}` : '',
-    (player.level >= 12 && (player.times_won || 0) >= 1) ? `${c.magenta}  [J]${c.white} Ascend ${c.dgray}(Prestige — reset to level 1, carry your power forward)` : '',
+    `${c.yellow}  [N]${c.white} Daily News`,
+    `${c.yellow}  [Y]${c.white} Town Crier`,
+    divider('─', 44),
+    `${c.yellow}  [M]${c.white} The Market          ${c.dgray}(shops & herbalist)`,
+    `${c.yellow}  [X]${c.white} The Gates           ${c.dgray}(forest, travel & adventure)${stam === 0 ? c.red + '  ✗ exhausted' : ''}`,
+    `${c.yellow}  [H]${c.white} Training Grounds    ${c.dgray}(master & training yard)`,
+    `${c.yellow}  [P]${c.white} Social Hall         ${c.dgray}(character, players & bard)`,
+    divider('─', 44),
     (player.perk_points || 0) > 0 ? `${c.magenta}  [E]${c.white} Choose a Perk ${c.magenta}✦ (${player.perk_points} point${player.perk_points > 1 ? 's' : ''} available!)` : '',
     player.spec_pending ? `${c.cyan}  [S]${c.white} Choose Your Specialisation ${c.cyan}✦ (your path awaits!)` : '',
-    `${c.yellow}  [Y]${c.white} Town Crier${c.dgray} (post an announcement)`,
-    `${c.cyan}  [V]${c.white} World Map / Travel${c.dgray} (${town.connections.length} route${town.connections.length !== 1 ? 's' : ''} from here)`,
-    factionInTown ? `${c.brown}  [K]${c.white} ${factionInTown.houseName}${c.dgray} (${factionInTown.shortName})` : '',
+    factionInTown ? `${c.brown}  [K]${c.white} ${factionInTown.houseName}  ${c.dgray}(${factionInTown.shortName})` : '',
     invaders.length > 0 ? `${c.red}  [Z]${c.white} Fight ${invaders[0].given_name}${invaders[0].title ? ', ' + invaders[0].title : ''} at the gate` : '',
     showVeilNpc ? `${veilStep.color}  [Q]${c.white} ${veilStep.label}  ${c.dgray}⚡ Quest` : '',
-    (town.id === 'silverkeep' || town.id === 'ironhold') ? `${c.cyan}  [0]${c.white} The Arena${c.dgray} (formal duels, spectator betting)` : '',
     `${c.dgray}  [\\]${c.gray} Switch Character`,
     `${c.dgray}  [L]${c.gray} Logout`,
     '',
   ].filter(l => l !== undefined && l !== '');
 
   const choices = [
-    zone ? { key: 'F', label: `Explore ${zone.name}`, action: 'wilderness', disabled: stam === 0 }
-         : { key: 'F', label: 'Enter the Forest', action: 'forest', disabled: stam === 0 },
-    { key: 'X', label: 'Training Grounds', action: 'training' },
-    { key: 'W', label: 'Weapon Shop', action: 'weapon_shop' },
-    { key: 'A', label: 'Armour Shop', action: 'armor_shop' },
-    { key: 'I', label: 'Inn', action: 'inn' },
-    { key: 'H', label: 'Herbalist', action: 'herbalist' },
-    { key: 'B', label: 'Bank', action: 'bank' },
-    { key: 'M', label: 'Master', action: 'master' },
-    { key: 'T', label: 'Tavern', action: 'tavern' },
-    { key: 'G', label: social.name, action: social.action },
-    { key: 'R', label: 'The Bard', action: 'bard' },
-    { key: 'N', label: 'Daily News', action: 'news' },
-    { key: 'P', label: 'Other Players', action: 'players' },
-    { key: 'C', label: 'Character', action: 'character' },
-    { key: 'Y', label: 'Town Crier', action: 'crier' },
-    { key: 'V', label: 'World Map / Travel', action: 'world_map' },
-    { key: '\\', label: 'Switch Character', action: 'char_switch' },
-    { key: 'L', label: 'Logout', action: 'logout' },
+    { key: 'T', label: 'Tavern',          action: 'tavern' },
+    { key: 'I', label: 'The Inn',         action: 'inn' },
+    { key: 'B', label: 'The Bank',        action: 'bank' },
+    { key: 'G', label: social.name,       action: social.action },
+    { key: 'N', label: 'Daily News',      action: 'news' },
+    { key: 'Y', label: 'Town Crier',      action: 'crier' },
+    { key: 'M', label: 'The Market',      action: 'district_market' },
+    { key: 'X', label: 'The Gates',       action: 'district_gates' },
+    { key: 'H', label: 'Training Grounds',action: 'district_training' },
+    { key: 'P', label: 'Social Hall',     action: 'district_social' },
+    { key: '\\',label: 'Switch Character',action: 'char_switch' },
+    { key: 'L', label: 'Logout',          action: 'logout' },
   ];
-  if ((player.perk_points || 0) > 0) choices.splice(choices.findIndex(ch => ch.key === 'Y'), 0, { key: 'E', label: 'Choose a Perk', action: 'perk_select' });
-  if (player.spec_pending) choices.splice(choices.findIndex(ch => ch.key === 'Y'), 0, { key: 'S', label: 'Choose Specialisation', action: 'spec_select' });
-  if (factionInTown) choices.splice(choices.findIndex(ch => ch.key === 'L'), 0, { key: 'K', label: factionInTown.houseName, action: 'faction_house' });
-  if (player.level >= 12) choices.splice(choices.findIndex(ch => ch.key === 'Y'), 0, { key: 'D', label: (player.times_won || 0) > 0 ? 'Return to the Lair' : 'Challenge Dragon', action: 'dragon' });
-  if (player.level >= 12 && (player.times_won || 0) >= 1) choices.splice(choices.findIndex(ch => ch.key === 'L'), 0, { key: 'J', label: 'Ascend (Prestige)', action: 'prestige_confirm' });
-  if (ruin) choices.splice(1, 0, { key: 'U', label: ruin.name, action: 'ruins', disabled: ruinVisited });
-  if (invaders.length > 0) choices.splice(choices.findIndex(ch => ch.key === 'L'), 0,
-    { key: 'Z', label: `Fight ${invaders[0].given_name}`, action: 'town_invader_fight' });
-  if (showVeilNpc) choices.splice(choices.findIndex(ch => ch.key === 'L'), 0,
-    { key: 'Q', label: veilStep.label, action: veilStep.action });
-  if (town.id === 'silverkeep' || town.id === 'ironhold') choices.splice(choices.findIndex(ch => ch.key === 'L'), 0,
-    { key: '0', label: 'The Arena', action: 'arena_lobby' });
+
+  if ((player.perk_points || 0) > 0)
+    choices.splice(choices.findIndex(ch => ch.key === '\\'), 0, { key: 'E', label: 'Choose a Perk ✦', action: 'perk_select' });
+  if (player.spec_pending)
+    choices.splice(choices.findIndex(ch => ch.key === '\\'), 0, { key: 'S', label: 'Choose Specialisation ✦', action: 'spec_select' });
+  if (factionInTown)
+    choices.splice(choices.findIndex(ch => ch.key === 'L'), 0, { key: 'K', label: factionInTown.houseName, action: 'faction_house' });
+  if (invaders.length > 0)
+    choices.splice(choices.findIndex(ch => ch.key === 'L'), 0, { key: 'Z', label: `Fight ${invaders[0].given_name}`, action: 'town_invader_fight' });
+  if (showVeilNpc)
+    choices.splice(choices.findIndex(ch => ch.key === 'L'), 0, { key: 'Q', label: veilStep.label, action: veilStep.action });
 
   return { screen: 'town', ...buildScreen(town.name, lines, choices) };
+}
+
+function getMarketScreen(player) {
+  const town   = TOWNS[player.current_town || 'dawnmark'] || TOWNS.dawnmark;
+  const flavor = (DISTRICT_FLAVOR.market[town.id] || DISTRICT_FLAVOR.market.default);
+  const lines = [
+    ...renderBanner('market'),
+    '',
+    `${c.gray}  ${c.dgray}⚑ ${c.yellow}${town.name}  ${c.dgray}— The Market`,
+    `${c.dgray}  ${flavor}`,
+    '',
+  ];
+  return buildScreen('The Market', lines, [
+    { key: 'W', label: 'Weapon Shop',  action: 'weapon_shop' },
+    { key: 'A', label: 'Armour Shop',  action: 'armor_shop'  },
+    { key: 'H', label: 'Herbalist',    action: 'herbalist'   },
+    { key: 'B', label: 'Back to Town', action: 'town'        },
+  ]);
+}
+
+function getGatesScreen(player) {
+  const stam  = player.stamina ?? player.fights_left ?? 10;
+  const town  = TOWNS[player.current_town || 'dawnmark'] || TOWNS.dawnmark;
+  const flavor = (DISTRICT_FLAVOR.gates[town.id] || DISTRICT_FLAVOR.gates.default);
+
+  const { WILDERNESS_ZONES } = require('./wilderness');
+  const { RUINS } = require('./ruins');
+  const zone = WILDERNESS_ZONES[town.id] || null;
+  const ruin = RUINS[town.id] || null;
+  const visitedRuins = JSON.parse(player.ruins_visited || '[]');
+  const ruinVisited = ruin ? visitedRuins.includes(ruin.id) : false;
+
+  const lines = [
+    ...renderBanner('forest'),
+    '',
+    `${c.gray}  ${c.dgray}⚑ ${c.yellow}${town.name}  ${c.dgray}— The Gates`,
+    `${c.dgray}  ${flavor}`,
+    '',
+  ];
+
+  const choices = [];
+  if (zone) {
+    choices.push({ key: 'F', label: `Explore ${zone.name}${stam === 0 ? ' (exhausted)' : ` (${stam} stamina)`}`, action: 'wilderness', disabled: stam === 0 });
+  } else {
+    choices.push({ key: 'F', label: `Enter the Forest${stam === 0 ? ' (exhausted)' : ` (${stam} stamina)`}`, action: 'forest', disabled: stam === 0 });
+  }
+  if (ruin) choices.push({ key: 'U', label: `${ruin.name}${ruinVisited ? ' (visited today)' : ''}`, action: 'ruins', disabled: ruinVisited });
+  choices.push({ key: 'V', label: 'World Map / Travel', action: 'world_map' });
+  if (player.level >= 12) choices.push({ key: 'D', label: (player.times_won || 0) > 0 ? 'Return to the Dragon\'s Lair' : 'Challenge the Red Dragon', action: 'dragon' });
+  if (player.level >= 12 && (player.times_won || 0) >= 1) choices.push({ key: 'J', label: 'Ascend (Prestige)', action: 'prestige_confirm' });
+  choices.push({ key: 'B', label: 'Back to Town', action: 'town' });
+
+  return buildScreen('The Gates', lines, choices);
+}
+
+function getTrainingGroundsScreen(player) {
+  const trainLeft = 5 - (player.training_today || 0);
+  const town    = TOWNS[player.current_town || 'dawnmark'] || TOWNS.dawnmark;
+  const flavor  = (DISTRICT_FLAVOR.training[town.id] || DISTRICT_FLAVOR.training.default);
+  const lines = [
+    ...renderBanner('training'),
+    '',
+    `${c.gray}  ${c.dgray}⚑ ${c.yellow}${town.name}  ${c.dgray}— Training Grounds`,
+    `${c.dgray}  ${flavor}`,
+    '',
+  ];
+  return buildScreen('Training Grounds', lines, [
+    { key: 'M', label: 'Seek the Master (Aldric)', action: 'master' },
+    { key: 'X', label: `Training Yard${trainLeft > 0 ? ` (${trainLeft} session${trainLeft !== 1 ? 's' : ''} left)` : ' (fully trained today)'}`, action: 'training', disabled: trainLeft === 0 },
+    { key: 'B', label: 'Back to Town', action: 'town' },
+  ]);
+}
+
+function getSocialHallScreen(player) {
+  const town   = TOWNS[player.current_town || 'dawnmark'] || TOWNS.dawnmark;
+  const flavor = (DISTRICT_FLAVOR.social[town.id] || DISTRICT_FLAVOR.social.default);
+  const lines = [
+    ...renderBanner('social'),
+    '',
+    `${c.gray}  ${c.dgray}⚑ ${c.yellow}${town.name}  ${c.dgray}— Social Hall`,
+    `${c.dgray}  ${flavor}`,
+    '',
+  ];
+  const choices = [
+    { key: 'C', label: 'Your Character', action: 'character' },
+    { key: 'O', label: 'Other Players',  action: 'players'   },
+    { key: 'R', label: 'The Bard',       action: 'bard'      },
+  ];
+  if (town.id === 'silverkeep' || town.id === 'ironhold')
+    choices.splice(choices.length, 0, { key: '0', label: 'The Arena', action: 'arena_lobby' });
+  choices.push({ key: 'B', label: 'Back to Town', action: 'town' });
+  return buildScreen('Social Hall', lines, choices);
 }
 
 function getForestEncounterScreen(player, monster, depth = 0) {
@@ -2405,7 +2545,7 @@ function renderWorldMap(currentTownId, connections, playerLevel) {
       const id = MAP_NAME_TO_ID[m[1]];
       const dest = id ? TOWNS[id] : null;
       const locked = dest && (dest.minLevel || 1) > playerLevel;
-      if (id === currentTownId)                         result += `${c.yellow}${m[0]}`;
+      if (id === currentTownId)                         result += `${c.brown}[*${m[1]}*]`;
       else if (id && connections.includes(id) && locked) result += `${c.red}${m[0]}`;
       else if (id && connections.includes(id))           result += `${c.green}${m[0]}`;
       else                                               result += `${c.dgray}${m[0]}`;
@@ -2424,7 +2564,7 @@ function getWorldMapScreen(player) {
     ...renderBanner('title'),
     '',
     `${c.yellow}  --- WORLD MAP ---`,
-    `${c.dgray}  ${c.yellow}[You]${c.dgray} = here   ${c.green}[Green]${c.dgray} = reachable   ${c.red}[Red]${c.dgray} = level-locked   ${c.dgray}[Gray]${c.dgray} = farther away`,
+    `${c.dgray}  ${c.brown}[*Name*]${c.dgray} = you are here   ${c.green}[Green]${c.dgray} = reachable   ${c.red}[Red]${c.dgray} = level-locked   ${c.dgray}[Gray]${c.dgray} = farther away`,
     '',
     ...renderWorldMap(town.id, connections, player.level),
     '',
@@ -3682,7 +3822,8 @@ function getCharDeleteConfirmScreen(char) {
 }
 
 module.exports = {
-  getTownScreen, getForestEncounterScreen, getForestCombatScreen,
+  getTownScreen, getMarketScreen, getGatesScreen, getTrainingGroundsScreen, getSocialHallScreen,
+  getForestEncounterScreen, getForestCombatScreen,
   getWeaponShopScreen, getArmorShopScreen, getInnScreen, getBankScreen,
   getMasterScreen, getTrainingScreen, getTavernScreen, getTavernDrinkScreen,
   getTavernEncounterScreen, getWorldMapScreen,

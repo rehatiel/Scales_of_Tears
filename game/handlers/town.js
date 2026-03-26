@@ -3,7 +3,8 @@ const { WEAPONS, ARMORS, TOWNS, SHOP_OWNERS, getWeaponByNum, getArmorByNum, PERK
 const { checkLevelUp } = require('../newday');
 const { getEventDef } = require('../world_events');
 const {
-  getTownScreen, getWeaponShopScreen, getArmorShopScreen, getInnScreen, getInnHealerScreen,
+  getTownScreen, getMarketScreen, getGatesScreen, getTrainingGroundsScreen, getSocialHallScreen,
+  getWeaponShopScreen, getArmorShopScreen, getInnScreen, getInnHealerScreen,
   getHerbalistScreen, getBankScreen, getMasterScreen, getTrainingScreen, getGardenScreen,
   getBardScreen, getNewsScreen, getCharacterScreen, getCharacterGearScreen, getCharacterRecordsScreen, getCharacterFactionsScreen, getCrierScreen, getLevelUpScreen,
   getPerkSelectionScreen, getSpecSelectionScreen,
@@ -813,6 +814,24 @@ async function merchant_loot({ player, req, res, pendingMessages }) {
   ]});
 }
 
+// ── DISTRICT SCREENS ──────────────────────────────────────────────────────────
+
+async function district_market({ player, req, res, pendingMessages }) {
+  return res.json({ ...getMarketScreen(player), pendingMessages });
+}
+
+async function district_gates({ player, req, res, pendingMessages }) {
+  return res.json({ ...getGatesScreen(player), pendingMessages });
+}
+
+async function district_training({ player, req, res, pendingMessages }) {
+  return res.json({ ...getTrainingGroundsScreen(player), pendingMessages });
+}
+
+async function district_social({ player, req, res, pendingMessages }) {
+  return res.json({ ...getSocialHallScreen(player), pendingMessages });
+}
+
 module.exports = {
   inn, inn_rest, inn_gem, inn_antidote,
   inn_retire, inn_wake,
@@ -839,4 +858,5 @@ module.exports = {
   choose_spec,
   merchant_help,
   merchant_loot,
+  district_market, district_gates, district_training, district_social,
 };

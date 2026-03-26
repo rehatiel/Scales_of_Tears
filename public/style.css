@@ -7,7 +7,7 @@
   --sb-height: 36px;
   --c1:  #0000AA; --c2:  #00AA00; --c3:  #00AAAA;
   --c4:  #AA0000; --c5:  #AA00AA; --c6:  #AA5500;
-  --c7:  #AAAAAA; --c8:  #555555; --c9:  #5555FF;
+  --c7:  #AAAAAA; --c8:  #6a6a6a; --c9:  #5555FF;
   --c0:  #55FF55; --c!:  #55FFFF; --c@:  #FF5555;
   --c#:  #FF55FF; --c$:  #FFFF55; --c%:  #FFFFFF;
   --default: #AAAAAA;
@@ -632,8 +632,9 @@ button, .choice-item, .sex-btn, .class-card, .tab-btn {
      0.6em ≈ monospace char width; 62 chars + 16px padding.
      clamp(min, preferred, max) */
   #terminal {
-    font-size: clamp(9px, 2.55vw, 14px);
-    padding: 6px 8px 0;
+    font-size: clamp(10px, 2.55vw, 14px);
+    padding: 8px 10px 0;
+    line-height: 1.6;
   }
 
   /* Status bar: 2-row compact layout */
@@ -685,19 +686,19 @@ button, .choice-item, .sex-btn, .class-card, .tab-btn {
   /* Choice buttons — full width, finger-friendly */
   .choice-block {
     grid-template-columns: 1fr;
-    gap: 3px;
+    gap: 4px;
   }
   .choice-item {
-    min-height: 46px;
-    padding: 10px 14px;
-    font-size: 14px;
+    min-height: 50px;
+    padding: 12px 16px;
+    font-size: 15px;
     border-left: 2px solid #1a3a1a;
   }
   .choice-item:active:not(.disabled):not(.dead) {
     background: #001800;
     color: #FFFF55;
   }
-  .ck { font-size: 14px; min-width: 2.4em; }
+  .ck { font-size: 15px; min-width: 2.4em; }
 
   /* Input — prevent iOS zoom, full width */
   #game-input {

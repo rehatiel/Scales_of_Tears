@@ -128,9 +128,19 @@ function renderScreen(data) {
   termOutput.innerHTML = '';
 
   // Screen lines (ANSI art etc. always first)
-  if (data.lines && data.lines.length) {
+  // Strip lines that are just choice indicators — they're already rendered as buttons below.
+  // A "choice line" is one whose content (after stripping color codes) begins with [KEY].
+  const choiceKeys = new Set((data.choices || []).map(c => c.key.toUpperCase()));
+  const visibleLines = (data.lines || []).filter(line => {
+    if (!choiceKeys.size) return true;
+    const stripped = line.replace(/`[0-9!@#$%a-h]/g, '').trim();
+    const m = stripped.match(/^\[(.)\]/);
+    return !(m && choiceKeys.has(m[1].toUpperCase()));
+  });
+
+  if (visibleLines.length) {
     const linesDiv = document.createElement('div');
-    linesDiv.innerHTML = data.lines.map(l =>
+    linesDiv.innerHTML = visibleLines.map(l =>
       `<span class="tline">${parseLine(l)}</span>`
     ).join('');
     termOutput.appendChild(linesDiv);
