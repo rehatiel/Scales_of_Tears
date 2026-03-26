@@ -60,6 +60,15 @@ function showSetup() {
   setupScreen.classList.remove('hidden');
   gameScreen.classList.add('hidden');
   statusBar.classList.add('hidden');
+  // Reset wizard state so a second character starts clean
+  wizard.name = '';
+  wizard.sex = null;
+  wizard.classNum = null;
+  charNameInput.value = '';
+  nameNext.disabled = true;
+  document.getElementById('confirm-submit').disabled = false;
+  document.getElementById('confirm-submit').textContent = '⚔ Enter the Realm!';
+  document.getElementById('setup-error').textContent = '';
   wizardGoTo(1);
 }
 function showGame() {

@@ -66,12 +66,13 @@ lord-web/
 ├── game/
 │   ├── engine.js      — Screen generation, ASCII banners, HP bars
 │   ├── combat.js      — Round resolution, monster AI, flee formula
-│   ├── data.js        — Static data: weapons, armors, 132 monsters
+│   ├── data.js        — In-memory game data cache (weapons, armors, monsters, exp table); populated from DB at startup
 │   ├── forest_events.js — Non-combat forest encounters + monster art
 │   ├── newday.js      — Daily reset routine (HP, bank interest, etc.)
 │   ├── secrets.js     — 18 hidden one-time secrets with trigger/weight system
 │   ├── sse.js         — Server-Sent Events registry (push screens and toasts to players)
-│   ├── quests.js      — Quest registry and step logic
+│   ├── quests.js      — Quest cache (QUEST_DEFINITIONS); populated from DB at startup
+│   ├── quest_runner.js — Generic executor for DB-driven quests (kill triggers, travel triggers, choice resolution)
 │   ├── factions.js    — Faction reputation helpers
 │   ├── wounds.js      — Wound and infection parsing/display
 │   └── handlers/      — Action handlers split by domain (forest, tavern, combat, characters, …)
@@ -120,7 +121,7 @@ lord-web/
 - Faction standing affects available quests, NPC reactions, and town access
 
 ### Quests & Story
-- **Quest system** with branching outcomes and permanent moral consequences
+- **Database-driven quest framework** — quests and their steps are stored in PostgreSQL and loaded into memory at startup; new quests with `kill_named`, `travel`, `choice`, `npc_talk`, `kill_boss`, and `event_trigger` step types can be added from the admin panel with no code changes
 - *The Warden's Fall* — 6-step post-dragon questline culminating in a Veilborn boss fight
 - Unlisted quests, secret lore fragments, and one-time story events discoverable through exploration
 - **18 hidden secrets** — rare, unrepeatable moments scattered across forest, inn, bank, tavern, and town
@@ -138,3 +139,5 @@ lord-web/
 
 ### Admin
 - Admin panel at `/admin.html` — player management, ban system, announcements, migration runner, one-time impersonation tokens
+- **Game Data editor** — live-edit weapons, armors, monsters, and game constants (exp thresholds, dragon stats, daily limits, etc.) directly from the browser; changes take effect immediately without a restart
+- **Quest builder** — create and edit quests with an ordered step editor; each step type reveals type-specific fields (destination town, NPC ID, boss ID, choice prompt with per-option effects and outcome text); active player count shown before deletion

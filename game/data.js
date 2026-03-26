@@ -1042,6 +1042,46 @@ const HUNT_PRIZE_ITEMS = [
   'wardens_edge',
 ];
 
+// ── DB cache loader ───────────────────────────────────────────────────────────
+// Called at startup by server.js after initDb() + loadGameDataFromDb().
+// Mutates WEAPONS, ARMORS, MONSTER_TEMPLATES, EXP_TABLE in-place so all
+// existing require() destructures automatically see the live DB values.
+function loadGameData({ weapons, armors, monsters, constants }) {
+  // Weapons: index by num
+  for (const w of weapons) {
+    WEAPONS[w.num] = {
+      num: w.num, name: w.name,
+      price: Number(w.price), strength: Number(w.strength), tier: Number(w.tier),
+      ...(w.bonus ? { bonus: w.bonus, bonusDesc: w.bonus_desc } : {}),
+    };
+  }
+  // Armors: index by num
+  for (const a of armors) {
+    ARMORS[a.num] = {
+      num: a.num, name: a.name,
+      price: Number(a.price), defense: Number(a.defense), tier: Number(a.tier),
+      ...(a.bonus ? { bonus: a.bonus, bonusDesc: a.bonus_desc } : {}),
+    };
+  }
+  // Monster templates: clear and rebuild by level / sort_order
+  for (let i = 0; i < MONSTER_TEMPLATES.length; i++) MONSTER_TEMPLATES[i].length = 0;
+  for (const m of monsters) {
+    const lvlIdx = m.level - 1;
+    MONSTER_TEMPLATES[lvlIdx][m.sort_order] = {
+      name: m.name, weapon: m.weapon,
+      strMult: parseFloat(m.str_mult), hpMult: parseFloat(m.hp_mult),
+      goldMult: parseFloat(m.gold_mult), expMult: parseFloat(m.exp_mult),
+      ...(m.behavior ? { behavior: m.behavior } : {}),
+      meet: m.meet_text, death: m.death_text,
+    };
+  }
+  // EXP table
+  for (let i = 1; i <= 11; i++) {
+    const val = constants[`exp_l${i}`];
+    if (val !== undefined) EXP_TABLE[i - 1] = parseInt(val, 10);
+  }
+}
+
 module.exports = {
   WEAPONS, ARMORS, RED_DRAGON, CHAMPION_DRAGONS, getChampionDragon,
   CLASS_START_HP, CLASS_START_STR, PRESTIGE_TITLES, getPrestigeTitle,
@@ -1057,4 +1097,5 @@ module.exports = {
   NAMED_ENEMY_POOL, generateNamedEnemyName, pickKillTitle,
   NAMED_ITEMS, getNamedItemDrop,
   HUNT_MONSTER_POOL, HUNT_RANK_REWARDS, HUNT_PRIZE_ITEMS,
+  loadGameData,
 };

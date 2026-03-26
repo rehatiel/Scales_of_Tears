@@ -15,6 +15,7 @@ const {
 } = require('../wounds');
 const { startAbduction } = require('./abduction');
 const { isRefused, adjustReps } = require('../factions');
+const { executeQuestChoice } = require('../quest_runner');
 
 // ── INN ───────────────────────────────────────────────────────────────────────
 
@@ -814,6 +815,29 @@ async function merchant_loot({ player, req, res, pendingMessages }) {
   ]});
 }
 
+async function quest_choice({ player, param, req, res, pendingMessages }) {
+  const result = executeQuestChoice(player, param);
+  if (!result) return res.json({ ...getTownScreen(player), pendingMessages });
+
+  await updatePlayer(player.id, result.updates);
+  player = await getPlayer(player.id);
+
+  if (result.questComplete) {
+    await addNews(`\`0${player.handle}\`% has completed the quest: \`$${result.questName}\`%!`);
+  }
+
+  const levelUp = checkLevelUp(player);
+  if (levelUp) {
+    await updatePlayer(player.id, levelUp.updates);
+    player = await getPlayer(player.id);
+    await addNews(`\`$${player.handle}\`% has advanced to level \`$${levelUp.newLevel}\`%!`);
+    return res.json({ ...getLevelUpScreen(player, levelUp.newLevel, levelUp.hpGain, levelUp.strGain, levelUp.perkPoint, levelUp.specPoint), pendingMessages: [
+      ...pendingMessages, ...result.messages,
+    ]});
+  }
+  return res.json({ ...getTownScreen(player), pendingMessages: [...pendingMessages, ...result.messages] });
+}
+
 // ── DISTRICT SCREENS ──────────────────────────────────────────────────────────
 
 async function district_market({ player, req, res, pendingMessages }) {
@@ -858,5 +882,6 @@ module.exports = {
   choose_spec,
   merchant_help,
   merchant_loot,
+  quest_choice,
   district_market, district_gates, district_training, district_social,
 };

@@ -6,6 +6,7 @@ const { checkLevelUp } = require('../newday');
 const { FOREST_EVENTS } = require('../forest_events');
 const { parseWounds, getWoundType, getWoundSeverity, getWoundLocation, woundChance, getBleedDamage, getCrushDefPenalty, rollInfection, resolveInfection } = require('../wounds');
 const { adjustReps, getHostileFactions, makeAssassin } = require('../factions');
+const { checkKillNamedTrigger } = require('../quest_runner');
 const {
   getTownScreen, getForestEncounterScreen, getForestCombatScreen,
   getForestEventScreen, getRescueOpportunityScreen, getLevelUpScreen,
@@ -1029,19 +1030,15 @@ async function forest_combat({ action, player, req, res, pendingMessages }) {
       }
       log.push({ text: `\`$The legend of ${monster.displayName} ends here. Gold & exp ×1.5!` });
 
-      // Widow's Revenge quest: auto-complete on named enemy kill
-      if (player.quest_id === 'widow_revenge') {
-        const qExp  = 400 * player.level;
-        const qGold = 300 * player.level;
-        player = await getPlayer(player.id);
-        await updatePlayer(player.id, {
-          quest_id: '', quest_step: 0, quest_data: '',
-          charm: player.charm + 3,
-          exp:  Number(player.exp)  + qExp,
-          gold: Number(player.gold) + qGold,
-        });
-        player = await getPlayer(player.id);
-        log.push({ text: `\`$QUEST COMPLETE: The Widow\'s Revenge! +${qExp.toLocaleString()} exp, +${qGold.toLocaleString()} gold, +3 charm!` });
+      // Generic quest: auto-complete if current step is kill_named
+      {
+        const qResult = checkKillNamedTrigger(player);
+        if (qResult) {
+          await updatePlayer(player.id, qResult.updates);
+          player = await getPlayer(player.id);
+          const rewardStr = qResult.messages.join(', ');
+          log.push({ text: `\`$QUEST COMPLETE: ${qResult.questName}!${rewardStr ? ' ' + rewardStr : ''}` });
+        }
       }
     } else if (monster.isAssassin) {
       await addNews(`\`$${player.handle}\`% defeated a ${monster.name} sent by the \`@${monster.factionId}\`% in the forest!`);

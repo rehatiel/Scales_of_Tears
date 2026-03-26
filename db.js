@@ -698,6 +698,167 @@ async function setBanAccount(accountId, banned) {
   await pool.query('UPDATE accounts SET banned = $1 WHERE id = $2', [banned, accountId]);
 }
 
+// ── Game data (weapons / armours / monsters / constants) ─────────────────────
+
+async function loadGameDataFromDb() {
+  const [weapons, armors, monsters, constants] = await Promise.all([
+    pool.query('SELECT * FROM weapons ORDER BY num ASC'),
+    pool.query('SELECT * FROM armors ORDER BY num ASC'),
+    pool.query('SELECT * FROM monsters ORDER BY level ASC, sort_order ASC'),
+    pool.query('SELECT key, value FROM game_constants'),
+  ]);
+  const constantMap = {};
+  for (const row of constants.rows) constantMap[row.key] = row.value;
+  return {
+    weapons: weapons.rows,
+    armors: armors.rows,
+    monsters: monsters.rows,
+    constants: constantMap,
+  };
+}
+
+async function getAllWeapons() {
+  const { rows } = await pool.query('SELECT * FROM weapons ORDER BY tier ASC, num ASC');
+  return rows;
+}
+
+async function updateWeapon(num, fields) {
+  const allowed = new Set(['name', 'price', 'strength', 'tier', 'bonus', 'bonus_desc']);
+  const keys = Object.keys(fields).filter(k => allowed.has(k));
+  if (!keys.length) return;
+  const set = keys.map((k, i) => `${k} = $${i + 1}`).join(', ');
+  await pool.query(`UPDATE weapons SET ${set} WHERE num = $${keys.length + 1}`, [...keys.map(k => fields[k]), num]);
+}
+
+async function getAllArmors() {
+  const { rows } = await pool.query('SELECT * FROM armors ORDER BY tier ASC, num ASC');
+  return rows;
+}
+
+async function updateArmor(num, fields) {
+  const allowed = new Set(['name', 'price', 'defense', 'tier', 'bonus', 'bonus_desc']);
+  const keys = Object.keys(fields).filter(k => allowed.has(k));
+  if (!keys.length) return;
+  const set = keys.map((k, i) => `${k} = $${i + 1}`).join(', ');
+  await pool.query(`UPDATE armors SET ${set} WHERE num = $${keys.length + 1}`, [...keys.map(k => fields[k]), num]);
+}
+
+async function getAllMonsters(level) {
+  if (level) {
+    const { rows } = await pool.query('SELECT * FROM monsters WHERE level = $1 ORDER BY sort_order ASC', [level]);
+    return rows;
+  }
+  const { rows } = await pool.query('SELECT * FROM monsters ORDER BY level ASC, sort_order ASC');
+  return rows;
+}
+
+async function updateMonster(id, fields) {
+  const allowed = new Set(['name', 'weapon', 'str_mult', 'hp_mult', 'gold_mult', 'exp_mult', 'behavior', 'meet_text', 'death_text']);
+  const keys = Object.keys(fields).filter(k => allowed.has(k));
+  if (!keys.length) return;
+  const set = keys.map((k, i) => `${k} = $${i + 1}`).join(', ');
+  await pool.query(`UPDATE monsters SET ${set} WHERE id = $${keys.length + 1}`, [...keys.map(k => fields[k]), id]);
+}
+
+async function getAllGameConstants() {
+  const { rows } = await pool.query('SELECT * FROM game_constants ORDER BY key ASC');
+  return rows;
+}
+
+async function setGameConstant(key, value) {
+  await pool.query(
+    `INSERT INTO game_constants (key, value) VALUES ($1, $2)
+     ON CONFLICT (key) DO UPDATE SET value = $2`,
+    [key, String(value)]
+  );
+}
+
+// ── Quest helpers ──────────────────────────────────────────────────────────────
+
+async function loadQuestsFromDb() {
+  const [questRes, stepRes] = await Promise.all([
+    pool.query('SELECT * FROM quests ORDER BY created_at'),
+    pool.query('SELECT * FROM quest_steps ORDER BY quest_id, step_order'),
+  ]);
+  return { quests: questRes.rows, steps: stepRes.rows };
+}
+
+async function getAllQuests() {
+  const { rows } = await pool.query('SELECT * FROM quests ORDER BY created_at');
+  return rows;
+}
+
+async function getQuestWithSteps(id) {
+  const [q, s] = await Promise.all([
+    pool.query('SELECT * FROM quests WHERE id = $1', [id]),
+    pool.query('SELECT * FROM quest_steps WHERE quest_id = $1 ORDER BY step_order', [id]),
+  ]);
+  if (!q.rows[0]) return null;
+  return { ...q.rows[0], steps: s.rows };
+}
+
+async function createQuest(q) {
+  const { rows } = await pool.query(
+    `INSERT INTO quests (id, name, description, min_level, repeatable, active, trigger_type, trigger_ref)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+    [q.id, q.name, q.description, q.min_level ?? 1, q.repeatable ?? false, q.active ?? true, q.trigger_type ?? null, q.trigger_ref ?? null]
+  );
+  return rows[0];
+}
+
+async function updateQuest(id, fields) {
+  const allowed = ['name', 'description', 'min_level', 'repeatable', 'active', 'trigger_type', 'trigger_ref'];
+  const sets = [];
+  const vals = [];
+  for (const k of allowed) {
+    if (k in fields) { sets.push(`${k} = $${vals.length + 1}`); vals.push(fields[k]); }
+  }
+  if (!sets.length) return;
+  vals.push(id);
+  await pool.query(`UPDATE quests SET ${sets.join(', ')} WHERE id = $${vals.length}`, vals);
+}
+
+async function deleteQuest(id) {
+  await pool.query('DELETE FROM quests WHERE id = $1', [id]);
+}
+
+async function createQuestStep(step) {
+  const { rows } = await pool.query(
+    `INSERT INTO quest_steps (quest_id, step_order, type, params, effects, display_text)
+     VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+    [step.quest_id, step.step_order, step.type,
+     JSON.stringify(step.params ?? {}), JSON.stringify(step.effects ?? {}), step.display_text]
+  );
+  return rows[0];
+}
+
+async function updateQuestStep(id, fields) {
+  const allowed = ['step_order', 'type', 'params', 'effects', 'display_text'];
+  const sets = [];
+  const vals = [];
+  for (const k of allowed) {
+    if (k in fields) {
+      sets.push(`${k} = $${vals.length + 1}`);
+      vals.push(k === 'params' || k === 'effects' ? JSON.stringify(fields[k]) : fields[k]);
+    }
+  }
+  if (!sets.length) return;
+  vals.push(id);
+  await pool.query(`UPDATE quest_steps SET ${sets.join(', ')} WHERE id = $${vals.length}`, vals);
+}
+
+async function deleteQuestStep(id) {
+  await pool.query('DELETE FROM quest_steps WHERE id = $1', [id]);
+}
+
+async function getPlayersOnQuest(questId) {
+  const { rows } = await pool.query(
+    'SELECT COUNT(*)::int AS count FROM players WHERE quest_id = $1',
+    [questId]
+  );
+  return rows[0]?.count ?? 0;
+}
+
 // ── Player secrets ─────────────────────────────────────────────────────────────
 
 async function getSeenSecrets(playerId) {
@@ -713,4 +874,7 @@ async function recordSecret(playerId, secretId) {
 }
 
 module.exports = { pool, initDb, getPlayer, getPlayerByUsername, updatePlayer, claimNewDay, createPlayer, getAllPlayers, getPlayersInTown, getRetiredPlayersInTown, getNearDeathPlayers, getCaptivePlayers, getRecentNews, addNews, getHallOfKings, addToHallOfKings, TODAY, getBannerOverride, setBanner, deleteBanner, getAllBanners, loadBanners, getActiveNamedEnemiesForLevel, createNamedEnemy, updateNamedEnemy, getNamedEnemy, getAllUndefeatedNamedEnemies, getUndefeatedNamedEnemiesWithKills, getInvadingEnemies, getActiveWorldEvent, triggerWorldEvent, expireWorldEvents, getWorldState, setWorldState, getActiveHunts, generateWeeklyHunts, incrementHuntKill, getWeeklyHuntLeaderboard, sendMail, getInboxMail, getSentMail, markMailRead, getUnreadMailCount, getOnlinePlayers, postBounty, getBountiesOnTarget, getAllActiveBounties, collectBounties, createArenaChallenge, getPendingChallengesForPlayer, getArenaChallenge, updateArenaChallenge, placeBet, getArenaSpectators, resolveArenaBets, getOpenArenaChallenge, createPvpSession, getPvpSession, getActivePvpSessionForPlayer, updatePvpSession, completePvpSession, getSeenSecrets, recordSecret,
-  getAccountByUsername, getAccountById, createAccount, getCharactersForAccount, createCharacterForAccount, setBanAccount };
+  getAccountByUsername, getAccountById, createAccount, getCharactersForAccount, createCharacterForAccount, setBanAccount,
+  loadGameDataFromDb, getAllWeapons, updateWeapon, getAllArmors, updateArmor, getAllMonsters, updateMonster, getAllGameConstants, setGameConstant,
+  loadQuestsFromDb, getAllQuests, getQuestWithSteps, createQuest, updateQuest, deleteQuest,
+  createQuestStep, updateQuestStep, deleteQuestStep, getPlayersOnQuest };

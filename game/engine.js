@@ -3186,6 +3186,32 @@ function getMissingMerchantScreen(player, town) {
   ]);
 }
 
+// ── Generic quest choice screen (DB-driven) ───────────────────────────────────
+function getQuestChoiceScreen(player, step) {
+  const params  = step.params  || {};
+  const options = params.options || [];
+  const prompt  = params.prompt || 'What do you do?';
+
+  const lines = [
+    '',
+    `${c.yellow}  ── ${step.display_text || 'Quest'} ──`,
+    '',
+  ];
+  // Render the prompt as word-wrapped lines prefixed with white
+  for (const sentence of prompt.split(/(?<=\.)\s+/)) {
+    lines.push(`${c.white}  ${sentence}`);
+  }
+  lines.push('');
+
+  const choices = [];
+  for (const opt of options) {
+    lines.push(`${c.white}  [${opt.key}] ${opt.label}`);
+    choices.push({ key: opt.key, label: opt.label, action: 'quest_choice', param: opt.key });
+  }
+
+  return buildScreen('Quest', lines, choices);
+}
+
 // ── Wilderness victory screen ─────────────────────────────────────────────────
 function getWildernessVictoryScreen(player, monster, log, round, history, zone) {
   const lines = [...renderBanner('forest')];
@@ -3841,6 +3867,7 @@ module.exports = {
   getHerbalistScreen, getInnHealerScreen, getAbductionDungeonScreen, getAbductionFightScreen, getAbductionEscapeScreen,
   getFactionHouseScreen, getFactionStandingsLines,
   getMissingMerchantScreen,
+  getQuestChoiceScreen,
   getWildernessVictoryScreen,
   getDungeonEventScreen, getDungeonCompleteScreen,
   getRuinsScreen,

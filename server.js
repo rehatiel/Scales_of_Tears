@@ -5,8 +5,10 @@ const session = require('express-session');
 const pgSession = require('connect-pg-simple')(session);
 const { WebSocketServer } = require('ws');
 const path = require('path');
-const { initDb, pool, updatePlayer, addNews, TODAY } = require('./db');
+const { initDb, pool, updatePlayer, addNews, TODAY, loadGameDataFromDb, loadQuestsFromDb } = require('./db');
 const { runNewDay } = require('./game/newday');
+const { loadGameData } = require('./game/data');
+const { loadQuestsData } = require('./game/quests');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -118,6 +120,12 @@ function scheduleNextMidnight() {
 }
 
 initDb().then(async () => {
+  // Load game data from DB into in-memory cache (weapons, armours, monsters, constants)
+  const gameData = await loadGameDataFromDb();
+  loadGameData(gameData);
+  const questData = await loadQuestsFromDb();
+  loadQuestsData(questData);
+  console.log('Game data loaded from database.');
   // Process any players who missed a new day while the server was down
   await runGlobalNewDay().catch(err => console.error('Startup new-day error:', err));
   scheduleNextMidnight();

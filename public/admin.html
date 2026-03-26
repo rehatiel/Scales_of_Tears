@@ -207,6 +207,8 @@
     <button class="tab-btn" data-tab="banners">Banners</button>
     <button class="tab-btn" data-tab="news">News</button>
     <button class="tab-btn" data-tab="system">System</button>
+    <button class="tab-btn" data-tab="gamedata">Game Data</button>
+    <button class="tab-btn" data-tab="quests">Quests</button>
     <span class="spacer"></span>
     <span class="user-label" id="user-label"></span>
   </div>
@@ -506,6 +508,33 @@
 
     </div>
   </div>
+
+  <!-- ── Quests ── -->
+  <div class="tab-panel" id="tab-quests">
+    <div style="display:flex;align-items:center;gap:8px;padding:10px 16px;background:#050505;border-bottom:1px solid #002222;flex-shrink:0;">
+      <button class="btn btn-green" onclick="qNewQuest()">+ New Quest</button>
+      <button class="btn btn-gray"  onclick="qLoad()">Refresh</button>
+      <span class="status-msg" id="q-status"></span>
+    </div>
+    <div style="display:flex;flex:1;overflow:hidden;">
+      <!-- Quest list -->
+      <div id="q-list-col" style="width:320px;border-right:1px solid #002222;overflow-y:auto;flex-shrink:0;"></div>
+      <!-- Quest editor -->
+      <div id="q-edit-col" style="flex:1;overflow-y:auto;padding:16px 20px;"></div>
+    </div>
+  </div>
+
+  <!-- ── Game Data ── -->
+  <div class="tab-panel" id="tab-gamedata">
+    <div style="display:flex;align-items:center;gap:8px;padding:10px 16px;background:#050505;border-bottom:1px solid #002222;flex-shrink:0;">
+      <button class="btn btn-gray" id="gd-tab-weapons" onclick="gdShowTab('weapons')">Weapons</button>
+      <button class="btn btn-gray" id="gd-tab-armors"  onclick="gdShowTab('armors')">Armours</button>
+      <button class="btn btn-gray" id="gd-tab-monsters" onclick="gdShowTab('monsters')">Monsters</button>
+      <button class="btn btn-gray" id="gd-tab-constants" onclick="gdShowTab('constants')">Constants</button>
+      <span class="status-msg" id="gd-status"></span>
+    </div>
+    <div class="panel-content" id="gd-content"></div>
+  </div>
 </div>
 
 <script>
@@ -582,6 +611,8 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     document.getElementById('tab-'+btn.dataset.tab).classList.add('active');
     if (btn.dataset.tab === 'news') loadNews();
     if (btn.dataset.tab === 'system') loadSystem();
+    if (btn.dataset.tab === 'gamedata') gdShowTab('weapons');
+    if (btn.dataset.tab === 'quests')   qLoad();
     if (btn.dataset.tab === 'dashboard') loadDashboard();
   });
 });
@@ -1164,6 +1195,571 @@ async function loadDashboard() {
       <div class="level-bar">${barHtml || '<span style="color:#333;font-size:12px">No players yet.</span>'}</div>
     </div>
   `;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ── Game Data tab ─────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+
+let gdCurrentTab = 'weapons';
+
+function gdShowTab(tab) {
+  gdCurrentTab = tab;
+  ['weapons','armors','monsters','constants'].forEach(t => {
+    const btn = document.getElementById('gd-tab-' + t);
+    if (btn) btn.classList.toggle('btn-yellow', t === tab);
+    if (btn) btn.classList.toggle('btn-gray', t !== tab);
+  });
+  gdLoad(tab);
+}
+
+async function gdLoad(tab) {
+  const content = document.getElementById('gd-content');
+  content.innerHTML = '<span style="color:#555">Loading…</span>';
+  const r = await api('GET', '/' + tab);
+  if (!r.ok) { content.innerHTML = '<span style="color:#f55">Error loading data.</span>'; return; }
+  const data = await r.json();
+  if (tab === 'weapons')   gdRenderWeapons(data);
+  if (tab === 'armors')    gdRenderArmors(data);
+  if (tab === 'monsters')  gdRenderMonsters(data);
+  if (tab === 'constants') gdRenderConstants(data);
+}
+
+function gdStatus(msg, ok = true) {
+  const el = document.getElementById('gd-status');
+  el.textContent = msg;
+  el.style.color = ok ? '#55FF55' : '#FF5555';
+  setTimeout(() => { el.textContent = ''; }, 3000);
+}
+
+// ── Weapons ───────────────────────────────────────────────────────────────────
+function gdRenderWeapons(rows) {
+  const content = document.getElementById('gd-content');
+  content.innerHTML = `
+    <div class="section-title">Weapons (${rows.length})</div>
+    <table>
+      <thead><tr>
+        <th>#</th><th>Name</th><th>Price</th><th>Strength</th><th>Tier</th><th>Bonus</th><th>Bonus Desc</th><th></th>
+      </tr></thead>
+      <tbody id="gd-weapons-tbody"></tbody>
+    </table>`;
+  const tbody = document.getElementById('gd-weapons-tbody');
+  for (const w of rows) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${w.num}</td>
+      <td><input class="gd-input" data-field="name" value="${escHtml(w.name)}"></td>
+      <td><input class="gd-input" data-field="price" type="number" value="${w.price}" style="width:100px"></td>
+      <td><input class="gd-input" data-field="strength" type="number" value="${w.strength}" style="width:70px"></td>
+      <td><input class="gd-input" data-field="tier" type="number" value="${w.tier}" style="width:50px"></td>
+      <td><input class="gd-input" data-field="bonus" value="${escHtml(w.bonus||'')}"></td>
+      <td><input class="gd-input" data-field="bonus_desc" value="${escHtml(w.bonus_desc||'')}" style="width:200px"></td>
+      <td><button class="btn btn-green" style="padding:3px 10px" onclick="gdSaveWeapon(${w.num},this.parentElement.parentElement)">Save</button></td>`;
+    tbody.appendChild(tr);
+  }
+}
+
+async function gdSaveWeapon(num, tr) {
+  const fields = {};
+  tr.querySelectorAll('.gd-input').forEach(inp => {
+    const v = inp.value.trim();
+    fields[inp.dataset.field] = inp.type === 'number' ? Number(v) : (v || null);
+  });
+  const r = await api('PUT', `/weapons/${num}`, fields);
+  if (r.ok) gdStatus(`Weapon #${num} saved.`);
+  else gdStatus(`Error saving weapon #${num}.`, false);
+}
+
+// ── Armors ────────────────────────────────────────────────────────────────────
+function gdRenderArmors(rows) {
+  const content = document.getElementById('gd-content');
+  content.innerHTML = `
+    <div class="section-title">Armours (${rows.length})</div>
+    <table>
+      <thead><tr>
+        <th>#</th><th>Name</th><th>Price</th><th>Defense</th><th>Tier</th><th>Bonus</th><th>Bonus Desc</th><th></th>
+      </tr></thead>
+      <tbody id="gd-armors-tbody"></tbody>
+    </table>`;
+  const tbody = document.getElementById('gd-armors-tbody');
+  for (const a of rows) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${a.num}</td>
+      <td><input class="gd-input" data-field="name" value="${escHtml(a.name)}"></td>
+      <td><input class="gd-input" data-field="price" type="number" value="${a.price}" style="width:100px"></td>
+      <td><input class="gd-input" data-field="defense" type="number" value="${a.defense}" style="width:70px"></td>
+      <td><input class="gd-input" data-field="tier" type="number" value="${a.tier}" style="width:50px"></td>
+      <td><input class="gd-input" data-field="bonus" value="${escHtml(a.bonus||'')}"></td>
+      <td><input class="gd-input" data-field="bonus_desc" value="${escHtml(a.bonus_desc||'')}" style="width:200px"></td>
+      <td><button class="btn btn-green" style="padding:3px 10px" onclick="gdSaveArmor(${a.num},this.parentElement.parentElement)">Save</button></td>`;
+    tbody.appendChild(tr);
+  }
+}
+
+async function gdSaveArmor(num, tr) {
+  const fields = {};
+  tr.querySelectorAll('.gd-input').forEach(inp => {
+    const v = inp.value.trim();
+    fields[inp.dataset.field] = inp.type === 'number' ? Number(v) : (v || null);
+  });
+  const r = await api('PUT', `/armors/${num}`, fields);
+  if (r.ok) gdStatus(`Armour #${num} saved.`);
+  else gdStatus(`Error saving armour #${num}.`, false);
+}
+
+// ── Monsters ──────────────────────────────────────────────────────────────────
+let gdMonsterLevel = 1;
+
+function gdRenderMonsters(rows) {
+  const content = document.getElementById('gd-content');
+  // Group by level for level picker
+  const levels = [...new Set(rows.map(m => m.level))].sort((a,b)=>a-b);
+  const levelBtns = levels.map(l =>
+    `<button class="btn ${l==gdMonsterLevel?'btn-yellow':'btn-gray'}" style="padding:3px 10px" onclick="gdMonsterLevel=${l};gdRenderMonstersFiltered(window._gdMonsters)">${l}</button>`
+  ).join('');
+  window._gdMonsters = rows;
+  content.innerHTML = `
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:12px;flex-wrap:wrap;">
+      <span class="section-title" style="margin:0">Level:</span>
+      ${levelBtns}
+    </div>
+    <div id="gd-monster-list"></div>`;
+  gdRenderMonstersFiltered(rows);
+}
+
+function gdRenderMonstersFiltered(rows) {
+  const filtered = rows.filter(m => m.level == gdMonsterLevel);
+  // Re-render level buttons with updated active state
+  const levels = [...new Set(rows.map(m => m.level))].sort((a,b)=>a-b);
+  const content = document.getElementById('gd-content');
+  const levelBtns = levels.map(l =>
+    `<button class="btn ${l==gdMonsterLevel?'btn-yellow':'btn-gray'}" style="padding:3px 10px" onclick="gdMonsterLevel=${l};gdRenderMonstersFiltered(window._gdMonsters)">${l}</button>`
+  ).join('');
+  content.querySelector('div').innerHTML = `<span class="section-title" style="margin:0">Level:</span> ${levelBtns}`;
+
+  const list = document.getElementById('gd-monster-list');
+  if (!list) return;
+  list.innerHTML = `
+    <table>
+      <thead><tr>
+        <th>Ord</th><th>Name</th><th>Weapon</th><th>StrM</th><th>HpM</th><th>GoldM</th><th>ExpM</th><th>Behavior</th><th>Meet Text</th><th>Death Text</th><th></th>
+      </tr></thead>
+      <tbody id="gd-monsters-tbody"></tbody>
+    </table>`;
+  const tbody = document.getElementById('gd-monsters-tbody');
+  for (const m of filtered) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${m.sort_order}</td>
+      <td><input class="gd-input" data-field="name" value="${escHtml(m.name)}" style="width:130px"></td>
+      <td><input class="gd-input" data-field="weapon" value="${escHtml(m.weapon)}" style="width:120px"></td>
+      <td><input class="gd-input" data-field="str_mult" type="number" step="0.1" value="${m.str_mult}" style="width:55px"></td>
+      <td><input class="gd-input" data-field="hp_mult"  type="number" step="0.1" value="${m.hp_mult}"  style="width:55px"></td>
+      <td><input class="gd-input" data-field="gold_mult" type="number" step="0.1" value="${m.gold_mult}" style="width:55px"></td>
+      <td><input class="gd-input" data-field="exp_mult"  type="number" step="0.1" value="${m.exp_mult}"  style="width:55px"></td>
+      <td><select class="gd-input" data-field="behavior" style="background:#0a0a0a;border:1px solid #003333;color:#aaa;font-size:12px;padding:3px">
+        <option value="">—</option>
+        <option ${m.behavior==='fleeing'?'selected':''}>fleeing</option>
+        <option ${m.behavior==='aggressive'?'selected':''}>aggressive</option>
+        <option ${m.behavior==='defensive'?'selected':''}>defensive</option>
+        <option ${m.behavior==='venomous'?'selected':''}>venomous</option>
+      </select></td>
+      <td><input class="gd-input" data-field="meet_text" value="${escHtml(m.meet_text)}" style="width:220px"></td>
+      <td><input class="gd-input" data-field="death_text" value="${escHtml(m.death_text)}" style="width:200px"></td>
+      <td><button class="btn btn-green" style="padding:3px 10px" onclick="gdSaveMonster(${m.id},this.parentElement.parentElement)">Save</button></td>`;
+    tbody.appendChild(tr);
+  }
+}
+
+async function gdSaveMonster(id, tr) {
+  const numericFields = new Set(['str_mult','hp_mult','gold_mult','exp_mult']);
+  const fields = {};
+  tr.querySelectorAll('.gd-input').forEach(inp => {
+    const v = inp.tagName === 'SELECT' ? inp.value : inp.value.trim();
+    if (numericFields.has(inp.dataset.field)) fields[inp.dataset.field] = Number(v);
+    else fields[inp.dataset.field] = v || null;
+  });
+  const r = await api('PUT', `/monsters/${id}`, fields);
+  if (r.ok) gdStatus(`Monster #${id} saved.`);
+  else gdStatus(`Error saving monster #${id}.`, false);
+}
+
+// ── Constants ─────────────────────────────────────────────────────────────────
+function gdRenderConstants(rows) {
+  const content = document.getElementById('gd-content');
+  content.innerHTML = `
+    <div class="section-title">Game Constants (${rows.length})</div>
+    <table>
+      <thead><tr>
+        <th>Key</th><th>Value</th><th>Description</th><th></th>
+      </tr></thead>
+      <tbody id="gd-constants-tbody"></tbody>
+    </table>`;
+  const tbody = document.getElementById('gd-constants-tbody');
+  for (const c of rows) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td style="color:#55FFFF;white-space:nowrap">${escHtml(c.key)}</td>
+      <td><input class="gd-input" data-key="${escHtml(c.key)}" value="${escHtml(c.value)}" style="width:120px"></td>
+      <td style="color:#555;font-size:11px">${escHtml(c.description||'')}</td>
+      <td><button class="btn btn-green" style="padding:3px 10px" onclick="gdSaveConstant('${escHtml(c.key)}',this.parentElement.parentElement)">Save</button></td>`;
+    tbody.appendChild(tr);
+  }
+}
+
+async function gdSaveConstant(key, tr) {
+  const inp = tr.querySelector('.gd-input');
+  const value = inp.value.trim();
+  const r = await api('PUT', `/constants/${key}`, { value });
+  if (r.ok) gdStatus(`${key} saved.`);
+  else gdStatus(`Error saving ${key}.`, false);
+}
+
+// Add CSS for gd-input
+document.head.insertAdjacentHTML('beforeend', `<style>
+.gd-input { background:#0a0a0a; border:1px solid #003333; color:#AAAAAA; font-family:inherit; font-size:12px; padding:3px 6px; width:160px; }
+.gd-input:focus { outline:none; border-color:#005555; }
+</style>`);
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ── Quests tab ────────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+
+document.head.insertAdjacentHTML('beforeend', `<style>
+.q-item { padding:10px 14px; border-bottom:1px solid #001a1a; cursor:pointer; }
+.q-item:hover { background:#061212; }
+.q-item.active { background:#002222; }
+.q-item-name { color:#FFFF55; font-size:13px; }
+.q-item-meta { color:#555; font-size:11px; margin-top:2px; }
+.q-field-row { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+.q-field-label { color:#555; font-size:11px; width:110px; flex-shrink:0; text-align:right; }
+.q-input { background:#0a0a0a; border:1px solid #003333; color:#AAAAAA; font-family:inherit; font-size:12px; padding:4px 7px; flex:1; }
+.q-input:focus { outline:none; border-color:#005555; }
+.q-textarea { background:#0a0a0a; border:1px solid #003333; color:#AAAAAA; font-family:inherit; font-size:12px; padding:4px 7px; flex:1; height:60px; resize:vertical; }
+.q-select { background:#0a0a0a; border:1px solid #003333; color:#AAAAAA; font-family:inherit; font-size:12px; padding:4px 7px; }
+.q-step-card { background:#060e0e; border:1px solid #002222; padding:12px; margin-bottom:10px; }
+.q-step-header { display:flex; align-items:center; gap:8px; margin-bottom:10px; }
+.q-step-order { color:#FFFF55; font-weight:bold; width:24px; flex-shrink:0; }
+.q-params-box { background:#050a0a; border:1px solid #001a1a; padding:8px 10px; margin-top:6px; }
+.q-params-label { color:#555; font-size:11px; margin-bottom:6px; }
+.q-choice-opt { background:#080f0f; border:1px solid #002222; padding:8px 10px; margin-bottom:6px; }
+</style>`);
+
+let qSelectedId = null;
+let qQuestList  = [];
+
+function qStatus(msg, ok = true) {
+  const el = document.getElementById('q-status');
+  el.textContent = msg;
+  el.style.color = ok ? '#55FF55' : '#FF5555';
+  setTimeout(() => { el.textContent = ''; }, 3000);
+}
+
+async function qLoad() {
+  const listCol = document.getElementById('q-list-col');
+  listCol.innerHTML = '<span style="color:#555;padding:10px;display:block">Loading…</span>';
+  const r = await api('GET', '/quests');
+  if (!r.ok) { listCol.innerHTML = '<span style="color:#f55;padding:10px;display:block">Error</span>'; return; }
+  qQuestList = await r.json();
+  qRenderList();
+  if (qSelectedId) {
+    const still = qQuestList.find(q => q.id === qSelectedId);
+    if (still) qEditQuest(still.id);
+    else { qSelectedId = null; document.getElementById('q-edit-col').innerHTML = ''; }
+  }
+}
+
+function qRenderList() {
+  const listCol = document.getElementById('q-list-col');
+  if (!qQuestList.length) {
+    listCol.innerHTML = '<span style="color:#555;padding:10px;display:block">No quests.</span>';
+    return;
+  }
+  listCol.innerHTML = '';
+  for (const q of qQuestList) {
+    const div = document.createElement('div');
+    div.className = 'q-item' + (q.id === qSelectedId ? ' active' : '');
+    div.onclick = () => qEditQuest(q.id);
+    div.innerHTML = `<div class="q-item-name">${escHtml(q.name)}</div>
+      <div class="q-item-meta">${escHtml(q.id)} &nbsp;·&nbsp; ${q.active ? '<span style="color:#55FF55">active</span>' : '<span style="color:#555">inactive</span>'} &nbsp;·&nbsp; ${escHtml(q.trigger_type||'—')}${q.trigger_ref ? ' / '+escHtml(q.trigger_ref) : ''}</div>`;
+    listCol.appendChild(div);
+  }
+}
+
+async function qEditQuest(id) {
+  qSelectedId = id;
+  qRenderList();
+  const editCol = document.getElementById('q-edit-col');
+  editCol.innerHTML = '<span style="color:#555">Loading…</span>';
+  const r = await api('GET', `/quests/${id}`);
+  if (!r.ok) { editCol.innerHTML = '<span style="color:#f55">Error loading quest.</span>'; return; }
+  const quest = await r.json();
+  qRenderEditor(quest);
+}
+
+function qRenderEditor(quest) {
+  const col = document.getElementById('q-edit-col');
+  const steps = (quest.steps || []).sort((a,b) => a.step_order - b.step_order);
+
+  col.innerHTML = `
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;">
+      <span style="color:#FFFF55;font-size:15px;font-weight:bold">${escHtml(quest.name)}</span>
+      <span style="color:#555;font-size:12px">&nbsp;[${escHtml(quest.id)}]</span>
+      <button class="btn btn-red" style="margin-left:auto;padding:3px 10px" onclick="qDeleteQuest('${escHtml(quest.id)}')">Delete Quest</button>
+    </div>
+
+    <div class="section-title">Quest Metadata</div>
+    <div class="q-field-row"><span class="q-field-label">Name</span>         <input class="q-input" id="qe-name"         value="${escHtml(quest.name)}"></div>
+    <div class="q-field-row"><span class="q-field-label">Description</span>  <textarea class="q-textarea" id="qe-desc">${escHtml(quest.description)}</textarea></div>
+    <div class="q-field-row"><span class="q-field-label">Min Level</span>    <input class="q-input" id="qe-minlevel"     type="number" value="${quest.min_level||1}" style="width:80px;flex:none"></div>
+    <div class="q-field-row"><span class="q-field-label">Repeatable</span>   <input type="checkbox" id="qe-repeatable"  ${quest.repeatable ? 'checked' : ''}></div>
+    <div class="q-field-row"><span class="q-field-label">Active</span>       <input type="checkbox" id="qe-active"      ${quest.active ? 'checked' : ''}></div>
+    <div class="q-field-row"><span class="q-field-label">Trigger Type</span>
+      <select class="q-select" id="qe-trigtype">
+        <option value="">— none —</option>
+        ${['tavern_encounter','event','auto','manual'].map(t => `<option value="${t}" ${quest.trigger_type===t?'selected':''}>${t}</option>`).join('')}
+      </select>
+    </div>
+    <div class="q-field-row"><span class="q-field-label">Trigger Ref</span>  <input class="q-input" id="qe-trigref"     value="${escHtml(quest.trigger_ref||'')}"></div>
+    <button class="btn btn-green" style="margin-bottom:20px" onclick="qSaveQuest('${escHtml(quest.id)}')">Save Metadata</button>
+
+    <hr class="divider">
+    <div class="section-title">Steps (${steps.length})</div>
+    <div id="qe-steps-container">
+      ${steps.map(s => qStepCardHTML(quest.id, s)).join('')}
+    </div>
+    <button class="btn btn-green" onclick="qAddStep('${escHtml(quest.id)}', ${steps.length + 1})">+ Add Step</button>
+  `;
+}
+
+const STEP_TYPES = ['travel','npc_talk','kill_named','kill_boss','choice','event_trigger'];
+
+function qStepCardHTML(questId, step) {
+  const p = step.params || {};
+  const e = step.effects || {};
+  const typeOpts = STEP_TYPES.map(t => `<option value="${t}" ${step.type===t?'selected':''}>${t}</option>`).join('');
+
+  // Type-specific params UI
+  let paramsHtml = '';
+  if (step.type === 'travel') {
+    paramsHtml = `<div class="q-params-box">
+      <div class="q-params-label">PARAMS — travel</div>
+      <div class="q-field-row"><span class="q-field-label">town_id</span><input class="q-input qsp-town_id" value="${escHtml(p.town_id||'')}" placeholder="e.g. dawnmark or $targetTown"></div>
+    </div>`;
+  } else if (step.type === 'npc_talk') {
+    paramsHtml = `<div class="q-params-box">
+      <div class="q-params-label">PARAMS — npc_talk</div>
+      <div class="q-field-row"><span class="q-field-label">npc_id</span>  <input class="q-input qsp-npc_id"   value="${escHtml(p.npc_id||'')}"></div>
+      <div class="q-field-row"><span class="q-field-label">town_id</span> <input class="q-input qsp-town_id"  value="${escHtml(p.town_id||'')}"></div>
+    </div>`;
+  } else if (step.type === 'kill_boss') {
+    paramsHtml = `<div class="q-params-box">
+      <div class="q-params-label">PARAMS — kill_boss</div>
+      <div class="q-field-row"><span class="q-field-label">boss_id</span> <input class="q-input qsp-boss_id"  value="${escHtml(p.boss_id||'')}"></div>
+      <div class="q-field-row"><span class="q-field-label">town_id</span> <input class="q-input qsp-town_id"  value="${escHtml(p.town_id||'')}"></div>
+    </div>`;
+  } else if (step.type === 'event_trigger') {
+    paramsHtml = `<div class="q-params-box">
+      <div class="q-params-label">PARAMS — event_trigger</div>
+      <div class="q-field-row"><span class="q-field-label">event_id</span><input class="q-input qsp-event_id" value="${escHtml(p.event_id||'')}"></div>
+    </div>`;
+  } else if (step.type === 'choice') {
+    const opts = p.options || [];
+    paramsHtml = `<div class="q-params-box">
+      <div class="q-params-label">PARAMS — choice</div>
+      <div class="q-field-row"><span class="q-field-label">Prompt</span><textarea class="q-textarea qsp-prompt" style="height:44px">${escHtml(p.prompt||'')}</textarea></div>
+      <div class="q-params-label" style="margin-top:8px">Options</div>
+      ${opts.map((o,i) => `
+        <div class="q-choice-opt" data-opt-idx="${i}">
+          <div class="q-field-row"><span class="q-field-label">Key</span>          <input class="q-input qso-key" value="${escHtml(o.key||'')}" style="width:50px;flex:none"></div>
+          <div class="q-field-row"><span class="q-field-label">Label</span>        <input class="q-input qso-label" value="${escHtml(o.label||'')}"></div>
+          <div class="q-field-row"><span class="q-field-label">Outcome text</span> <textarea class="q-textarea qso-outcome" style="height:44px">${escHtml(o.outcome_text||'')}</textarea></div>
+          <div class="q-field-row"><span class="q-field-label">Effects (JSON)</span><input class="q-input qso-effects" value="${escHtml(JSON.stringify(o.effects||{}))}"></div>
+          <button class="btn btn-red" style="padding:2px 8px;font-size:11px" onclick="qRemoveChoiceOpt(this)">Remove</button>
+        </div>`).join('')}
+      <button class="btn btn-gray" style="margin-top:6px;padding:3px 10px;font-size:11px" onclick="qAddChoiceOpt(this)">+ Option</button>
+    </div>`;
+  }
+
+  // Effects UI
+  const effFields = [
+    ['exp_flat','Exp flat'],['exp_level_mult','Exp × level'],
+    ['gold_flat','Gold flat'],['gold_level_mult','Gold × level'],
+    ['alignment_delta','Alignment Δ'],['charm_delta','Charm Δ'],
+    ['strength_delta','Strength Δ'],['hit_max_delta','Max HP Δ'],
+  ];
+  const repFields = [
+    ['knights','Rep: Knights'],['merchants','Rep: Merchants'],
+    ['guild','Rep: Guild'],['druids','Rep: Druids'],['necromancers','Rep: Necromancers'],
+  ];
+  const rep = e.rep_changes || {};
+  const effHtml = `<div class="q-params-box" style="margin-top:6px">
+    <div class="q-params-label">EFFECTS</div>
+    ${effFields.map(([k,label]) => `<div class="q-field-row"><span class="q-field-label">${label}</span><input class="q-input qse-${k}" type="number" value="${e[k]||0}" style="width:90px;flex:none"></div>`).join('')}
+    ${repFields.map(([k,label]) => `<div class="q-field-row"><span class="q-field-label">${label}</span><input class="q-input qse-rep-${k}" type="number" value="${rep[k]||0}" style="width:90px;flex:none"></div>`).join('')}
+  </div>`;
+
+  return `<div class="q-step-card" id="qstep-${step.id}">
+    <div class="q-step-header">
+      <span class="q-step-order">${step.step_order}</span>
+      <select class="q-select qst-type" onchange="qStepTypeChanged(this)">
+        ${typeOpts}
+      </select>
+      <span style="color:#555;font-size:11px;margin-left:auto">id:${step.id}</span>
+      <button class="btn btn-red" style="padding:2px 8px;font-size:11px" onclick="qDeleteStep(${step.id},'${escHtml(questId)}')">✕</button>
+    </div>
+    <div class="q-field-row"><span class="q-field-label">Display text</span><textarea class="q-textarea qst-display" style="height:44px">${escHtml(step.display_text)}</textarea></div>
+    <div class="qst-params">${paramsHtml}</div>
+    ${effHtml}
+    <div style="margin-top:10px">
+      <button class="btn btn-green" style="padding:3px 10px" onclick="qSaveStep(${step.id},'${escHtml(questId)}',this.closest('.q-step-card'))">Save Step</button>
+    </div>
+  </div>`;
+}
+
+function qStepTypeChanged(sel) {
+  // Re-render just the params section based on new type
+  const card = sel.closest('.q-step-card');
+  const fakeStep = { type: sel.value, params: {}, effects: {}, display_text: '', id: 0, step_order: 0 };
+  const tmpDiv = document.createElement('div');
+  tmpDiv.innerHTML = qStepCardHTML('', fakeStep);
+  const newParams = tmpDiv.querySelector('.qst-params');
+  card.querySelector('.qst-params').replaceWith(newParams);
+}
+
+function qAddChoiceOpt(btn) {
+  const container = btn.closest('.q-params-box');
+  const idx = container.querySelectorAll('.q-choice-opt').length;
+  const div = document.createElement('div');
+  div.className = 'q-choice-opt';
+  div.dataset.optIdx = idx;
+  div.innerHTML = `
+    <div class="q-field-row"><span class="q-field-label">Key</span>          <input class="q-input qso-key" value="" style="width:50px;flex:none"></div>
+    <div class="q-field-row"><span class="q-field-label">Label</span>        <input class="q-input qso-label" value=""></div>
+    <div class="q-field-row"><span class="q-field-label">Outcome text</span> <textarea class="q-textarea qso-outcome" style="height:44px"></textarea></div>
+    <div class="q-field-row"><span class="q-field-label">Effects (JSON)</span><input class="q-input qso-effects" value="{}"></div>
+    <button class="btn btn-red" style="padding:2px 8px;font-size:11px" onclick="qRemoveChoiceOpt(this)">Remove</button>`;
+  btn.parentElement.insertBefore(div, btn);
+}
+
+function qRemoveChoiceOpt(btn) {
+  btn.closest('.q-choice-opt').remove();
+}
+
+function qReadStepFromCard(card) {
+  const type        = card.querySelector('.qst-type').value;
+  const display_text = card.querySelector('.qst-display').value.trim();
+
+  // Read params
+  const params = {};
+  if (type === 'travel') {
+    const v = card.querySelector('.qsp-town_id')?.value.trim(); if (v) params.town_id = v;
+  } else if (type === 'npc_talk') {
+    const npc = card.querySelector('.qsp-npc_id')?.value.trim();   if (npc)  params.npc_id = npc;
+    const town = card.querySelector('.qsp-town_id')?.value.trim(); if (town) params.town_id = town;
+  } else if (type === 'kill_boss') {
+    const boss = card.querySelector('.qsp-boss_id')?.value.trim(); if (boss) params.boss_id = boss;
+    const town = card.querySelector('.qsp-town_id')?.value.trim(); if (town) params.town_id = town;
+  } else if (type === 'event_trigger') {
+    const ev = card.querySelector('.qsp-event_id')?.value.trim(); if (ev) params.event_id = ev;
+  } else if (type === 'choice') {
+    const prompt = card.querySelector('.qsp-prompt')?.value.trim(); if (prompt) params.prompt = prompt;
+    params.options = [];
+    card.querySelectorAll('.q-choice-opt').forEach(opt => {
+      let effects = {};
+      try { effects = JSON.parse(opt.querySelector('.qso-effects').value || '{}'); } catch {}
+      params.options.push({
+        key:          opt.querySelector('.qso-key').value.trim(),
+        label:        opt.querySelector('.qso-label').value.trim(),
+        outcome_text: opt.querySelector('.qso-outcome').value.trim(),
+        effects,
+      });
+    });
+  }
+
+  // Read effects
+  const effKeys = ['exp_flat','exp_level_mult','gold_flat','gold_level_mult','alignment_delta','charm_delta','strength_delta','hit_max_delta'];
+  const repKeys  = ['knights','merchants','guild','druids','necromancers'];
+  const effects  = {};
+  for (const k of effKeys) {
+    const v = Number(card.querySelector(`.qse-${k}`)?.value || 0);
+    if (v !== 0) effects[k] = v;
+  }
+  const rep = {};
+  for (const k of repKeys) {
+    const v = Number(card.querySelector(`.qse-rep-${k}`)?.value || 0);
+    if (v !== 0) rep[k] = v;
+  }
+  if (Object.keys(rep).length) effects.rep_changes = rep;
+
+  return { type, display_text, params, effects };
+}
+
+async function qSaveStep(stepId, questId, card) {
+  const body = qReadStepFromCard(card);
+  const r = await api('PUT', `/steps/${stepId}`, body);
+  if (r.ok) qStatus(`Step ${stepId} saved.`);
+  else qStatus(`Error saving step.`, false);
+}
+
+async function qDeleteStep(stepId, questId) {
+  if (!confirm(`Delete step ${stepId}?`)) return;
+  const r = await api('DELETE', `/steps/${stepId}`);
+  if (!r.ok) { qStatus('Error deleting step.', false); return; }
+  qStatus('Step deleted.');
+  qEditQuest(questId);
+}
+
+async function qAddStep(questId, nextOrder) {
+  const body = { step_order: nextOrder, type: 'travel', display_text: 'New step', params: {}, effects: {} };
+  const r = await api('POST', `/quests/${questId}/steps`, body);
+  if (!r.ok) { qStatus('Error adding step.', false); return; }
+  qStatus('Step added.');
+  qEditQuest(questId);
+}
+
+async function qSaveQuest(questId) {
+  const body = {
+    name:         document.getElementById('qe-name').value.trim(),
+    description:  document.getElementById('qe-desc').value.trim(),
+    min_level:    Number(document.getElementById('qe-minlevel').value) || 1,
+    repeatable:   document.getElementById('qe-repeatable').checked,
+    active:       document.getElementById('qe-active').checked,
+    trigger_type: document.getElementById('qe-trigtype').value || null,
+    trigger_ref:  document.getElementById('qe-trigref').value.trim() || null,
+  };
+  const r = await api('PUT', `/quests/${questId}`, body);
+  if (r.ok) { qStatus('Quest saved.'); qLoad(); }
+  else qStatus('Error saving quest.', false);
+}
+
+async function qDeleteQuest(questId) {
+  if (!confirm(`Delete quest "${questId}" and all its steps?`)) return;
+  const r = await api('DELETE', `/quests/${questId}`);
+  if (r.status === 409) {
+    const data = await r.json();
+    if (!confirm(`${data.count} player(s) are currently on this quest. Delete anyway?`)) return;
+    const r2 = await api('DELETE', `/quests/${questId}?force=true`);
+    if (!r2.ok) { qStatus('Error deleting quest.', false); return; }
+  } else if (!r.ok) { qStatus('Error deleting quest.', false); return; }
+  qStatus('Quest deleted.');
+  qSelectedId = null;
+  document.getElementById('q-edit-col').innerHTML = '';
+  qLoad();
+}
+
+async function qNewQuest() {
+  const id = prompt('Quest ID (snake_case, unique):');
+  if (!id) return;
+  const name = prompt('Quest Name:');
+  if (!name) return;
+  const desc = prompt('Short description:') || '';
+  const r = await api('POST', '/quests', { id: id.trim(), name: name.trim(), description: desc.trim() });
+  if (!r.ok) { qStatus('Error creating quest (ID already exists?).', false); return; }
+  qStatus('Quest created.');
+  await qLoad();
+  qEditQuest(id.trim());
 }
 </script>
 </body>

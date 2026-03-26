@@ -1,6 +1,7 @@
 const { getPlayer, updatePlayer } = require('../../db');
 const { TOWNS } = require('../data');
-const { getWorldMapScreen, getTownScreen, getMissingMerchantScreen } = require('../engine');
+const { getWorldMapScreen, getTownScreen, getQuestChoiceScreen } = require('../engine');
+const { checkTravelTrigger } = require('../quest_runner');
 
 const TRAVEL_COST = 50;
 
@@ -43,14 +44,13 @@ async function travel({ player, param, req, res, pendingMessages }) {
     `\`8${dest.tagline}`,
   ];
 
-  // Missing Merchant quest: intercept arrival at target town
-  if (player.quest_id === 'missing_merchant' && player.quest_step === 1) {
-    let qdata = {};
-    try { qdata = JSON.parse(player.quest_data || '{}'); } catch { /* ignore */ }
-    if (qdata.targetTown === param) {
-      await updatePlayer(player.id, { quest_step: 2 });
-      player = await getPlayer(player.id);
-      return res.json({ ...getMissingMerchantScreen(player, dest), pendingMessages: arrivalMsgs });
+  // Generic quest travel trigger: advance step and show choice screen if next step is a choice
+  const travelTrigger = checkTravelTrigger(player, param);
+  if (travelTrigger) {
+    await updatePlayer(player.id, { quest_step: travelTrigger.nextStepOrder });
+    player = await getPlayer(player.id);
+    if (travelTrigger.nextStep?.type === 'choice') {
+      return res.json({ ...getQuestChoiceScreen(player, travelTrigger.nextStep), pendingMessages: arrivalMsgs });
     }
   }
 

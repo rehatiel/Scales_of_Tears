@@ -1,7 +1,9 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
-const { pool, getAllPlayers, getRecentNews, addNews, updatePlayer, TODAY, getBannerOverride, setBanner, deleteBanner, getAllBanners, loadBanners, getWorldState, setWorldState } = require('../db');
+const { pool, getAllPlayers, getRecentNews, addNews, updatePlayer, TODAY, getBannerOverride, setBanner, deleteBanner, getAllBanners, loadBanners, getWorldState, setWorldState, getAllWeapons, updateWeapon, getAllArmors, updateArmor, getAllMonsters, updateMonster, getAllGameConstants, setGameConstant, loadGameDataFromDb, loadQuestsFromDb, getAllQuests, getQuestWithSteps, createQuest, updateQuest, deleteQuest, createQuestStep, updateQuestStep, deleteQuestStep, getPlayersOnQuest } = require('../db');
+const { loadGameData } = require('../game/data');
+const { loadQuestsData } = require('../game/quests');
 const { runNewDay } = require('../game/newday');
 const { LOCATION_BANNERS } = require('../game/engine');
 
@@ -423,6 +425,174 @@ router.put('/settings', ar(async (req, res) => {
     return res.status(400).json({ error: 'registration_open must be a boolean.' });
   await setWorldState('registration_open', registration_open ? '1' : '0');
   res.json({ ok: true, registration_open });
+}));
+
+// ── Game data editors ─────────────────────────────────────────────────────────
+
+// Helper: reload game data cache after any edit
+async function reloadGameData() {
+  const data = await loadGameDataFromDb();
+  loadGameData(data);
+}
+
+// GET /api/admin/weapons
+router.get('/weapons', ar(async (req, res) => {
+  res.json(await getAllWeapons());
+}));
+
+// PUT /api/admin/weapons/:num
+router.put('/weapons/:num', ar(async (req, res) => {
+  const num = parseInt(req.params.num);
+  if (!Number.isFinite(num)) return res.status(400).json({ error: 'invalid num' });
+  const allowed = { name: 'string', price: 'number', strength: 'number', tier: 'number', bonus: 'string', bonus_desc: 'string' };
+  const fields = {};
+  for (const [k, type] of Object.entries(allowed)) {
+    if (req.body[k] === undefined) continue;
+    if (req.body[k] === null) { fields[k] = null; continue; }
+    fields[k] = type === 'number' ? Number(req.body[k]) : String(req.body[k]);
+  }
+  await updateWeapon(num, fields);
+  await reloadGameData();
+  console.log(`[ADMIN] PUT /weapons/${num}`);
+  res.json({ ok: true });
+}));
+
+// GET /api/admin/armors
+router.get('/armors', ar(async (req, res) => {
+  res.json(await getAllArmors());
+}));
+
+// PUT /api/admin/armors/:num
+router.put('/armors/:num', ar(async (req, res) => {
+  const num = parseInt(req.params.num);
+  if (!Number.isFinite(num)) return res.status(400).json({ error: 'invalid num' });
+  const allowed = { name: 'string', price: 'number', defense: 'number', tier: 'number', bonus: 'string', bonus_desc: 'string' };
+  const fields = {};
+  for (const [k, type] of Object.entries(allowed)) {
+    if (req.body[k] === undefined) continue;
+    if (req.body[k] === null) { fields[k] = null; continue; }
+    fields[k] = type === 'number' ? Number(req.body[k]) : String(req.body[k]);
+  }
+  await updateArmor(num, fields);
+  await reloadGameData();
+  console.log(`[ADMIN] PUT /armors/${num}`);
+  res.json({ ok: true });
+}));
+
+// GET /api/admin/monsters?level=N
+router.get('/monsters', ar(async (req, res) => {
+  const level = req.query.level ? parseInt(req.query.level) : null;
+  res.json(await getAllMonsters(level));
+}));
+
+// PUT /api/admin/monsters/:id
+router.put('/monsters/:id', ar(async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (!Number.isFinite(id)) return res.status(400).json({ error: 'invalid id' });
+  const numericFields = new Set(['str_mult', 'hp_mult', 'gold_mult', 'exp_mult']);
+  const allowed = ['name', 'weapon', 'str_mult', 'hp_mult', 'gold_mult', 'exp_mult', 'behavior', 'meet_text', 'death_text'];
+  const fields = {};
+  for (const k of allowed) {
+    if (req.body[k] === undefined) continue;
+    if (req.body[k] === null && k === 'behavior') { fields[k] = null; continue; }
+    fields[k] = numericFields.has(k) ? Number(req.body[k]) : String(req.body[k]);
+  }
+  await updateMonster(id, fields);
+  await reloadGameData();
+  console.log(`[ADMIN] PUT /monsters/${id}`);
+  res.json({ ok: true });
+}));
+
+// GET /api/admin/constants
+router.get('/constants', ar(async (req, res) => {
+  res.json(await getAllGameConstants());
+}));
+
+// PUT /api/admin/constants/:key
+router.put('/constants/:key', ar(async (req, res) => {
+  const { key } = req.params;
+  const { value } = req.body;
+  if (value === undefined || value === null) return res.status(400).json({ error: 'value required' });
+  await setGameConstant(key, value);
+  await reloadGameData();
+  console.log(`[ADMIN] PUT /constants/${key} = ${value}`);
+  res.json({ ok: true });
+}));
+
+// ── Quests ────────────────────────────────────────────────────────────────────
+
+async function reloadQuestData() {
+  const data = await loadQuestsFromDb();
+  loadQuestsData(data);
+}
+
+// GET /api/admin/quests
+router.get('/quests', ar(async (req, res) => {
+  res.json(await getAllQuests());
+}));
+
+// GET /api/admin/quests/:id
+router.get('/quests/:id', ar(async (req, res) => {
+  const quest = await getQuestWithSteps(req.params.id);
+  if (!quest) return res.status(404).json({ error: 'Not found' });
+  res.json(quest);
+}));
+
+// POST /api/admin/quests
+router.post('/quests', ar(async (req, res) => {
+  const { id, name, description, min_level, repeatable, active, trigger_type, trigger_ref } = req.body;
+  if (!id || !name || !description) return res.status(400).json({ error: 'id, name, description required' });
+  const quest = await createQuest({ id, name, description, min_level, repeatable, active, trigger_type, trigger_ref });
+  await reloadQuestData();
+  console.log(`[ADMIN] POST /quests ${id}`);
+  res.json(quest);
+}));
+
+// PUT /api/admin/quests/:id
+router.put('/quests/:id', ar(async (req, res) => {
+  await updateQuest(req.params.id, req.body);
+  await reloadQuestData();
+  console.log(`[ADMIN] PUT /quests/${req.params.id}`);
+  res.json({ ok: true });
+}));
+
+// DELETE /api/admin/quests/:id
+router.delete('/quests/:id', ar(async (req, res) => {
+  const id = req.params.id;
+  const count = await getPlayersOnQuest(id);
+  if (count > 0 && !req.query.force) {
+    return res.status(409).json({ error: `${count} player(s) are on this quest. Use ?force=true to delete anyway.`, count });
+  }
+  await deleteQuest(id);
+  await reloadQuestData();
+  console.log(`[ADMIN] DELETE /quests/${id}`);
+  res.json({ ok: true });
+}));
+
+// POST /api/admin/quests/:id/steps
+router.post('/quests/:id/steps', ar(async (req, res) => {
+  const { step_order, type, params, effects, display_text } = req.body;
+  if (!step_order || !type || !display_text) return res.status(400).json({ error: 'step_order, type, display_text required' });
+  const step = await createQuestStep({ quest_id: req.params.id, step_order, type, params, effects, display_text });
+  await reloadQuestData();
+  console.log(`[ADMIN] POST /quests/${req.params.id}/steps step ${step_order}`);
+  res.json(step);
+}));
+
+// PUT /api/admin/steps/:stepId
+router.put('/steps/:stepId', ar(async (req, res) => {
+  await updateQuestStep(req.params.stepId, req.body);
+  await reloadQuestData();
+  console.log(`[ADMIN] PUT /steps/${req.params.stepId}`);
+  res.json({ ok: true });
+}));
+
+// DELETE /api/admin/steps/:stepId
+router.delete('/steps/:stepId', ar(async (req, res) => {
+  await deleteQuestStep(req.params.stepId);
+  await reloadQuestData();
+  console.log(`[ADMIN] DELETE /steps/${req.params.stepId}`);
+  res.json({ ok: true });
 }));
 
 module.exports = router;
