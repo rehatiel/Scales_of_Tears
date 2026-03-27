@@ -152,6 +152,32 @@ function makeAssassin(faction, playerLevel) {
   };
 }
 
+// Mutates FACTIONS and CLASS_STARTING_REP in-place from DB rows (called at startup and after admin edits)
+function loadFactionsData({ factions, classReps }) {
+  for (const k of Object.keys(FACTIONS)) delete FACTIONS[k];
+  for (const k of Object.keys(CLASS_STARTING_REP)) delete CLASS_STARTING_REP[k];
+  for (const f of factions) {
+    FACTIONS[f.id] = {
+      id: f.id,
+      name: f.name,
+      shortName: f.short_name,
+      homeTown: f.home_town,
+      houseName: f.house_name,
+      houseKeeper: f.house_keeper,
+      repColumn: f.rep_column,
+      welcomePositive: f.welcome_positive,
+      welcomeNeutral: f.welcome_neutral,
+      welcomeNegative: f.welcome_negative,
+      assassinName: f.assassin_name,
+      assassinWeapon: f.assassin_weapon,
+    };
+  }
+  for (const row of classReps) {
+    if (!CLASS_STARTING_REP[row.class_num]) CLASS_STARTING_REP[row.class_num] = {};
+    if (row.rep_delta !== 0) CLASS_STARTING_REP[row.class_num][row.faction_id] = row.rep_delta;
+  }
+}
+
 // Returns DB update object for starting rep based on class
 function getStartingRepUpdates(cls) {
   const bonuses = CLASS_STARTING_REP[cls] || {};
@@ -165,6 +191,7 @@ function getStartingRepUpdates(cls) {
 module.exports = {
   FACTIONS,
   CLASS_STARTING_REP,
+  loadFactionsData,
   getFactionRep,
   adjustRep,
   adjustReps,

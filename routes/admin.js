@@ -1,9 +1,10 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
-const { pool, getAllPlayers, getRecentNews, addNews, updatePlayer, TODAY, getBannerOverride, setBanner, deleteBanner, getAllBanners, loadBanners, getWorldState, setWorldState, getAllWeapons, updateWeapon, getAllArmors, updateArmor, getAllMonsters, updateMonster, getAllGameConstants, setGameConstant, loadGameDataFromDb, loadQuestsFromDb, getAllQuests, getQuestWithSteps, createQuest, updateQuest, deleteQuest, createQuestStep, updateQuestStep, deleteQuestStep, getPlayersOnQuest } = require('../db');
-const { loadGameData } = require('../game/data');
+const { pool, getAllPlayers, getRecentNews, addNews, updatePlayer, TODAY, getBannerOverride, setBanner, deleteBanner, getAllBanners, loadBanners, getWorldState, setWorldState, getAllWeapons, updateWeapon, getAllArmors, updateArmor, getAllMonsters, updateMonster, getAllGameConstants, setGameConstant, loadGameDataFromDb, loadQuestsFromDb, getAllQuests, getQuestWithSteps, createQuest, updateQuest, deleteQuest, createQuestStep, updateQuestStep, deleteQuestStep, getPlayersOnQuest, loadFactionsFromDb, getAllFactions, updateFaction, getFactionClassReps, setFactionClassRep, loadTownsFromDb, getAllTowns, updateTown, updateTownSocial, updateTownShop } = require('../db');
+const { loadGameData, loadTownsData } = require('../game/data');
 const { loadQuestsData } = require('../game/quests');
+const { loadFactionsData } = require('../game/factions');
 const { runNewDay } = require('../game/newday');
 const { LOCATION_BANNERS } = require('../game/engine');
 
@@ -592,6 +593,91 @@ router.delete('/steps/:stepId', ar(async (req, res) => {
   await deleteQuestStep(req.params.stepId);
   await reloadQuestData();
   console.log(`[ADMIN] DELETE /steps/${req.params.stepId}`);
+  res.json({ ok: true });
+}));
+
+// ── Factions ──────────────────────────────────────────────────────────────────
+
+async function reloadFactionsData() {
+  const data = await loadFactionsFromDb();
+  loadFactionsData(data);
+}
+
+// GET /api/admin/factions
+router.get('/factions', ar(async (req, res) => {
+  const { CLASS_NAMES } = require('../game/data');
+  const [factions, classReps] = await Promise.all([getAllFactions(), getFactionClassReps()]);
+  res.json({ factions, classReps, classNames: CLASS_NAMES });
+}));
+
+// PUT /api/admin/factions/:id
+router.put('/factions/:id', ar(async (req, res) => {
+  await updateFaction(req.params.id, req.body);
+  await reloadFactionsData();
+  console.log(`[ADMIN] PUT /factions/${req.params.id}`);
+  res.json({ ok: true });
+}));
+
+// PUT /api/admin/faction-class-rep
+router.put('/faction-class-rep', ar(async (req, res) => {
+  const { faction_id, class_num, rep_delta } = req.body;
+  if (!faction_id || class_num == null || rep_delta == null) {
+    return res.status(400).json({ error: 'faction_id, class_num, rep_delta required' });
+  }
+  await setFactionClassRep(faction_id, Number(class_num), Number(rep_delta));
+  await reloadFactionsData();
+  console.log(`[ADMIN] PUT /faction-class-rep ${faction_id} cls${class_num} = ${rep_delta}`);
+  res.json({ ok: true });
+}));
+
+// ── Towns ─────────────────────────────────────────────────────────────────────
+
+async function reloadTownsData() {
+  const data = await loadTownsFromDb();
+  loadTownsData(data);
+}
+
+// GET /api/admin/towns
+router.get('/towns', ar(async (req, res) => {
+  const data = await getAllTowns();
+  res.json(data);
+}));
+
+// PUT /api/admin/towns/:id
+router.put('/towns/:id', ar(async (req, res) => {
+  const fields = { ...req.body };
+  // connections may arrive as a comma-separated string from the form
+  if (typeof fields.connections === 'string') {
+    fields.connections = fields.connections.split(',').map(s => s.trim()).filter(Boolean);
+  }
+  await updateTown(req.params.id, fields);
+  await reloadTownsData();
+  console.log(`[ADMIN] PUT /towns/${req.params.id}`);
+  res.json({ ok: true });
+}));
+
+// PUT /api/admin/town-social/:id
+router.put('/town-social/:id', ar(async (req, res) => {
+  await updateTownSocial(req.params.id, req.body);
+  await reloadTownsData();
+  console.log(`[ADMIN] PUT /town-social/${req.params.id}`);
+  res.json({ ok: true });
+}));
+
+// PUT /api/admin/town-shop/:id
+router.put('/town-shop/:id', ar(async (req, res) => {
+  const fields = { ...req.body };
+  // coerce numeric and boolean fields
+  for (const f of ['weapon_mult', 'armor_mult', 'sell_mult']) {
+    if (f in fields) fields[f] = parseFloat(fields[f]);
+  }
+  if ('tier_cap' in fields) fields.tier_cap = fields.tier_cap === '' ? null : parseInt(fields.tier_cap, 10);
+  for (const f of ['charm_bonus', 'daily_discount', 'poison_gear_discount', 'flee_discount', 'forge_upgrade', 'stocks_bonus']) {
+    if (f in fields) fields[f] = Boolean(fields[f]);
+  }
+  await updateTownShop(req.params.id, fields);
+  await reloadTownsData();
+  console.log(`[ADMIN] PUT /town-shop/${req.params.id}`);
   res.json({ ok: true });
 }));
 

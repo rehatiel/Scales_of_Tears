@@ -5,10 +5,11 @@ const session = require('express-session');
 const pgSession = require('connect-pg-simple')(session);
 const { WebSocketServer } = require('ws');
 const path = require('path');
-const { initDb, pool, updatePlayer, addNews, TODAY, loadGameDataFromDb, loadQuestsFromDb } = require('./db');
+const { initDb, pool, updatePlayer, addNews, TODAY, loadGameDataFromDb, loadQuestsFromDb, loadFactionsFromDb, loadTownsFromDb } = require('./db');
 const { runNewDay } = require('./game/newday');
-const { loadGameData } = require('./game/data');
+const { loadGameData, loadTownsData } = require('./game/data');
 const { loadQuestsData } = require('./game/quests');
+const { loadFactionsData } = require('./game/factions');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -125,6 +126,10 @@ initDb().then(async () => {
   loadGameData(gameData);
   const questData = await loadQuestsFromDb();
   loadQuestsData(questData);
+  const factionData = await loadFactionsFromDb();
+  loadFactionsData(factionData);
+  const townData = await loadTownsFromDb();
+  loadTownsData(townData);
   console.log('Game data loaded from database.');
   // Process any players who missed a new day while the server was down
   await runGlobalNewDay().catch(err => console.error('Startup new-day error:', err));

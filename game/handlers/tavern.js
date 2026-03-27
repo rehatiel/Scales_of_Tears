@@ -1,5 +1,5 @@
 const {
-  pool, getPlayer, updatePlayer, getPlayersInTown, addNews,
+  pool, getPlayer, updatePlayer, getPlayersInTown, getJailedPlayersInTown, addNews,
   sendMail, getInboxMail, getSentMail, markMailRead, getUnreadMailCount, getAllPlayers,
   getOnlinePlayers, postBounty, getAllActiveBounties, collectBounties,
   createArenaChallenge, getPendingChallengesForPlayer, getArenaChallenge, updateArenaChallenge,
@@ -13,7 +13,7 @@ const {
   getTavernPlayerScreen, getPlayerInspectScreen,
   getMailHubScreen, getMailRosterScreen, getMailInboxScreen, getMailReadScreen, getMailSentScreen, getMailComposeScreen, getBountyPostScreen,
   getBountyBoardScreen, getArenaLobbyScreen, getArenaBettingScreen, getWhoIsOnlineScreen,
-  getPvPCombatScreen, getPvPChallengeScreen,
+  getPvPCombatScreen, getPvPChallengeScreen, getJailScreen,
 } = require('../engine');
 const { pickEncounter, RESOLVERS } = require('../tavern_events');
 const { pushToast } = require('../sse');
@@ -254,6 +254,84 @@ async function tavern_attack({ player, param, req, res, pendingMessages }) {
     { type: 'status',    text: '`7They are offline — their skills will fight for them.' },
   ];
   return res.json({ ...getPvPCombatScreen(player, req.session.pvpCombat, initLog, false, false, false, false, 1, []), pendingMessages });
+}
+
+// ── Pickpocket ────────────────────────────────────────────────────────────────
+async function tavern_pickpocket({ player, param, req, res, pendingMessages }) {
+  const targetId = parseInt(param);
+  if (!targetId) return res.json({ ...(await tavernScreen(player)), pendingMessages: ['`@Invalid target.'] });
+
+  const others = await townPlayers(player);
+  const targetStub = others.find(p => p.id === targetId);
+  if (!targetStub)
+    return res.json({ ...(await tavernScreen(player)), pendingMessages: ['`@That person isn\'t here.'] });
+
+  const target = await getPlayer(targetId);
+  if (!target || target.dead)
+    return res.json({ ...(await tavernScreen(player)), pendingMessages: ['`@Target not available.'] });
+
+  // Progressive catch rate: each attempt today reduces success by 10%
+  // Guild rep gives a bonus (up to +20%), Rogue class gets +10%
+  const attemptsToday = player.pickpocket_today || 0;
+  const guildBonus = Math.min(20, Math.floor((player.rep_guild || 0) / 5));
+  const classBonus = player.class === 3 ? 10 : 0;
+  const successRate = Math.max(5, 40 + guildBonus + classBonus - (attemptsToday * 10)) / 100;
+
+  // Increment attempt counter regardless of outcome
+  await updatePlayer(player.id, { pickpocket_today: attemptsToday + 1 });
+
+  if (Math.random() < successRate) {
+    // Success — steal 5–15% of target gold, capped at player.level × 200
+    const targetGold = Number(target.gold);
+    if (targetGold <= 0) {
+      player = await getPlayer(player.id);
+      return res.json({ ...(await tavernScreen(player)), pendingMessages: [
+        `\`7You slip your hand into ${target.handle}'s pocket... nothing there. They're as broke as you.`,
+      ]});
+    }
+    const pct = 0.05 + Math.random() * 0.10;
+    const stolen = Math.min(Math.floor(targetGold * pct), player.level * 200);
+    await updatePlayer(player.id, { gold: Number(player.gold) + stolen });
+    await updatePlayer(target.id, { gold: Math.max(0, targetGold - stolen) });
+    await addNews(`\`8Someone's coin purse is lighter in ${TOWNS[player.current_town]?.name || 'town'} tonight.`);
+    player = await getPlayer(player.id);
+    return res.json({ ...(await tavernScreen(player)), pendingMessages: [
+      `\`7You watch ${target.handle} for a moment. Their attention drifts.`,
+      `\`7Your hand moves. Coin purse. Done.`,
+      `\`$You lifted \`$${stolen.toLocaleString()}\`$ gold without a sound.`,
+      attemptsToday >= 2 ? '`8The tavern is starting to notice the pattern. Be careful.' : '',
+    ].filter(Boolean)});
+  }
+
+  // Failure — caught. Rep hit and jail time.
+  const repHit = 5 + attemptsToday * 3;
+  const newKnightsRep = Math.max(-100, (player.rep_knights || 0) - repHit);
+  // Sentence scales: 15 min base, +15 per prior attempt today
+  const jailMinutes = 15 + attemptsToday * 15;
+  const jailUntil = Date.now() + jailMinutes * 60 * 1000;
+  const townId = player.current_town || 'dawnmark';
+
+  await updatePlayer(player.id, {
+    rep_knights: newKnightsRep,
+    jailed_until: jailUntil,
+    jail_town: townId,
+    jail_offense: 'pickpocket',
+  });
+  await addNews(`\`7A pickpocket was caught in ${TOWNS[townId]?.name || 'town'} and dragged to the cells.`);
+  player = await getPlayer(player.id);
+
+  const cellmates = await getJailedPlayersInTown(townId, player.id);
+
+  const catchMsgs = [
+    `\`@Your hand moves toward ${target.handle}'s belt.`,
+    `\`@${target.handle} catches your wrist. Hard.`,
+    '`@"Thief!" The whole tavern turns.',
+    '`@Two guards materialise from the shadows like they\'ve been waiting for exactly this.',
+    `\`7They haul you out the door and into the street.`,
+    `\`8Sentence: ${jailMinutes} minutes in the ${TOWNS[townId]?.name || ''} jail.`,
+    `\`8(Knights reputation −${repHit})`,
+  ];
+  return res.json({ ...getJailScreen(player, cellmates), pendingMessages: catchMsgs });
 }
 
 async function tavern_intimidate({ player, param, req, res, pendingMessages }) {
@@ -877,6 +955,7 @@ module.exports = {
   players: tavern,
   tavern_player,
   tavern_attack,
+  tavern_pickpocket,
   tavern_intimidate,
   tavern_inspect,
   tavern_drink,

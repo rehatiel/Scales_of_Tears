@@ -1046,6 +1046,44 @@ const HUNT_PRIZE_ITEMS = [
 // Called at startup by server.js after initDb() + loadGameDataFromDb().
 // Mutates WEAPONS, ARMORS, MONSTER_TEMPLATES, EXP_TABLE in-place so all
 // existing require() destructures automatically see the live DB values.
+// Mutates TOWNS, SOCIAL_SPACES, SHOP_OWNERS in-place from DB rows
+function loadTownsData({ towns, socialSpaces, shopOwners }) {
+  for (const k of Object.keys(TOWNS)) delete TOWNS[k];
+  for (const k of Object.keys(SOCIAL_SPACES)) delete SOCIAL_SPACES[k];
+  for (const k of Object.keys(SHOP_OWNERS)) delete SHOP_OWNERS[k];
+  for (const t of towns) {
+    TOWNS[t.id] = {
+      id: t.id,
+      name: t.name,
+      tagline: t.tagline,
+      minLevel: t.min_level,
+      shopMaxTier: t.shop_max_tier,
+      connections: t.connections,
+    };
+  }
+  for (const s of socialSpaces) {
+    SOCIAL_SPACES[s.town_id] = { name: s.name, action: s.action };
+  }
+  for (const o of shopOwners) {
+    SHOP_OWNERS[o.town_id] = {
+      name: o.name,
+      title: o.title,
+      quote: o.quote,
+      weaponMult: parseFloat(o.weapon_mult),
+      armorMult: parseFloat(o.armor_mult),
+      sellMult: parseFloat(o.sell_mult),
+      ...(o.tier_cap != null ? { tierCap: o.tier_cap } : {}),
+      ...(o.faction ? { faction: o.faction } : { faction: null }),
+      ...(o.charm_bonus ? { charmBonus: true } : {}),
+      ...(o.daily_discount ? { dailyDiscount: true } : {}),
+      ...(o.poison_gear_discount ? { poisonGearDiscount: true } : {}),
+      ...(o.flee_discount ? { fleeDiscount: true } : {}),
+      ...(o.forge_upgrade ? { forgeUpgrade: true } : {}),
+      ...(o.stocks_bonus ? { stocksBonus: true } : {}),
+    };
+  }
+}
+
 function loadGameData({ weapons, armors, monsters, constants }) {
   // Weapons: index by num
   for (const w of weapons) {
@@ -1098,4 +1136,5 @@ module.exports = {
   NAMED_ITEMS, getNamedItemDrop,
   HUNT_MONSTER_POOL, HUNT_RANK_REWARDS, HUNT_PRIZE_ITEMS,
   loadGameData,
+  loadTownsData,
 };

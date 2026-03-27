@@ -531,6 +531,8 @@
       <button class="btn btn-gray" id="gd-tab-armors"  onclick="gdShowTab('armors')">Armours</button>
       <button class="btn btn-gray" id="gd-tab-monsters" onclick="gdShowTab('monsters')">Monsters</button>
       <button class="btn btn-gray" id="gd-tab-constants" onclick="gdShowTab('constants')">Constants</button>
+      <button class="btn btn-gray" id="gd-tab-factions"  onclick="gdShowTab('factions')">Factions</button>
+      <button class="btn btn-gray" id="gd-tab-towns"     onclick="gdShowTab('towns')">Towns</button>
       <span class="status-msg" id="gd-status"></span>
     </div>
     <div class="panel-content" id="gd-content"></div>
@@ -1205,7 +1207,7 @@ let gdCurrentTab = 'weapons';
 
 function gdShowTab(tab) {
   gdCurrentTab = tab;
-  ['weapons','armors','monsters','constants'].forEach(t => {
+  ['weapons','armors','monsters','constants','factions','towns'].forEach(t => {
     const btn = document.getElementById('gd-tab-' + t);
     if (btn) btn.classList.toggle('btn-yellow', t === tab);
     if (btn) btn.classList.toggle('btn-gray', t !== tab);
@@ -1223,6 +1225,8 @@ async function gdLoad(tab) {
   if (tab === 'armors')    gdRenderArmors(data);
   if (tab === 'monsters')  gdRenderMonsters(data);
   if (tab === 'constants') gdRenderConstants(data);
+  if (tab === 'factions') gdRenderFactions(data);
+  if (tab === 'towns')    gdRenderTowns(data);
 }
 
 function gdStatus(msg, ok = true) {
@@ -1516,12 +1520,14 @@ function qRenderEditor(quest) {
     <div class="q-field-row"><span class="q-field-label">Repeatable</span>   <input type="checkbox" id="qe-repeatable"  ${quest.repeatable ? 'checked' : ''}></div>
     <div class="q-field-row"><span class="q-field-label">Active</span>       <input type="checkbox" id="qe-active"      ${quest.active ? 'checked' : ''}></div>
     <div class="q-field-row"><span class="q-field-label">Trigger Type</span>
-      <select class="q-select" id="qe-trigtype">
+      <select class="q-select" id="qe-trigtype" onchange="qUpdateTriggerRef(this.value)">
         <option value="">— none —</option>
         ${['tavern_encounter','event','auto','manual'].map(t => `<option value="${t}" ${quest.trigger_type===t?'selected':''}>${t}</option>`).join('')}
       </select>
     </div>
-    <div class="q-field-row"><span class="q-field-label">Trigger Ref</span>  <input class="q-input" id="qe-trigref"     value="${escHtml(quest.trigger_ref||'')}"></div>
+    <div class="q-field-row"><span class="q-field-label">Trigger Ref</span>
+      <div id="qe-trigref-wrap" style="flex:1">${qTriggerRefHTML(quest.trigger_type, quest.trigger_ref||'')}</div>
+    </div>
     <button class="btn btn-green" style="margin-bottom:20px" onclick="qSaveQuest('${escHtml(quest.id)}')">Save Metadata</button>
 
     <hr class="divider">
@@ -1531,6 +1537,76 @@ function qRenderEditor(quest) {
     </div>
     <button class="btn btn-green" onclick="qAddStep('${escHtml(quest.id)}', ${steps.length + 1})">+ Add Step</button>
   `;
+}
+
+// ── Quest smart dropdown data ─────────────────────────────────────────────────
+const ADMIN_TOWNS = [
+  {id:'dawnmark',       name:'Town of Dawnmark'},
+  {id:'stormwatch',     name:'Stormwatch'},
+  {id:'ironhold',       name:'Ironhold Bastion'},
+  {id:'old_karth',      name:'Old Karth'},
+  {id:'thornreach',     name:'Thornreach'},
+  {id:'silverkeep',     name:'Silverkeep'},
+  {id:'velmora',        name:'Velmora'},
+  {id:'bracken_hollow', name:'Bracken Hollow'},
+  {id:'duskveil',       name:'Duskveil'},
+  {id:'graveport',      name:'Graveport'},
+  {id:'mirefen',        name:'Mirefen'},
+  {id:'ashenfall',      name:'Ashenfall'},
+  {id:'frostmere',      name:'Frostmere'},
+];
+const ADMIN_NPCS = [
+  {id:'scholar_voss',       label:'scholar_voss — Scholar Voss (Dawnmark)'},
+  {id:'captain_ralen',      label:'captain_ralen — Captain Ralen (Ironhold)'},
+  {id:'archivist_thessaly', label:'archivist_thessaly — Archivist Thessaly (Stormwatch)'},
+  {id:'ancient_forge',      label:'ancient_forge — The Ancient Forge (Ashenfall)'},
+];
+const ADMIN_BOSSES = [
+  {id:'pale_captain', label:'pale_captain — The Pale Captain (Graveport)'},
+  {id:'veilborn',     label:'veilborn — The Veilborn (Dawnmark)'},
+];
+const ADMIN_TRIG_REFS = {
+  tavern_encounter: ['crying_widow', 'missing_merchant_rumour'],
+  event:  ['cursed_blade'],
+  auto:   ['dragon_first_kill'],
+};
+
+function qTownSelect(cls, val) {
+  const known = ADMIN_TOWNS.some(t => t.id === val);
+  const extraOpt = (val && val !== '$targetTown' && !known)
+    ? `<option value="${escHtml(val)}" selected>${escHtml(val)}</option>` : '';
+  return `<select class="q-select ${cls}">
+    <option value="">— none —</option>
+    ${extraOpt}
+    ${ADMIN_TOWNS.map(t => `<option value="${t.id}"${val===t.id?' selected':''}>${escHtml(t.name)}</option>`).join('')}
+    <option value="$targetTown"${val==='$targetTown'?' selected':''}>$targetTown (dynamic)</option>
+  </select>`;
+}
+
+function qNpcInput(cls, val, uid) {
+  const listId = 'dl-npc-' + uid;
+  return `<input class="q-input ${cls}" list="${listId}" value="${escHtml(val||'')}" placeholder="npc_id or custom">
+    <datalist id="${listId}">${ADMIN_NPCS.map(n=>`<option value="${escHtml(n.id)}">${escHtml(n.label)}</option>`).join('')}</datalist>`;
+}
+
+function qBossInput(cls, val, uid) {
+  const listId = 'dl-boss-' + uid;
+  return `<input class="q-input ${cls}" list="${listId}" value="${escHtml(val||'')}" placeholder="boss_id or custom">
+    <datalist id="${listId}">${ADMIN_BOSSES.map(b=>`<option value="${escHtml(b.id)}">${escHtml(b.label)}</option>`).join('')}</datalist>`;
+}
+
+function qTriggerRefHTML(trigType, val) {
+  const known = ADMIN_TRIG_REFS[trigType];
+  if (known) {
+    const opts = known.map(id=>`<option value="${id}"${val===id?' selected':''}>${id}</option>`).join('');
+    return `<select class="q-select" id="qe-trigref" style="flex:1"><option value="">— none —</option>${opts}</select>`;
+  }
+  return `<input class="q-input" id="qe-trigref" style="width:100%" value="${escHtml(val||'')}" placeholder="trigger ref">`;
+}
+
+function qUpdateTriggerRef(trigType) {
+  const wrap = document.getElementById('qe-trigref-wrap');
+  if (wrap) wrap.innerHTML = qTriggerRefHTML(trigType, '');
 }
 
 const STEP_TYPES = ['travel','npc_talk','kill_named','kill_boss','choice','event_trigger'];
@@ -1545,19 +1621,19 @@ function qStepCardHTML(questId, step) {
   if (step.type === 'travel') {
     paramsHtml = `<div class="q-params-box">
       <div class="q-params-label">PARAMS — travel</div>
-      <div class="q-field-row"><span class="q-field-label">town_id</span><input class="q-input qsp-town_id" value="${escHtml(p.town_id||'')}" placeholder="e.g. dawnmark or $targetTown"></div>
+      <div class="q-field-row"><span class="q-field-label">town_id</span>${qTownSelect('qsp-town_id', p.town_id||'')}</div>
     </div>`;
   } else if (step.type === 'npc_talk') {
     paramsHtml = `<div class="q-params-box">
       <div class="q-params-label">PARAMS — npc_talk</div>
-      <div class="q-field-row"><span class="q-field-label">npc_id</span>  <input class="q-input qsp-npc_id"   value="${escHtml(p.npc_id||'')}"></div>
-      <div class="q-field-row"><span class="q-field-label">town_id</span> <input class="q-input qsp-town_id"  value="${escHtml(p.town_id||'')}"></div>
+      <div class="q-field-row"><span class="q-field-label">npc_id</span>  ${qNpcInput('qsp-npc_id', p.npc_id||'', step.id+'-npc')}</div>
+      <div class="q-field-row"><span class="q-field-label">town_id</span> ${qTownSelect('qsp-town_id', p.town_id||'')}</div>
     </div>`;
   } else if (step.type === 'kill_boss') {
     paramsHtml = `<div class="q-params-box">
       <div class="q-params-label">PARAMS — kill_boss</div>
-      <div class="q-field-row"><span class="q-field-label">boss_id</span> <input class="q-input qsp-boss_id"  value="${escHtml(p.boss_id||'')}"></div>
-      <div class="q-field-row"><span class="q-field-label">town_id</span> <input class="q-input qsp-town_id"  value="${escHtml(p.town_id||'')}"></div>
+      <div class="q-field-row"><span class="q-field-label">boss_id</span> ${qBossInput('qsp-boss_id', p.boss_id||'', step.id+'-boss')}</div>
+      <div class="q-field-row"><span class="q-field-label">town_id</span> ${qTownSelect('qsp-town_id', p.town_id||'')}</div>
     </div>`;
   } else if (step.type === 'event_trigger') {
     paramsHtml = `<div class="q-params-box">
@@ -1747,6 +1823,259 @@ async function qDeleteQuest(questId) {
   qSelectedId = null;
   document.getElementById('q-edit-col').innerHTML = '';
   qLoad();
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ── Factions tab ──────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+
+function gdRenderFactions(data) {
+  const content = document.getElementById('gd-content');
+  const { factions, classReps, classNames } = data;
+  const FC = { knights:'#DDDDFF', guild:'#FFFF55', druids:'#55FF55', necromancers:'#FF55FF', merchants:'#FFAA44' };
+
+  // Build classRep lookup: classRep[classNum][factionId] = delta
+  const classRepMap = {};
+  for (const r of classReps) {
+    if (!classRepMap[r.class_num]) classRepMap[r.class_num] = {};
+    classRepMap[r.class_num][r.faction_id] = r.rep_delta;
+  }
+
+  function fRow(label, field, val, placeholder='') {
+    return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;font-size:12px">
+      <span style="color:#444;min-width:100px;flex-shrink:0">${label}</span>
+      <input data-field="${field}" value="${escHtml(val||'')}" placeholder="${escHtml(placeholder)}"
+        style="flex:1;background:#0a1a1a;border:1px solid #002222;color:#AAAAAA;padding:2px 6px;font-size:12px;font-family:inherit">
+    </div>`;
+  }
+
+  const cards = factions.map(f => `
+    <div id="fc-${f.id}" style="background:#060e0e;border:1px solid #002222;padding:14px 16px">
+      <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:10px">
+        <span style="color:${FC[f.id]||'#AAAAAA'};font-size:13px;font-weight:bold">${escHtml(f.id)}</span>
+        <span style="color:#444;font-size:11px">${escHtml(f.rep_column)}</span>
+      </div>
+      ${fRow('Name', 'name', f.name)}
+      ${fRow('Short name', 'short_name', f.short_name)}
+      ${fRow('Home town', 'home_town', f.home_town)}
+      ${fRow('House name', 'house_name', f.house_name)}
+      ${fRow('House keeper', 'house_keeper', f.house_keeper)}
+      ${fRow('Assassin name', 'assassin_name', f.assassin_name)}
+      ${fRow('Assassin weapon', 'assassin_weapon', f.assassin_weapon)}
+      ${fRow('Welcome (+)', 'welcome_positive', f.welcome_positive)}
+      ${fRow('Welcome (=)', 'welcome_neutral', f.welcome_neutral)}
+      ${fRow('Welcome (−)', 'welcome_negative', f.welcome_negative)}
+      <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
+        <button onclick="gdSaveFaction('${f.id}', this)" style="font-size:11px;padding:3px 10px">Save</button>
+        <span id="fcs-${f.id}" style="font-size:11px;color:#555"></span>
+      </div>
+    </div>`).join('');
+
+  const allClassNums = Object.keys(classNames).map(Number).sort((a,b)=>a-b);
+  const gridHeader = `<th style="padding:5px 10px;color:#555;font-size:11px;text-align:left">Class</th>` +
+    factions.map(f => `<th style="padding:5px 10px;font-size:11px;color:${FC[f.id]||'#AAA'};text-align:center">${escHtml(f.short_name||f.id)}</th>`).join('');
+  const gridRows = allClassNums.map(cls => {
+    const repRow = classRepMap[cls] || {};
+    const cells = factions.map(f => {
+      const v = repRow[f.id] || 0;
+      return `<td style="text-align:center;padding:2px 6px">
+        <input type="number" value="${v}" data-cls="${cls}" data-fid="${f.id}"
+          onchange="gdSaveClassRep(${cls}, '${f.id}', this.value, this)"
+          style="width:52px;text-align:center;background:#0a1a1a;border:1px solid #002222;
+                 color:${v>0?'#55FF55':v<0?'#FF5555':'#555'};font-size:12px;font-family:inherit;padding:2px 4px"
+          oninput="this.style.color=Number(this.value)>0?'#55FF55':Number(this.value)<0?'#FF5555':'#555'">
+      </td>`;
+    }).join('');
+    return `<tr style="border-bottom:1px solid #0a1010">
+      <td style="padding:4px 10px;color:#FFFF55;font-size:12px;white-space:nowrap">${escHtml(classNames[cls]||'Class '+cls)}</td>
+      ${cells}
+    </tr>`;
+  }).join('');
+
+  content.innerHTML = `
+    <div class="section-title">Factions (${factions.length})</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:10px;margin-bottom:24px">${cards}</div>
+    <div class="section-title">Starting Reputation by Class</div>
+    <div id="crep-status" style="font-size:11px;color:#555;margin-bottom:6px"></div>
+    <div style="overflow-x:auto">
+    <table><thead><tr style="border-bottom:1px solid #002222">${gridHeader}</tr></thead><tbody>${gridRows}</tbody></table>
+    </div>
+  `;
+}
+
+async function gdSaveFaction(id, btn) {
+  const card = document.getElementById('fc-' + id);
+  const statusEl = document.getElementById('fcs-' + id);
+  const fields = {};
+  card.querySelectorAll('input[data-field]').forEach(inp => { fields[inp.dataset.field] = inp.value; });
+  statusEl.style.color = '#555';
+  statusEl.textContent = 'Saving…';
+  const r = await api('PUT', '/factions/' + id, fields);
+  if (r.ok) {
+    statusEl.style.color = '#55FF55';
+    statusEl.textContent = 'Saved';
+    setTimeout(() => { statusEl.textContent = ''; }, 2000);
+  } else {
+    statusEl.style.color = '#FF5555';
+    statusEl.textContent = 'Error';
+  }
+}
+
+async function gdSaveClassRep(cls, fid, val, inp) {
+  const statusEl = document.getElementById('crep-status');
+  const delta = Number(val);
+  statusEl.style.color = '#555';
+  statusEl.textContent = 'Saving…';
+  const r = await api('PUT', '/faction-class-rep', { faction_id: fid, class_num: cls, rep_delta: delta });
+  if (r.ok) {
+    statusEl.style.color = '#55FF55';
+    statusEl.textContent = `Saved: ${fid} class ${cls} = ${delta >= 0 ? '+' : ''}${delta}`;
+    setTimeout(() => { statusEl.textContent = ''; }, 2000);
+    inp.style.color = delta > 0 ? '#55FF55' : delta < 0 ? '#FF5555' : '#555';
+  } else {
+    statusEl.style.color = '#FF5555';
+    statusEl.textContent = 'Error saving rep';
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ── Towns tab ─────────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+
+function gdRenderTowns(data) {
+  const content = document.getElementById('gd-content');
+  const { towns, socialSpaces, shopOwners } = data;
+
+  // Build lookup maps
+  const socialMap = {};
+  for (const s of socialSpaces) socialMap[s.town_id] = s;
+  const shopMap = {};
+  for (const o of shopOwners) shopMap[o.town_id] = o;
+
+  function inp(field, val, style='') {
+    return `<input data-field="${field}" value="${escHtml(String(val ?? ''))}"
+      style="background:#0a1a1a;border:1px solid #002222;color:#AAAAAA;padding:2px 5px;font-size:11px;font-family:inherit;${style}">`;
+  }
+  function numInp(field, val, w='52px') {
+    return `<input type="number" step="any" data-field="${field}" value="${val ?? ''}"
+      style="background:#0a1a1a;border:1px solid #002222;color:#55FFFF;padding:2px 4px;font-size:11px;font-family:inherit;width:${w};text-align:right">`;
+  }
+  function chk(field, val, label) {
+    return `<label style="font-size:10px;color:#666;display:flex;align-items:center;gap:3px;cursor:pointer">
+      <input type="checkbox" data-field="${field}" ${val ? 'checked' : ''}
+        style="accent-color:#55FF55;cursor:pointer">
+      ${label}</label>`;
+  }
+  function saveBtn(id, endpoint, selector) {
+    return `<button onclick="gdSaveTown('${id}','${endpoint}','${selector}',this)"
+      style="font-size:10px;padding:2px 8px;margin-top:4px">Save</button>
+      <span id="ts-${id}-${endpoint.replace('/','')}" style="font-size:10px;color:#555;margin-left:6px"></span>`;
+  }
+
+  const cards = towns.map(t => {
+    const social = socialMap[t.id] || {};
+    const shop = shopMap[t.id] || {};
+    const flags = ['charm_bonus','daily_discount','poison_gear_discount','flee_discount','forge_upgrade','stocks_bonus'];
+    const flagLabels = ['Charm bonus','Daily discount','Poison gear discount','Flee discount','Forge upgrade','Stocks bonus'];
+
+    return `
+    <div style="background:#060e0e;border:1px solid #002222;padding:12px 14px">
+      <div style="color:#55FFFF;font-size:12px;font-weight:bold;margin-bottom:8px">${escHtml(t.id)}</div>
+
+      <div style="font-size:10px;color:#555;margin-bottom:2px">TOWN</div>
+      <div style="display:grid;grid-template-columns:80px 1fr;gap:3px 8px;align-items:center;font-size:11px;margin-bottom:6px">
+        <span style="color:#444">Name</span> ${inp('name', t.name, 'width:100%')}
+        <span style="color:#444">Tagline</span> ${inp('tagline', t.tagline, 'width:100%')}
+        <span style="color:#444">Min level</span> ${numInp('min_level', t.min_level, '44px')}
+        <span style="color:#444">Shop tier</span> ${numInp('shop_max_tier', t.shop_max_tier, '44px')}
+        <span style="color:#444">Connections</span>
+        <input data-field="connections" value="${escHtml((t.connections||[]).join(', '))}"
+          title="Comma-separated town IDs"
+          style="background:#0a1a1a;border:1px solid #002222;color:#55FFFF;padding:2px 5px;font-size:11px;font-family:inherit;width:100%">
+      </div>
+      ${saveBtn(t.id, 'towns', '#tc-town-'+t.id)}
+      <div id="tc-town-${t.id}"></div>
+
+      ${social.name !== undefined ? `
+      <div style="font-size:10px;color:#555;margin:8px 0 2px">SOCIAL SPACE</div>
+      <div style="display:grid;grid-template-columns:80px 1fr;gap:3px 8px;align-items:center;font-size:11px;margin-bottom:6px">
+        <span style="color:#444">Name</span> ${inp('social_name', social.name, 'width:100%')}
+        <span style="color:#444">Action</span> ${inp('social_action', social.action, 'width:100%')}
+      </div>
+      ${saveBtn(t.id, 'town-social', '#tc-social-'+t.id)}
+      <div id="tc-social-${t.id}"></div>` : ''}
+
+      ${shop.name !== undefined ? `
+      <div style="font-size:10px;color:#555;margin:8px 0 2px">SHOP OWNER</div>
+      <div style="display:grid;grid-template-columns:80px 1fr;gap:3px 8px;align-items:center;font-size:11px;margin-bottom:4px">
+        <span style="color:#444">Name</span> ${inp('shop_name', shop.name, 'width:100%')}
+        <span style="color:#444">Title</span> ${inp('shop_title', shop.title, 'width:100%')}
+        <span style="color:#444">Quote</span> ${inp('shop_quote', shop.quote, 'width:100%')}
+        <span style="color:#444">Faction</span> ${inp('shop_faction', shop.faction||'', 'width:100%')}
+        <span style="color:#444">Wep ×</span> ${numInp('shop_weapon_mult', shop.weapon_mult)}
+        <span style="color:#444">Arm ×</span> ${numInp('shop_armor_mult', shop.armor_mult)}
+        <span style="color:#444">Sell ×</span> ${numInp('shop_sell_mult', shop.sell_mult)}
+        <span style="color:#444">Tier cap</span> ${numInp('shop_tier_cap', shop.tier_cap ?? '')}
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px 14px;margin-bottom:6px">
+        ${flags.map((f,i) => chk('shop_'+f, shop[f], flagLabels[i])).join('')}
+      </div>
+      ${saveBtn(t.id, 'town-shop', '#tc-shop-'+t.id)}
+      <div id="tc-shop-${t.id}"></div>` : ''}
+    </div>`;
+  }).join('');
+
+  content.innerHTML = `
+    <div class="section-title">Towns (${towns.length})</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:10px">${cards}</div>
+  `;
+}
+
+async function gdSaveTown(id, endpoint, statusSel, btn) {
+  const card = btn.closest('div[style]');
+  const fields = {};
+
+  if (endpoint === 'towns') {
+    card.querySelectorAll('[data-field]').forEach(el => {
+      if (!el.dataset.field.startsWith('social_') && !el.dataset.field.startsWith('shop_')) {
+        fields[el.dataset.field] = el.type === 'checkbox' ? el.checked : el.value;
+      }
+    });
+  } else if (endpoint === 'town-social') {
+    const nameEl = card.querySelector('[data-field="social_name"]');
+    const actionEl = card.querySelector('[data-field="social_action"]');
+    if (nameEl) fields.name = nameEl.value;
+    if (actionEl) fields.action = actionEl.value;
+  } else if (endpoint === 'town-shop') {
+    const fieldMap = {
+      shop_name: 'name', shop_title: 'title', shop_quote: 'quote', shop_faction: 'faction',
+      shop_weapon_mult: 'weapon_mult', shop_armor_mult: 'armor_mult', shop_sell_mult: 'sell_mult',
+      shop_tier_cap: 'tier_cap',
+      shop_charm_bonus: 'charm_bonus', shop_daily_discount: 'daily_discount',
+      shop_poison_gear_discount: 'poison_gear_discount', shop_flee_discount: 'flee_discount',
+      shop_forge_upgrade: 'forge_upgrade', shop_stocks_bonus: 'stocks_bonus',
+    };
+    card.querySelectorAll('[data-field]').forEach(el => {
+      const mapped = fieldMap[el.dataset.field];
+      if (mapped) fields[mapped] = el.type === 'checkbox' ? el.checked : el.value;
+    });
+  }
+
+  const statusKey = `ts-${id}-${endpoint.replace('/','').replace('-','')}`;
+  const statusEl = document.getElementById(statusKey) || document.querySelector(statusSel);
+  if (statusEl) { statusEl.style.color = '#555'; statusEl.textContent = 'Saving…'; }
+
+  const r = await api('PUT', `/${endpoint}/${id}`, fields);
+  if (statusEl) {
+    if (r.ok) {
+      statusEl.style.color = '#55FF55';
+      statusEl.textContent = 'Saved';
+      setTimeout(() => { statusEl.textContent = ''; }, 2000);
+    } else {
+      statusEl.style.color = '#FF5555';
+      statusEl.textContent = 'Error';
+    }
+  }
 }
 
 async function qNewQuest() {

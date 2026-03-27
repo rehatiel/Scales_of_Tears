@@ -977,7 +977,7 @@ function getForestEncounterScreen(player, monster, depth = 0) {
       ? `${c.yellow}  [P]${c.white} ${move.name}! ${c.dgray}(${player.skill_uses_left} use${player.skill_uses_left !== 1 ? 's' : ''} left)`
       : `${c.dgray}  [P] ${move.name} ${c.dgray}(no uses left)`,
     '',
-    `${c.dgray}  Stamina remaining today: ${player.stamina ?? player.fights_left ?? 10}`,
+    `${c.dgray}  Stamina: ${player.stamina ?? player.fights_left ?? 0}/${(player.stamina_max||10)*2}${c.dgray}  ${c.dgray}(+1/hr)`,
   );
   if (player.class === 1) lines.push(`${c.red}  [D]${c.white} RAGE! ${c.dgray}(spend 15% HP, next strike x2 damage)`);
 
@@ -1490,12 +1490,15 @@ function getInnScreen(player, sleeperCount = 0) {
     lines.push('');
   }
   if (player.retired_today) {
-    lines.push(`${c.cyan}  You are currently asleep here.`);
+    lines.push(`${c.cyan}  You are currently asleep here. You are protected from attack.`);
+    lines.push('');
     lines.push(`${c.yellow}  [W]${c.white} Wake up`);
+    lines.push(`${c.yellow}  [C]${c.white} Switch character    ${c.dgray}(stay asleep, swap to another)`);
+    lines.push(`${c.yellow}  [X]${c.white} Sign out            ${c.dgray}(stay asleep, log off safely)`);
   } else {
     lines.push(`${c.yellow}  [R]${c.white} Rest and recover all HP${c.dgray} (costs ${fmt(restCost)} gold)`);
     player.class === 4 && lines.push(`${c.cyan}  (Mage discount applied: 10% off)`);
-    lines.push(`${c.yellow}  [T]${c.white} Retire for the Night${c.dgray} (costs ${retireCost} gold${sleeperCount > 0 ? ` — busy tonight` : ''})`);
+    lines.push(`${c.yellow}  [T]${c.white} Sleep for the Night${c.dgray}  (costs ${retireCost} gold${sleeperCount > 0 ? ` — busy tonight` : ''} — safe from attack)`);
     player.gems > 0
       ? lines.push(`${c.yellow}  [G]${c.white} Use a gem to recover all HP${c.dgray} (free, uses 1 gem)`)
       : lines.push(`${c.dgray}  [G] Use a gem (you have no gems)`);
@@ -1508,11 +1511,13 @@ function getInnScreen(player, sleeperCount = 0) {
 
   const choices = [];
   if (player.retired_today) {
-    choices.push({ key: 'W', label: 'Wake up', action: 'inn_wake' });
+    choices.push({ key: 'W', label: 'Wake up',          action: 'inn_wake' });
+    choices.push({ key: 'C', label: 'Switch character',  action: 'char_switch' });
+    choices.push({ key: 'X', label: 'Sign out',          action: 'logout' });
   } else {
     choices.push(
       { key: 'R', label: 'Rest (gold)', action: 'inn_rest', disabled: fullHp || player.gold < restCost },
-      { key: 'T', label: 'Retire for Night', action: 'inn_retire', disabled: player.gold < retireCost },
+      { key: 'T', label: 'Sleep for Night', action: 'inn_retire', disabled: player.gold < retireCost },
       { key: 'G', label: 'Use gem', action: 'inn_gem', disabled: player.gems === 0 || fullHp },
       { key: 'U', label: 'Use antidote', action: 'inn_antidote', disabled: !player.antidote_owned },
       { key: 'B', label: 'Use bandage', action: 'inn_use_bandage', disabled: !(player.bandages > 0 && hasWounds) },
@@ -1828,6 +1833,7 @@ function getTavernScreen(player, otherPlayers, onlineIds, bountyTargetIds) {
   lines.push(`${c.yellow}  [M]${c.white} Speak to Hrok           ${c.dgray}(mail & messages)`);
   lines.push(`${c.yellow}  [W]${c.white} Wanted Board            ${c.dgray}(bounties)`);
   lines.push(`${c.yellow}  [O]${c.white} Who's Online            ${c.dgray}(active in last 15 min)`);
+  lines.push(`${c.yellow}  [J]${c.white} Visit the Jail          ${c.dgray}(bail someone out)`);
   lines.push(`${c.yellow}  [L]${c.white} Leave the Tavern`);
 
   const drinksRemain = 3 - (player.drinks_today || 0);
@@ -1840,6 +1846,7 @@ function getTavernScreen(player, otherPlayers, onlineIds, bountyTargetIds) {
     { key: 'M', label: 'Speak to Hrok', action: 'tavern_mail_hub' },
     { key: 'W', label: 'Wanted Board', action: 'tavern_bounty_board' },
     { key: 'O', label: "Who's Online", action: 'tavern_online' },
+    { key: 'J', label: 'Visit the Jail', action: 'jail_bail_list' },
     { key: 'L', label: 'Leave', action: 'town' },
   ];
 
@@ -1884,45 +1891,46 @@ function getTavernDrinkScreen(player) {
 
 function getGardenScreen(player) {
   const isFemale = player.sex === 5;
-  const lines = [
-    ...renderBanner('garden'),
-    `${c.green}  You push open a hidden gate and enter a beautiful garden.`,
-    `${c.green}  The scent of roses fills the air.`,
-    '',
-    `${c.magenta}  A sharp-eyed woman with auburn hair looks up from her work.`,
-    `${c.white}  "Oh! A visitor. How... unexpected."`,
-    '',
-  ];
 
-  if (player.flirted_today) {
-    lines.push(`${c.magenta}  Lysa smiles. "You again. I must say, you are persistent."`);
-    lines.push(`${c.dgray}  (You have already visited Lysa today.)`);
-    lines.push('');
-    lines.push(`${c.yellow}  [L]${c.white} Leave the Garden`);
-    return buildScreen("Lysa's Garden", lines, [{ key: 'L', label: 'Leave', action: 'town' }]);
-  }
+  // Intro text varies slightly based on visit history
+  const introLines = player.flirted_today
+    ? [
+        `${c.green}  The garden gate is familiar now. You push it open.`,
+        `${c.green}  The scent of roses follows you in.`,
+        '',
+        `${c.magenta}  Lysa glances up. A small smile — almost involuntary.`,
+        `${c.white}  "You again." She doesn't sound displeased.`,
+        '',
+      ]
+    : [
+        `${c.green}  You push open a hidden gate and step into a walled garden.`,
+        `${c.green}  Roses and herbs crowd every bed. The city noise disappears.`,
+        '',
+        `${c.magenta}  A woman with auburn hair and ink-stained fingers looks up from her work.`,
+        `${c.white}  "Oh. A visitor." A pause. "I don't get many of those."`,
+        '',
+      ];
 
-  if (isFemale) {
-    lines.push(`${c.magenta}  "Another lady in the realm! How delightful." She hands you`);
-    lines.push(`${c.magenta}  a beautiful rose. Your charm increases by 1!`);
-  } else {
-    lines.push(`${c.yellow}  [F]${c.white} Pick her a flower`);
-    lines.push(`${c.yellow}  [C]${c.white} Compliment her eyes`);
-    lines.push(`${c.yellow}  [K]${c.white} Try to steal a kiss`);
-  }
-  lines.push(`${c.yellow}  [L]${c.white} Leave the Garden`);
+  const lines = [...renderBanner('garden'), ...introLines];
 
   const choices = [
-    { key: 'L', label: 'Leave', action: 'town' },
+    { key: 'T', label: 'Talk to her',  action: 'garden_talk' },
+    { key: 'L', label: 'Leave',        action: 'town' },
   ];
-  if (!isFemale) {
-    choices.unshift(
-      { key: 'F', label: 'Pick a flower', action: 'garden_flower' },
-      { key: 'C', label: 'Compliment', action: 'garden_compliment' },
-      { key: 'K', label: 'Steal a kiss', action: 'garden_kiss' },
-    );
+
+  if (!player.flirted_today) {
+    if (!isFemale) {
+      choices.unshift(
+        { key: 'F', label: 'Pick her a flower', action: 'garden_flower' },
+        { key: 'C', label: 'Compliment her',    action: 'garden_compliment' },
+        { key: 'K', label: 'Steal a kiss',      action: 'garden_kiss' },
+      );
+    } else {
+      choices.unshift({ key: 'X', label: 'Accept rose', action: 'garden_female' });
+    }
   } else {
-    choices.unshift({ key: 'X', label: 'Accept rose', action: 'garden_female' });
+    lines.push(`${c.dgray}  (You have already visited Lysa today — charm actions unavailable.)`);
+    lines.push('');
   }
 
   return buildScreen("Lysa's Garden", lines, choices);
@@ -3371,6 +3379,7 @@ function getTavernPlayerScreen(player, target, hasArena, bounties) {
     '',
     divider('─', 50),
     `${c.yellow}  [A]${c.white} Attack          ${fightsNote}`,
+    `${c.yellow}  [P]${c.white} Pickpocket      ${c.dgray}(steal gold — risky)`,
     `${c.yellow}  [I]${c.white} Inspect         ${c.dgray}(public profile)`,
     `${c.yellow}  [M]${c.white} Send Message    ${c.dgray}(via Hrok)`,
     `${c.yellow}  [U]${c.white} Post Bounty     ${c.dgray}(50 gold min)`,
@@ -3382,6 +3391,7 @@ function getTavernPlayerScreen(player, target, hasArena, bounties) {
 
   const choices = [
     { key: 'A', label: 'Attack',          action: 'tavern_attack',        param: String(target.id), disabled: player.human_fights_left === 0 },
+    { key: 'P', label: 'Pickpocket',      action: 'tavern_pickpocket',    param: String(target.id) },
     { key: 'I', label: 'Inspect',         action: 'tavern_inspect',        param: String(target.id) },
     { key: 'M', label: 'Send Message',    action: 'tavern_mail_compose',   param: String(target.id) },
     { key: 'U', label: 'Post Bounty',     action: 'tavern_bounty_post',    param: String(target.id) },
@@ -3847,6 +3857,102 @@ function getCharDeleteConfirmScreen(char) {
   };
 }
 
+// ── Jail ──────────────────────────────────────────────────────────────────────
+
+const OFFENSE_LABELS = {
+  pickpocket:       'Pickpocketing',
+  vendor_theft:     'Theft from a merchant',
+  assault_sleeping: 'Assault on a sleeping citizen',
+};
+
+function getJailScreen(player, cellmates = []) {
+  const town = TOWNS[player.jail_town || player.current_town] || TOWNS.dawnmark;
+  const remaining = Math.max(0, (player.jailed_until || 0) - Date.now());
+  const minutes = Math.ceil(remaining / 60000);
+  const offense = OFFENSE_LABELS[player.jail_offense] || player.jail_offense || 'Disorderly conduct';
+  const freed = remaining <= 0;
+
+  const lines = [
+    `${c.dgray}Stone walls. Iron bars. The reek of damp straw and regret.`,
+    `${c.dgray}A guard leans against the far wall, pointedly ignoring you.`,
+    '',
+    `${c.yellow}Town:    ${c.white}${town.name} — Town Jail`,
+    `${c.yellow}Offense: ${c.white}${offense}`,
+    freed
+      ? `${c.green}Status:  Time served. You're free to go.`
+      : `${c.yellow}Time remaining: ${c.white}${minutes} minute${minutes !== 1 ? 's' : ''}`,
+    '',
+  ];
+
+  if (cellmates.length > 0) {
+    lines.push(`${c.gray}Also locked up:`);
+    for (const p of cellmates) {
+      const pmins = Math.ceil(Math.max(0, p.jailed_until - Date.now()) / 60000);
+      const pOffense = OFFENSE_LABELS[p.jail_offense] || p.jail_offense || 'misconduct';
+      lines.push(`  ${c.white}${pad(p.handle, 18)} ${c.dgray}Lv${p.level}  ${pmins}m  ${c.gray}(${pOffense})`);
+    }
+    lines.push('');
+  } else {
+    lines.push(`${c.dgray}The cell is empty except for you.`);
+    lines.push('');
+  }
+
+  const choices = freed
+    ? [{ key: 'L', label: 'Walk out the door', action: 'town' }]
+    : [
+        { key: 'W', label: 'Wait quietly',     action: 'jail_wait' },
+        { key: 'E', label: 'Pass the time...', action: 'jail_event' },
+      ];
+
+  return {
+    screen: 'jail',
+    title: `${town.name} — Town Jail`,
+    lines,
+    choices,
+  };
+}
+
+function getJailBailScreen(player, prisoners) {
+  const town = TOWNS[player.current_town || 'dawnmark'] || TOWNS.dawnmark;
+
+  const lines = [
+    `${c.dgray}The jail warden squints at you from behind a scarred desk.`,
+    `${c.dgray}"Looking to spring someone, are we? It'll cost ya."`,
+    '',
+  ];
+
+  const choices = [];
+
+  if (prisoners.length === 0) {
+    lines.push(`${c.gray}The cells are empty tonight. No one to bail out.`);
+  } else {
+    lines.push(`${c.yellow}Prisoners in ${town.name}:`);
+    lines.push(divider('─', 58));
+    prisoners.forEach((p, i) => {
+      const pmins = Math.ceil(Math.max(0, p.jailed_until - Date.now()) / 60000);
+      const bailCost = Math.min(2000, Math.ceil(pmins * 10));
+      const pOffense = OFFENSE_LABELS[p.jail_offense] || p.jail_offense || 'misconduct';
+      lines.push(`${c.yellow}  ${i + 1}. ${c.white}${pad(p.handle, 18)} ${c.dgray}${pmins}m left  ${c.gray}(${pOffense})  ${c.yellow}Bail: ${bailCost}g`);
+      choices.push({
+        key: String(i + 1),
+        label: `Bail out ${p.handle} (${bailCost}g)`,
+        action: 'jail_bail_pay',
+        param: String(p.id),
+      });
+    });
+  }
+
+  lines.push('');
+  choices.push({ key: 'B', label: 'Back to tavern', action: 'tavern' });
+
+  return {
+    screen: 'jail_bail',
+    title: `${town.name} — Bail Office`,
+    lines,
+    choices,
+  };
+}
+
 module.exports = {
   getTownScreen, getMarketScreen, getGatesScreen, getTrainingGroundsScreen, getSocialHallScreen,
   getForestEncounterScreen, getForestCombatScreen,
@@ -3880,4 +3986,5 @@ module.exports = {
   getPvPCombatScreen,
   getPvPSessionScreen, getPvPSessionWaitingScreen, getPvPChallengeScreen,
   getCharSelectScreen, getCharDeleteMenuScreen, getCharDeleteConfirmScreen,
+  getJailScreen, getJailBailScreen,
 };

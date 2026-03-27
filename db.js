@@ -62,7 +62,7 @@ const PLAYER_COLUMNS = new Set([
   'username', 'password_hash', 'handle', 'sex', 'class', 'hit_points', 'hit_max',
   'strength', 'defense', 'charm', 'level', 'exp', 'gold', 'bank', 'gems',
   'weapon_num', 'weapon_name', 'arm_num', 'arm_name', 'fights_left', 'human_fights_left',
-  'skill_points', 'skill_uses_left', 'stamina', 'stamina_max',
+  'skill_points', 'skill_uses_left', 'stamina', 'stamina_max', 'stamina_regen_at', 'slept_today', 'pickpocket_today',
   'dead', 'near_death', 'near_death_by', 'seen_master', 'seen_dragon',
   'has_horse', 'married_to', 'kids', 'times_won', 'kills', 'lays',
   'last_day', 'flirted_today', 'special_done_today', 'training_today', 'drinks_today',
@@ -87,6 +87,7 @@ const PLAYER_COLUMNS = new Set([
   'prestige_level',
   'earned_titles', 'active_title', 'death_count', 'flee_count',
   'last_killed_by',
+  'jailed_until', 'jail_town', 'jail_offense',
 ]);
 
 async function updatePlayer(id, fields) {
@@ -182,6 +183,19 @@ async function getPlayersInTown(townId, excludeId) {
        AND (travel_to IS NULL OR travel_to = '')
      ORDER BY level DESC, exp DESC`,
     [townId, excludeId]
+  );
+  return rows;
+}
+
+async function getJailedPlayersInTown(townId, excludeId) {
+  const { rows } = await pool.query(
+    `SELECT id, handle, level, class, jailed_until, jail_offense
+     FROM players
+     WHERE jail_town = $1 AND id != $2
+       AND jailed_until IS NOT NULL
+       AND jailed_until > EXTRACT(EPOCH FROM NOW()) * 1000
+     ORDER BY jailed_until ASC`,
+    [townId, excludeId || 0]
   );
   return rows;
 }
@@ -859,6 +873,105 @@ async function getPlayersOnQuest(questId) {
   return rows[0]?.count ?? 0;
 }
 
+// ── Town helpers ───────────────────────────────────────────────────────────────
+
+async function loadTownsFromDb() {
+  const [tRes, sRes, oRes] = await Promise.all([
+    pool.query('SELECT * FROM towns ORDER BY sort_order'),
+    pool.query('SELECT * FROM town_social_spaces'),
+    pool.query('SELECT * FROM town_shop_owners'),
+  ]);
+  return { towns: tRes.rows, socialSpaces: sRes.rows, shopOwners: oRes.rows };
+}
+
+async function getAllTowns() {
+  const [tRes, sRes, oRes] = await Promise.all([
+    pool.query('SELECT * FROM towns ORDER BY sort_order'),
+    pool.query('SELECT * FROM town_social_spaces'),
+    pool.query('SELECT * FROM town_shop_owners'),
+  ]);
+  return { towns: tRes.rows, socialSpaces: sRes.rows, shopOwners: oRes.rows };
+}
+
+async function updateTown(id, fields) {
+  const allowed = ['name', 'tagline', 'min_level', 'shop_max_tier', 'connections'];
+  const sets = [];
+  const vals = [];
+  for (const k of allowed) {
+    if (k in fields) { sets.push(`${k} = $${vals.length + 1}`); vals.push(fields[k]); }
+  }
+  if (!sets.length) return;
+  vals.push(id);
+  await pool.query(`UPDATE towns SET ${sets.join(', ')} WHERE id = $${vals.length}`, vals);
+}
+
+async function updateTownSocial(townId, fields) {
+  const allowed = ['name', 'action'];
+  const sets = [];
+  const vals = [];
+  for (const k of allowed) {
+    if (k in fields) { sets.push(`${k} = $${vals.length + 1}`); vals.push(fields[k]); }
+  }
+  if (!sets.length) return;
+  vals.push(townId);
+  await pool.query(`UPDATE town_social_spaces SET ${sets.join(', ')} WHERE town_id = $${vals.length}`, vals);
+}
+
+async function updateTownShop(townId, fields) {
+  const allowed = ['name', 'title', 'quote', 'weapon_mult', 'armor_mult', 'sell_mult',
+    'tier_cap', 'faction', 'charm_bonus', 'daily_discount', 'poison_gear_discount',
+    'flee_discount', 'forge_upgrade', 'stocks_bonus'];
+  const sets = [];
+  const vals = [];
+  for (const k of allowed) {
+    if (k in fields) { sets.push(`${k} = $${vals.length + 1}`); vals.push(fields[k]); }
+  }
+  if (!sets.length) return;
+  vals.push(townId);
+  await pool.query(`UPDATE town_shop_owners SET ${sets.join(', ')} WHERE town_id = $${vals.length}`, vals);
+}
+
+// ── Faction helpers ────────────────────────────────────────────────────────────
+
+async function loadFactionsFromDb() {
+  const [fRes, rRes] = await Promise.all([
+    pool.query('SELECT * FROM factions ORDER BY sort_order'),
+    pool.query('SELECT * FROM faction_class_rep ORDER BY class_num, faction_id'),
+  ]);
+  return { factions: fRes.rows, classReps: rRes.rows };
+}
+
+async function getAllFactions() {
+  const { rows } = await pool.query('SELECT * FROM factions ORDER BY sort_order');
+  return rows;
+}
+
+async function updateFaction(id, fields) {
+  const allowed = ['name', 'short_name', 'home_town', 'house_name', 'house_keeper',
+    'welcome_positive', 'welcome_neutral', 'welcome_negative', 'assassin_name', 'assassin_weapon'];
+  const sets = [];
+  const vals = [];
+  for (const k of allowed) {
+    if (k in fields) { sets.push(`${k} = $${vals.length + 1}`); vals.push(fields[k]); }
+  }
+  if (!sets.length) return;
+  vals.push(id);
+  await pool.query(`UPDATE factions SET ${sets.join(', ')} WHERE id = $${vals.length}`, vals);
+}
+
+async function getFactionClassReps() {
+  const { rows } = await pool.query('SELECT * FROM faction_class_rep ORDER BY class_num, faction_id');
+  return rows;
+}
+
+async function setFactionClassRep(factionId, classNum, delta) {
+  await pool.query(
+    `INSERT INTO faction_class_rep (faction_id, class_num, rep_delta) VALUES ($1, $2, $3)
+     ON CONFLICT (faction_id, class_num) DO UPDATE SET rep_delta = $3`,
+    [factionId, classNum, delta]
+  );
+}
+
 // ── Player secrets ─────────────────────────────────────────────────────────────
 
 async function getSeenSecrets(playerId) {
@@ -873,8 +986,10 @@ async function recordSecret(playerId, secretId) {
   );
 }
 
-module.exports = { pool, initDb, getPlayer, getPlayerByUsername, updatePlayer, claimNewDay, createPlayer, getAllPlayers, getPlayersInTown, getRetiredPlayersInTown, getNearDeathPlayers, getCaptivePlayers, getRecentNews, addNews, getHallOfKings, addToHallOfKings, TODAY, getBannerOverride, setBanner, deleteBanner, getAllBanners, loadBanners, getActiveNamedEnemiesForLevel, createNamedEnemy, updateNamedEnemy, getNamedEnemy, getAllUndefeatedNamedEnemies, getUndefeatedNamedEnemiesWithKills, getInvadingEnemies, getActiveWorldEvent, triggerWorldEvent, expireWorldEvents, getWorldState, setWorldState, getActiveHunts, generateWeeklyHunts, incrementHuntKill, getWeeklyHuntLeaderboard, sendMail, getInboxMail, getSentMail, markMailRead, getUnreadMailCount, getOnlinePlayers, postBounty, getBountiesOnTarget, getAllActiveBounties, collectBounties, createArenaChallenge, getPendingChallengesForPlayer, getArenaChallenge, updateArenaChallenge, placeBet, getArenaSpectators, resolveArenaBets, getOpenArenaChallenge, createPvpSession, getPvpSession, getActivePvpSessionForPlayer, updatePvpSession, completePvpSession, getSeenSecrets, recordSecret,
+module.exports = { pool, initDb, getPlayer, getPlayerByUsername, updatePlayer, claimNewDay, createPlayer, getAllPlayers, getPlayersInTown, getJailedPlayersInTown, getRetiredPlayersInTown, getNearDeathPlayers, getCaptivePlayers, getRecentNews, addNews, getHallOfKings, addToHallOfKings, TODAY, getBannerOverride, setBanner, deleteBanner, getAllBanners, loadBanners, getActiveNamedEnemiesForLevel, createNamedEnemy, updateNamedEnemy, getNamedEnemy, getAllUndefeatedNamedEnemies, getUndefeatedNamedEnemiesWithKills, getInvadingEnemies, getActiveWorldEvent, triggerWorldEvent, expireWorldEvents, getWorldState, setWorldState, getActiveHunts, generateWeeklyHunts, incrementHuntKill, getWeeklyHuntLeaderboard, sendMail, getInboxMail, getSentMail, markMailRead, getUnreadMailCount, getOnlinePlayers, postBounty, getBountiesOnTarget, getAllActiveBounties, collectBounties, createArenaChallenge, getPendingChallengesForPlayer, getArenaChallenge, updateArenaChallenge, placeBet, getArenaSpectators, resolveArenaBets, getOpenArenaChallenge, createPvpSession, getPvpSession, getActivePvpSessionForPlayer, updatePvpSession, completePvpSession, getSeenSecrets, recordSecret,
   getAccountByUsername, getAccountById, createAccount, getCharactersForAccount, createCharacterForAccount, setBanAccount,
   loadGameDataFromDb, getAllWeapons, updateWeapon, getAllArmors, updateArmor, getAllMonsters, updateMonster, getAllGameConstants, setGameConstant,
   loadQuestsFromDb, getAllQuests, getQuestWithSteps, createQuest, updateQuest, deleteQuest,
-  createQuestStep, updateQuestStep, deleteQuestStep, getPlayersOnQuest };
+  createQuestStep, updateQuestStep, deleteQuestStep, getPlayersOnQuest,
+  loadFactionsFromDb, getAllFactions, updateFaction, getFactionClassReps, setFactionClassRep,
+  loadTownsFromDb, getAllTowns, updateTown, updateTownSocial, updateTownShop };

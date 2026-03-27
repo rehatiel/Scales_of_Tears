@@ -15,7 +15,6 @@ async function runNewDay(player, dryRun = false) {
   const atInn = !!player.retired_today;
 
   // ── Daily counter resets ──────────────────────────────────────────────────
-  updates.fights_left       = 10;
   updates.human_fights_left = 5;
   updates.flirted_today     = 0;
   updates.special_done_today = 0;
@@ -28,14 +27,18 @@ async function runNewDay(player, dryRun = false) {
   updates.guide_hired       = 0;
   updates.road_hint         = null;
   updates.herbalist_today   = 0;
-  updates.retired_today     = 0;
+  updates.retired_today     = 0;  // wake everyone up at new day
   updates.retired_town      = '';
+  updates.slept_today       = false;
+  updates.pickpocket_today  = 0;
+  // Clear short jail sentences overnight — you don't rot in a cell forever
+  updates.jailed_until      = null;
+  updates.jail_town         = null;
+  updates.jail_offense      = null;
   updates.ruins_visited     = '[]';
   updates.dungeon_clears    = '[]';
-
-  // Stamina: inn sleepers recover fully; everyone else recovers 60%
-  const stamMax = player.stamina_max || 10;
-  updates.stamina = atInn ? stamMax : Math.max(1, Math.floor(stamMax * 0.6));
+  // Stamina is now real-time regen (+1/hr via tickStaminaRegen in routes/game.js)
+  // No daily reset — only wound drain below may reduce it
 
   // ── Near-death expiry ─────────────────────────────────────────────────────
   if (player.near_death) {
@@ -155,10 +158,12 @@ async function runNewDay(player, dryRun = false) {
   // Location penalties drain stamina overnight (torso wounds)
   const locPenalties = getLocationPenalties(wounds);
   if (locPenalties.staminaDrain > 0) {
-    const drained = Math.min(updates.stamina, locPenalties.staminaDrain);
-    updates.stamina = Math.max(1, updates.stamina - drained);
+    const currentStam = player.stamina ?? 0;
+    const drained = Math.min(currentStam, locPenalties.staminaDrain);
     if (drained > 0) {
-      messages.push(`\`8Your torso wound drains your strength. You wake with ${drained} less stamina.`);
+      updates.stamina = Math.max(0, currentStam - drained);
+      updates.stamina_regen_at = Date.now();
+      messages.push(`\`8Your torso wound drains your strength overnight. You lost ${drained} stamina.`);
     }
   }
 

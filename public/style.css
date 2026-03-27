@@ -672,9 +672,11 @@ button, .choice-item, .sex-btn, .class-card, .tab-btn {
   #setup-screen {
     position: fixed;
     inset: 0;
-    overflow-y: auto;
+    overflow-y: scroll;
+    -webkit-overflow-scrolling: touch; /* legacy Android WebView */
+    touch-action: pan-y;               /* tell Android this container scrolls */
     align-items: flex-start;
-    padding: 24px 0 40px;
+    padding: 24px 0 max(60px, env(safe-area-inset-bottom, 60px));
   }
   .setup-box { padding: 20px 14px; }
   .class-cards { grid-template-columns: repeat(2, 1fr); gap: 8px; }

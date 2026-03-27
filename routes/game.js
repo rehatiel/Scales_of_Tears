@@ -1,11 +1,33 @@
 const express = require('express');
 const { getPlayer, updatePlayer, claimNewDay, addNews, TODAY } = require('../db');
+
+// Real-time stamina regen: 1 point per hour, capped at stamina_max × 2
+async function tickStaminaRegen(player) {
+  const now = Date.now();
+  const cap = (player.stamina_max || 10) * 2;
+  const current = player.stamina ?? player.fights_left ?? 0;
+  if (!player.stamina_regen_at) {
+    // First time — record baseline, no gain
+    await updatePlayer(player.id, { stamina_regen_at: now });
+    return player;
+  }
+  if (current >= cap) return player;
+  const regenAt = Number(player.stamina_regen_at);
+  const hoursElapsed = Math.floor((now - regenAt) / 3600000);
+  if (hoursElapsed <= 0) return player;
+  const gained = Math.min(hoursElapsed, cap - current);
+  await updatePlayer(player.id, {
+    stamina: current + gained,
+    stamina_regen_at: regenAt + gained * 3600000,
+  });
+  return getPlayer(player.id);
+}
 const { LEVEL_UP_GAINS, TOWNS, expForNextLevel } = require('../game/data');
 const { runNewDay, runWorldDay } = require('../game/newday');
 const {
   getTownScreen, getSetupScreen, getNearDeathWaitingScreen,
   getRoadScreen, getCampingScreen, getCaptiveScreen,
-  getAbductionDungeonScreen, getInnScreen,
+  getAbductionDungeonScreen, getInnScreen, getJailScreen,
   setWorldEventCache, setInvaderCache,
 } = require('../game/engine');
 const { getActiveWorldEvent, getInvadingEnemies, getActivePvpSessionForPlayer, getCharactersForAccount, createCharacterForAccount } = require('../db');
@@ -67,6 +89,7 @@ const HANDLERS = {
   ...require('../game/handlers/veilborn'),
   ...require('../game/handlers/pvp_session'),
   ...require('../game/handlers/characters'),
+  ...require('../game/handlers/jail'),
 };
 
 // Auth guard
@@ -168,6 +191,7 @@ router.get('/state', ar(async (req, res) => {
   if (player.camping)      return res.json(getCampingScreen(player));
   if (player.travel_to)   return res.json(getRoadScreen(player));
   if (player.retired_today) return res.json(getInnScreen(player, 0));
+  if (player.jailed_until && Date.now() < Number(player.jailed_until)) return res.json(getJailScreen(player, []));
   if (req.session.abduction) {
     const state = req.session.abduction;
     const captor = state.captors[0];
@@ -275,6 +299,9 @@ router.post('/action', ar(async (req, res) => {
     player = await getPlayer(player.id);
   }
 
+  // Real-time stamina regen — recalculate before every action
+  player = await tickStaminaRegen(player);
+
   // Refresh world event + invader caches (synchronously available in all screen builders)
   const [activeEvent, townInvaders] = await Promise.all([
     getActiveWorldEvent(),
@@ -305,6 +332,16 @@ router.post('/action', ar(async (req, res) => {
   const CAPTIVE_ALLOWED    = ['captive_wait', 'captive_buy_freedom', 'captive_escape', 'logout'];
   const CAMPING_ALLOWED    = ['camp_wait', 'road_turn_back', 'road_encounter_fight', 'road_encounter_run', 'road_encounter_power', 'logout'];
   const ABDUCTION_ALLOWED  = ['abduction_fight', 'abduction_power', 'abduction_run', 'logout'];
+  const JAIL_ALLOWED       = new Set(['jail', 'jail_wait', 'jail_event', 'jail_bail_list', 'jail_bail_pay', 'logout']);
+
+  // Jailed players can only use jail actions (or leave once time is up)
+  if (player.jailed_until && Date.now() < Number(player.jailed_until)) {
+    if (!JAIL_ALLOWED.has(action)) {
+      const handler = HANDLERS.jail;
+      if (handler) return handler({ action: 'jail', player, param: null, req, res, pendingMessages });
+      return res.json({ ...getJailScreen(player, []), pendingMessages });
+    }
+  }
 
   // Dead players are sent to town (they'll get a "you are dead" message there);
   // only logout and town navigation are allowed until reincarnation on the next day.
