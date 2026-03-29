@@ -209,6 +209,7 @@
     <button class="tab-btn" data-tab="system">System</button>
     <button class="tab-btn" data-tab="gamedata">Game Data</button>
     <button class="tab-btn" data-tab="quests">Quests</button>
+    <button class="tab-btn" data-tab="npcdialogue">NPC Dialogue</button>
     <span class="spacer"></span>
     <span class="user-label" id="user-label"></span>
   </div>
@@ -524,6 +525,19 @@
     </div>
   </div>
 
+  <!-- ── NPC Dialogue ── -->
+  <div class="tab-panel" id="tab-npcdialogue">
+    <div style="display:flex;align-items:center;gap:8px;padding:10px 16px;background:#050505;border-bottom:1px solid #002222;flex-shrink:0;">
+      <button class="btn btn-green" onclick="ndNewEntry()">+ New Entry</button>
+      <button class="btn btn-gray"  onclick="ndLoad()">Refresh</button>
+      <span class="status-msg" id="nd-status"></span>
+    </div>
+    <div style="display:flex;flex:1;overflow:hidden;">
+      <div id="nd-list-col" style="width:340px;border-right:1px solid #002222;overflow-y:auto;flex-shrink:0;"></div>
+      <div id="nd-edit-col" style="flex:1;overflow-y:auto;padding:16px 20px;"></div>
+    </div>
+  </div>
+
   <!-- ── Game Data ── -->
   <div class="tab-panel" id="tab-gamedata">
     <div style="display:flex;align-items:center;gap:8px;padding:10px 16px;background:#050505;border-bottom:1px solid #002222;flex-shrink:0;">
@@ -614,8 +628,9 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     if (btn.dataset.tab === 'news') loadNews();
     if (btn.dataset.tab === 'system') loadSystem();
     if (btn.dataset.tab === 'gamedata') gdShowTab('weapons');
-    if (btn.dataset.tab === 'quests')   qLoad();
-    if (btn.dataset.tab === 'dashboard') loadDashboard();
+    if (btn.dataset.tab === 'quests')      qLoad();
+    if (btn.dataset.tab === 'npcdialogue') ndLoad();
+    if (btn.dataset.tab === 'dashboard')   loadDashboard();
   });
 });
 
@@ -2089,6 +2104,354 @@ async function qNewQuest() {
   qStatus('Quest created.');
   await qLoad();
   qEditQuest(id.trim());
+}
+
+// ═══════════════════════════════════════════════════════════
+// NPC DIALOGUE TAB
+// ═══════════════════════════════════════════════════════════
+
+let ndEntries = [];
+let ndSelected = null;
+
+function ndStatus(msg, ok = true) {
+  const el = document.getElementById('nd-status');
+  el.textContent = msg;
+  el.style.color = ok ? '#50fa7b' : '#ff5555';
+  setTimeout(() => { if (el.textContent === msg) el.textContent = ''; }, 3000);
+}
+
+async function ndLoad() {
+  const r = await api('GET', '/npc-dialogue');
+  if (!r.ok) { ndStatus('Failed to load.', false); return; }
+  ndEntries = await r.json();
+  ndRenderList();
+  if (ndSelected) {
+    const found = ndEntries.find(e => e.id === ndSelected);
+    if (found) ndRenderEditor(found); else ndSelected = null;
+  }
+}
+
+function ndRenderList() {
+  const col = document.getElementById('nd-list-col');
+  if (!ndEntries.length) { col.innerHTML = '<div style="padding:16px;color:#555">No entries.</div>'; return; }
+
+  // Group by npc_id
+  const byNpc = {};
+  for (const e of ndEntries) {
+    if (!byNpc[e.npc_id]) byNpc[e.npc_id] = [];
+    byNpc[e.npc_id].push(e);
+  }
+
+  let html = '';
+  for (const [npcId, entries] of Object.entries(byNpc)) {
+    html += `<div style="padding:8px 12px 4px;font-size:11px;text-transform:uppercase;color:#0aa;letter-spacing:1px;border-bottom:1px solid #001a1a">${npcId}</div>`;
+    for (const e of entries) {
+      const active  = e.active ? '' : ' style="opacity:0.45"';
+      const sel     = ndSelected === e.id ? 'background:#001a1a;' : '';
+      const rCount  = Array.isArray(e.responses) ? e.responses.length : 0;
+      html += `<div${active} style="${sel}padding:10px 14px;cursor:pointer;border-bottom:1px solid #0a1a1a" onclick="ndSelect(${e.id})">
+        <div style="color:#ccc;font-size:13px">${e.topic_key}</div>
+        <div style="color:#555;font-size:11px;margin-top:3px">${rCount} response${rCount !== 1 ? 's' : ''} · ${e.active ? '<span style="color:#0a0">active</span>' : '<span style="color:#a00">inactive</span>'}</div>
+      </div>`;
+    }
+  }
+  col.innerHTML = html;
+}
+
+function ndSelect(id) {
+  ndSelected = id;
+  ndRenderList();
+  const entry = ndEntries.find(e => e.id === id);
+  if (entry) ndRenderEditor(entry);
+}
+
+function ndRenderEditor(entry) {
+  const col = document.getElementById('nd-edit-col');
+  const responses = Array.isArray(entry.responses) ? entry.responses : [];
+
+  let responsesHtml = responses.map((r, i) => `
+    <div id="nd-resp-${entry.id}-${i}" style="background:#0a0f0f;border:1px solid #001a1a;border-radius:4px;padding:12px;margin-bottom:10px">
+      <div style="display:flex;gap:8px;margin-bottom:8px;align-items:center">
+        <label style="color:#555;font-size:11px;width:40px">Key</label>
+        <input style="width:60px" value="${esc(r.key)}" id="nd-key-${entry.id}-${i}">
+        <label style="color:#555;font-size:11px;margin-left:8px">Button Label</label>
+        <input style="flex:1" value="${esc(r.label)}" id="nd-label-${entry.id}-${i}">
+        <button class="btn btn-red" style="padding:3px 8px;font-size:11px" onclick="ndDeleteResponse(${entry.id},${i})">✕</button>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:8px;align-items:center">
+        <label style="color:#555;font-size:11px;width:80px">Answer Value</label>
+        <input style="flex:1" value="${esc(r.answer_value || '')}" id="nd-aval-${entry.id}-${i}" placeholder="stored in player_answers">
+      </div>
+      <label style="color:#555;font-size:11px">Lysa's Reaction <span style="color:#333">(one line per row — use LORD color codes)</span></label>
+      <textarea id="nd-react-${entry.id}-${i}" style="width:100%;min-height:80px;margin-top:4px;box-sizing:border-box;font-family:monospace;font-size:12px">${esc((r.reaction || []).join('\n'))}</textarea>
+    </div>`).join('');
+
+  col.innerHTML = `
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+      <h3 style="margin:0;color:#0cc">${esc(entry.npc_id)} / ${esc(entry.topic_key)}</h3>
+      <label style="color:#555;font-size:12px;margin-left:auto">
+        <input type="checkbox" id="nd-active-${entry.id}" ${entry.active ? 'checked' : ''}> Active
+      </label>
+      <button class="btn btn-red" style="font-size:12px" onclick="ndDeleteEntry(${entry.id})">Delete Entry</button>
+    </div>
+
+    <div style="margin-bottom:14px">
+      <label style="display:block;color:#555;font-size:11px;margin-bottom:4px">Answer Key <span style="color:#333">(stored in player_answers)</span></label>
+      <input id="nd-akey-${entry.id}" value="${esc(entry.answer_key)}" style="width:260px">
+    </div>
+
+    <div style="margin-bottom:18px">
+      <label style="display:block;color:#555;font-size:11px;margin-bottom:4px">Question Hint <span style="color:#333">(admin reference — not shown in game)</span></label>
+      <input id="nd-hint-${entry.id}" value="${esc(entry.question_hint || '')}" style="width:100%;box-sizing:border-box">
+    </div>
+
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+      <h4 style="margin:0;color:#888">Responses</h4>
+      <button class="btn btn-green" style="font-size:12px;padding:3px 10px" onclick="ndAddResponse(${entry.id})">+ Add</button>
+    </div>
+
+    <div id="nd-responses-${entry.id}">${responsesHtml}</div>
+
+    <button class="btn btn-green" style="margin-top:8px" onclick="ndSave(${entry.id})">Save Entry</button>
+  `;
+}
+
+function ndCollectEntry(id) {
+  const entry   = ndEntries.find(e => e.id === id);
+  if (!entry) return null;
+  const responses = (Array.isArray(entry.responses) ? entry.responses : []).map((_, i) => ({
+    key:          document.getElementById(`nd-key-${id}-${i}`)?.value.trim()  || '',
+    label:        document.getElementById(`nd-label-${id}-${i}`)?.value.trim() || '',
+    answer_value: document.getElementById(`nd-aval-${id}-${i}`)?.value.trim() || '',
+    reaction:     (document.getElementById(`nd-react-${id}-${i}`)?.value || '').split('\n').map(l => l.trim()).filter(Boolean),
+  }));
+  return {
+    answer_key:    document.getElementById(`nd-akey-${id}`)?.value.trim()  || entry.answer_key,
+    question_hint: document.getElementById(`nd-hint-${id}`)?.value.trim()  || '',
+    active:        document.getElementById(`nd-active-${id}`)?.checked ?? true,
+    responses,
+  };
+}
+
+async function ndSave(id) {
+  const data = ndCollectEntry(id);
+  if (!data) return;
+  const r = await api('PUT', `/npc-dialogue/${id}`, data);
+  if (r.ok) { ndStatus('Saved.'); await ndLoad(); }
+  else ndStatus('Save failed.', false);
+}
+
+async function ndAddResponse(id) {
+  const data = ndCollectEntry(id);
+  if (!data) return;
+  const entry = ndEntries.find(e => e.id === id);
+  if (!entry) return;
+  const nextKey = String.fromCharCode(65 + (data.responses || []).length); // A, B, C...
+  data.responses.push({ key: nextKey, label: '', answer_value: '', reaction: [] });
+  const r = await api('PUT', `/npc-dialogue/${id}`, data);
+  if (r.ok) { await ndLoad(); ndSelect(id); }
+  else ndStatus('Failed to add response.', false);
+}
+
+async function ndDeleteResponse(id, index) {
+  const data = ndCollectEntry(id);
+  if (!data) return;
+  data.responses.splice(index, 1);
+  const r = await api('PUT', `/npc-dialogue/${id}`, data);
+  if (r.ok) { await ndLoad(); ndSelect(id); }
+  else ndStatus('Failed to delete response.', false);
+}
+
+async function ndDeleteEntry(id) {
+  if (!confirm('Delete this dialogue entry? This cannot be undone.')) return;
+  const r = await api('DELETE', `/npc-dialogue/${id}`);
+  if (r.ok) {
+    ndStatus('Deleted.');
+    ndSelected = null;
+    document.getElementById('nd-edit-col').innerHTML = '';
+    await ndLoad();
+  } else ndStatus('Delete failed.', false);
+}
+
+// All topic keys available in the Lysa dialogue system, grouped by relationship level
+const ND_LYSA_TOPICS = [
+  { key: 'first_look',          rel: 0, hint: 'First encounter — she hasn\'t seen you before' },
+  { key: 'the_garden',          rel: 0, hint: 'She talks about the garden itself' },
+  { key: 'what_brings_you',     rel: 0, hint: 'She wonders what brought you here' },
+  { key: 'noticed_you',         rel: 1, hint: 'She\'s noticed you coming back' },
+  { key: 'class_remark',        rel: 1, hint: 'She remarks on your class/fighting style' },
+  { key: 'the_road',            rel: 1, hint: 'She asks about your travels' },
+  { key: 'garden_meaning_hint', rel: 1, hint: 'She hints at what the garden means to her' },
+  { key: 'world_question',      rel: 1, hint: 'She references current world events (named enemies etc.)' },
+  { key: 'opinion_fighters',    rel: 2, hint: 'She asks what drives fighters' },
+  { key: 'cross_player_ref',    rel: 2, hint: 'She references another player\'s deeds' },
+  { key: 'named_enemy_concern', rel: 2, hint: 'She expresses concern about a named enemy' },
+  { key: 'asks_why_fight',      rel: 2, hint: 'She asks why you keep fighting' },
+  { key: 'she_used_to_travel',  rel: 2, hint: 'She opens up about her own past' },
+  { key: 'on_alignment',        rel: 2, hint: 'She observes your alignment/reputation' },
+  { key: 'faction_observation', rel: 2, hint: 'She remarks on your faction ties' },
+  { key: 'garden_origin',       rel: 3, hint: 'She explains how she came to tend this garden' },
+  { key: 'druid_past',          rel: 3, hint: 'She reveals her time with the Druid Circle' },
+  { key: 'veilborn_knowledge',  rel: 3, hint: 'She shares what she knows about the Veilborn' },
+  { key: 'what_she_wants',      rel: 3, hint: 'She opens up about her real desires' },
+  { key: 'the_quiet',           rel: 3, hint: 'She admits she\'s noticed your absence' },
+  { key: 'full_honesty',        rel: 4, hint: 'She\'s fully honest about what the garden is' },
+  { key: 'the_thing_she_fears', rel: 4, hint: 'She shares her deepest fear' },
+  { key: 'she_asks_after_you',  rel: 4, hint: 'She admits she was wondering about you' },
+  { key: 'the_question_back',   rel: 4, hint: 'She turns the question back on you' },
+];
+
+const ND_REL_LABELS = ['0 – Stranger', '1 – Acquaintance', '2 – Regular', '3 – Trusted', '4 – Confidant'];
+
+function ndNewEntry() {
+  ndSelected = null;
+  ndRenderList();
+  const col = document.getElementById('nd-edit-col');
+
+  const topicOpts = ND_LYSA_TOPICS.map(t =>
+    `<option value="${t.key}" data-hint="${esc(t.hint)}" data-rel="${t.rel}">${t.key} &nbsp;(rel≥${t.rel})</option>`
+  ).join('') + '<option value="_custom">Custom…</option>';
+
+  col.innerHTML = `
+    <h3 style="margin:0 0 18px;color:#0cc;font-size:15px">New Dialogue Entry</h3>
+
+    <div style="display:grid;grid-template-columns:120px 1fr;gap:10px 16px;align-items:start;margin-bottom:20px">
+
+      <label style="color:#555;font-size:11px;padding-top:7px">NPC</label>
+      <div>
+        <select id="nd-wiz-npc" onchange="ndWizNpcChange()" style="width:220px">
+          <option value="lysa">lysa</option>
+          <option value="_custom">Custom…</option>
+        </select>
+        <input id="nd-wiz-npc-custom" placeholder="npc_id" style="display:none;width:220px;margin-top:6px">
+      </div>
+
+      <label style="color:#555;font-size:11px;padding-top:7px">Topic Key</label>
+      <div>
+        <select id="nd-wiz-topic-sel" onchange="ndWizTopicChange()" style="width:100%">${topicOpts}</select>
+        <input id="nd-wiz-topic-custom" placeholder="topic_key" style="display:none;width:100%;box-sizing:border-box;margin-top:6px">
+        <div id="nd-wiz-topic-hint" style="font-size:11px;color:#555;margin-top:4px"></div>
+      </div>
+
+      <label style="color:#555;font-size:11px;padding-top:7px">Answer Key</label>
+      <div>
+        <input id="nd-wiz-akey" placeholder="stored in player_answers, e.g. why_fight" style="width:100%;box-sizing:border-box">
+        <div style="font-size:11px;color:#333;margin-top:3px">A short slug saved when the player answers this question</div>
+      </div>
+
+      <label style="color:#555;font-size:11px;padding-top:7px">Question Hint</label>
+      <input id="nd-wiz-hint" placeholder='e.g. Lysa asks: "Why do you fight?"' style="width:100%;box-sizing:border-box">
+
+    </div>
+
+    <div style="border-top:1px solid #002222;padding-top:14px;margin-bottom:18px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+        <span style="color:#888;font-size:13px">First Response (A)</span>
+        <span style="color:#333;font-size:11px">— add more after saving</span>
+      </div>
+      <div style="background:#0a0f0f;border:1px solid #001a1a;border-radius:4px;padding:12px">
+        <div style="display:flex;gap:8px;margin-bottom:8px;align-items:center">
+          <label style="color:#555;font-size:11px;width:90px">Button Label</label>
+          <input id="nd-wiz-r0-label" placeholder="e.g. It is all I know" style="flex:1">
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:8px;align-items:center">
+          <label style="color:#555;font-size:11px;width:90px">Answer Value</label>
+          <input id="nd-wiz-r0-aval" placeholder="e.g. all_i_know" style="flex:1">
+        </div>
+        <label style="color:#555;font-size:11px">NPC Reaction <span style="color:#333">(one line per row — use LORD color codes)</span></label>
+        <textarea id="nd-wiz-r0-react" style="width:100%;min-height:60px;margin-top:4px;box-sizing:border-box;font-family:monospace;font-size:12px" placeholder="\`#She nods slowly.&#10;\`%&quot;That's honest.&quot;"></textarea>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:10px;align-items:center">
+      <button class="btn btn-green" onclick="ndCreateFromWizard()">Create Entry</button>
+      <button class="btn btn-gray" onclick="ndCancelWizard()">Cancel</button>
+      <span id="nd-wiz-err" style="color:#ff5555;font-size:12px"></span>
+    </div>
+  `;
+
+  // Trigger initial hint
+  ndWizTopicChange();
+}
+
+function ndWizNpcChange() {
+  const npcSel = document.getElementById('nd-wiz-npc');
+  const npcCustom = document.getElementById('nd-wiz-npc-custom');
+  const topicSel = document.getElementById('nd-wiz-topic-sel');
+  npcCustom.style.display = npcSel.value === '_custom' ? 'block' : 'none';
+  if (npcSel.value !== 'lysa' && npcSel.value !== '_custom') {
+    // Non-lysa NPC — only custom topic
+    topicSel.innerHTML = '<option value="_custom">Custom…</option>';
+    ndWizTopicChange();
+  } else if (npcSel.value === 'lysa') {
+    // Restore lysa topics if switching back
+    topicSel.innerHTML = ND_LYSA_TOPICS.map(t =>
+      `<option value="${t.key}" data-hint="${esc(t.hint)}" data-rel="${t.rel}">${t.key} &nbsp;(rel≥${t.rel})</option>`
+    ).join('') + '<option value="_custom">Custom…</option>';
+    ndWizTopicChange();
+  }
+}
+
+function ndWizTopicChange() {
+  const sel = document.getElementById('nd-wiz-topic-sel');
+  if (!sel) return;
+  const customInput = document.getElementById('nd-wiz-topic-custom');
+  const hintEl = document.getElementById('nd-wiz-topic-hint');
+  const isCustom = sel.value === '_custom';
+  customInput.style.display = isCustom ? 'block' : 'none';
+  const opt = sel.options[sel.selectedIndex];
+  if (hintEl) hintEl.textContent = isCustom ? '' : (opt?.dataset?.hint || '');
+  // Auto-fill answer key from topic key if blank
+  const akeyEl = document.getElementById('nd-wiz-akey');
+  if (akeyEl && !akeyEl.value && !isCustom) {
+    akeyEl.value = sel.value.replace(/_/g, '_');
+  }
+}
+
+function ndCancelWizard() {
+  document.getElementById('nd-edit-col').innerHTML = '';
+}
+
+async function ndCreateFromWizard() {
+  const npcSel = document.getElementById('nd-wiz-npc');
+  const npcId = npcSel.value === '_custom'
+    ? (document.getElementById('nd-wiz-npc-custom')?.value || '').trim()
+    : npcSel.value;
+
+  const topicSel = document.getElementById('nd-wiz-topic-sel');
+  const topicKey = topicSel.value === '_custom'
+    ? (document.getElementById('nd-wiz-topic-custom')?.value || '').trim()
+    : topicSel.value;
+
+  const answerKey = (document.getElementById('nd-wiz-akey')?.value || '').trim();
+  const hint      = (document.getElementById('nd-wiz-hint')?.value || '').trim();
+  const errEl     = document.getElementById('nd-wiz-err');
+
+  if (!npcId)     { errEl.textContent = 'NPC ID is required.'; return; }
+  if (!topicKey)  { errEl.textContent = 'Topic Key is required.'; return; }
+  if (!answerKey) { errEl.textContent = 'Answer Key is required.'; return; }
+  errEl.textContent = '';
+
+  const label  = (document.getElementById('nd-wiz-r0-label')?.value || '').trim();
+  const aval   = (document.getElementById('nd-wiz-r0-aval')?.value  || '').trim();
+  const react  = (document.getElementById('nd-wiz-r0-react')?.value || '').split('\n').map(l => l.trim()).filter(Boolean);
+  const responses = (label || aval || react.length)
+    ? [{ key: 'A', label, answer_value: aval, reaction: react }]
+    : [];
+
+  const r    = await api('POST', '/npc-dialogue', { npc_id: npcId, topic_key: topicKey, answer_key: answerKey, question_hint: hint, responses });
+  const data = await r.json();
+  if (data.ok) {
+    ndStatus('Created.');
+    await ndLoad();
+    ndSelect(data.id);
+  } else {
+    errEl.textContent = data.error || 'Create failed — topic key may already exist for this NPC.';
+  }
+}
+
+function esc(str) {
+  return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 </script>
 </body>

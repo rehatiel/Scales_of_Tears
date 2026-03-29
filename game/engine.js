@@ -755,12 +755,14 @@ function getStatusBar(player) {
   ];
 }
 
-function getTownScreen(player) {
+function getTownScreen(player, pendingPartyInvite = null) {
   const stam    = player.stamina ?? player.fights_left ?? 10;
   const town    = TOWNS[player.current_town || 'dawnmark'] || TOWNS.dawnmark;
   const social  = SOCIAL_SPACES[town.id] || SOCIAL_SPACES.dawnmark;
   const { FACTIONS } = require('./factions');
   const factionInTown = Object.values(FACTIONS).find(f => f.homeTown === town.id) || null;
+  const jailed        = player.jailed_until && Date.now() < Number(player.jailed_until);
+  const inParty       = !!player.party_id;
 
   const VEILBORN_STEPS = {
     1: { town: 'dawnmark',   action: 'veilborn_scholar',    label: 'Speak to Scholar Voss',    color: c.cyan },
@@ -794,12 +796,19 @@ function getTownScreen(player) {
     `${c.yellow}  [G]${c.white} ${social.name}`,
     `${c.yellow}  [N]${c.white} Daily News`,
     `${c.yellow}  [Y]${c.white} Town Crier`,
+    jailed
+      ? `${c.red}  [J]${c.white} The Jail  ${c.red}☠ (you are imprisoned)`
+      : `${c.yellow}  [J]${c.white} The Jail`,
     divider('─', 44),
     `${c.yellow}  [M]${c.white} The Market          ${c.dgray}(shops & herbalist)`,
     `${c.yellow}  [X]${c.white} The Gates           ${c.dgray}(forest, travel & adventure)${stam === 0 ? c.red + '  ✗ exhausted' : ''}`,
     `${c.yellow}  [H]${c.white} Training Grounds    ${c.dgray}(master & training yard)`,
     `${c.yellow}  [P]${c.white} Social Hall         ${c.dgray}(character, players & bard)`,
+    inParty
+      ? `${c.cyan}  [A]${c.white} Your Party`
+      : `${c.yellow}  [A]${c.white} Adventuring Party   ${c.dgray}(form a party)`,
     divider('─', 44),
+    pendingPartyInvite ? `${c.yellow}  ⚔ Party invite from ${c.cyan}${pendingPartyInvite.inviter_handle}${c.white} — ${c.yellow}[A]${c.white} to view` : '',
     (player.perk_points || 0) > 0 ? `${c.magenta}  [E]${c.white} Choose a Perk ${c.magenta}✦ (${player.perk_points} point${player.perk_points > 1 ? 's' : ''} available!)` : '',
     player.spec_pending ? `${c.cyan}  [S]${c.white} Choose Your Specialisation ${c.cyan}✦ (your path awaits!)` : '',
     factionInTown ? `${c.brown}  [K]${c.white} ${factionInTown.houseName}  ${c.dgray}(${factionInTown.shortName})` : '',
@@ -811,18 +820,20 @@ function getTownScreen(player) {
   ].filter(l => l !== undefined && l !== '');
 
   const choices = [
-    { key: 'T', label: 'Tavern',          action: 'tavern' },
-    { key: 'I', label: 'The Inn',         action: 'inn' },
-    { key: 'B', label: 'The Bank',        action: 'bank' },
-    { key: 'G', label: social.name,       action: social.action },
-    { key: 'N', label: 'Daily News',      action: 'news' },
-    { key: 'Y', label: 'Town Crier',      action: 'crier' },
-    { key: 'M', label: 'The Market',      action: 'district_market' },
-    { key: 'X', label: 'The Gates',       action: 'district_gates' },
-    { key: 'H', label: 'Training Grounds',action: 'district_training' },
-    { key: 'P', label: 'Social Hall',     action: 'district_social' },
-    { key: '\\',label: 'Switch Character',action: 'char_switch' },
-    { key: 'L', label: 'Logout',          action: 'logout' },
+    { key: 'T', label: 'Tavern',             action: 'tavern' },
+    { key: 'I', label: 'The Inn',            action: 'inn' },
+    { key: 'B', label: 'The Bank',           action: 'bank' },
+    { key: 'G', label: social.name,          action: social.action },
+    { key: 'N', label: 'Daily News',         action: 'news' },
+    { key: 'Y', label: 'Town Crier',         action: 'crier' },
+    { key: 'J', label: jailed ? 'The Jail (imprisoned)' : 'The Jail', action: jailed ? 'jail' : 'jail_bail_list' },
+    { key: 'M', label: 'The Market',         action: 'district_market' },
+    { key: 'X', label: 'The Gates',          action: 'district_gates' },
+    { key: 'H', label: 'Training Grounds',   action: 'district_training' },
+    { key: 'P', label: 'Social Hall',        action: 'district_social' },
+    { key: 'A', label: inParty ? 'Your Party' : 'Adventuring Party', action: 'party' },
+    { key: '\\',label: 'Switch Character',   action: 'char_switch' },
+    { key: 'L', label: 'Logout',             action: 'logout' },
   ];
 
   if ((player.perk_points || 0) > 0)
@@ -1311,11 +1322,12 @@ function getPvPChallengeScreen(player, session, challengerHandle) {
   ]);
 }
 
-function getWeaponShopScreen(player) {
+function getWeaponShopScreen(player, mem = null) {
   const town   = TOWNS[player.current_town || 'dawnmark'] || TOWNS.dawnmark;
   const owner  = SHOP_OWNERS[town.id] || SHOP_OWNERS.dawnmark;
   const maxTier = town.shopMaxTier || 15;
   const TODAY  = () => Math.floor(Date.now() / 86400000);
+  const visits = mem ? (mem.visit_count || 0) : 0;
 
   // Determine which tiers have multiple weapons, within available range
   const tierCounts = {};
@@ -1335,9 +1347,20 @@ function getWeaponShopScreen(player) {
   const effectiveSellMult = owner.sellMult * (owner.charmBonus && player.charm >= 20 ? 1.08 : 1.0);
   const tradeIn = cur ? Math.floor(cur.price * effectiveSellMult) : 0;
 
+  let shopOwnerLine;
+  if (visits >= 15) {
+    shopOwnerLine = `${c.brown}  ${owner.name}${c.dgray}, ${owner.title}${c.gray} — "My best customer. What can I do for you?"`;
+  } else if (visits >= 5) {
+    shopOwnerLine = `${c.brown}  ${owner.name}${c.dgray}, ${owner.title}${c.gray} — "Ah, ${player.handle}. Good timing — fresh stock just in."`;
+  } else if (visits >= 1) {
+    shopOwnerLine = `${c.brown}  ${owner.name}${c.dgray}, ${owner.title}${c.gray} — "(nods) ${player.handle}. What are you looking for?"`;
+  } else {
+    shopOwnerLine = `${c.brown}  ${owner.name}${c.dgray}, ${owner.title} — ${c.gray}${owner.quote}`;
+  }
+
   const lines = [
     ...renderBanner('weapon_shop'),
-    `${c.brown}  ${owner.name}${c.dgray}, ${owner.title} — ${c.gray}${owner.quote}`,
+    shopOwnerLine,
     divider('─', 55),
     `${c.gray}  Your gold: ${c.yellow}${fmt(player.gold)}`,
     `${c.gray}  Equipped:  ${c.white}${player.weapon_name}${tradeIn > 0 ? c.dgray + '  (trade-in: ' + fmt(tradeIn) + ' gold)' : ''}`,
@@ -1386,11 +1409,12 @@ function getWeaponShopScreen(player) {
   return buildScreen('Weapon Shop', lines, choices, { needsInput: true, inputLabel: 'Weapon # (0 to leave):', inputAction: 'buy_weapon' });
 }
 
-function getArmorShopScreen(player) {
+function getArmorShopScreen(player, mem = null) {
   const town   = TOWNS[player.current_town || 'dawnmark'] || TOWNS.dawnmark;
   const owner  = SHOP_OWNERS[town.id] || SHOP_OWNERS.dawnmark;
   const maxTier = town.shopMaxTier || 15;
   const TODAY  = () => Math.floor(Date.now() / 86400000);
+  const visits = mem ? (mem.visit_count || 0) : 0;
 
   const tierCounts = {};
   for (let i = 1; i < ARMORS.length; i++) {
@@ -1409,9 +1433,20 @@ function getArmorShopScreen(player) {
   const effectiveSellMult = owner.sellMult * (owner.charmBonus && player.charm >= 20 ? 1.08 : 1.0);
   const tradeIn = cur ? Math.floor(cur.price * effectiveSellMult) : 0;
 
+  let armorOwnerLine;
+  if (visits >= 15) {
+    armorOwnerLine = `${c.brown}  ${owner.name}${c.dgray}, ${owner.title}${c.gray} — "Always a pleasure, ${player.handle}. Looking for something specific?"`;
+  } else if (visits >= 5) {
+    armorOwnerLine = `${c.brown}  ${owner.name}${c.dgray}, ${owner.title}${c.gray} — "Back again. I keep good stock for regulars."`;
+  } else if (visits >= 1) {
+    armorOwnerLine = `${c.brown}  ${owner.name}${c.dgray}, ${owner.title}${c.gray} — "(nods) ${player.handle}."`;
+  } else {
+    armorOwnerLine = `${c.brown}  ${owner.name}${c.dgray}, ${owner.title} — ${c.gray}${owner.quote}`;
+  }
+
   const lines = [
     ...renderBanner('armor_shop'),
-    `${c.brown}  ${owner.name}${c.dgray}, ${owner.title} — ${c.gray}${owner.quote}`,
+    armorOwnerLine,
     divider('─', 55),
     `${c.gray}  Your gold: ${c.yellow}${fmt(player.gold)}`,
     `${c.gray}  Equipped:  ${c.white}${player.arm_name}${tradeIn > 0 ? c.dgray + '  (trade-in: ' + fmt(tradeIn) + ' gold)' : ''}`,
@@ -1459,7 +1494,7 @@ function getArmorShopScreen(player) {
   return buildScreen('Armour Shop', lines, choices, { needsInput: true, inputLabel: 'Armour # (0 to leave):', inputAction: 'buy_armor' });
 }
 
-function getInnScreen(player, sleeperCount = 0) {
+function getInnScreen(player, sleeperCount = 0, mem = null) {
   const { parseWounds, woundLabel, infectionLabel, hasSerious } = require('./wounds');
   const restCost = Math.max(50, Math.floor(player.level * 50 * (player.class === 4 ? 0.9 : 1.0)));
   const retireCost = Math.max(1, sleeperCount + 1);
@@ -1468,10 +1503,22 @@ function getInnScreen(player, sleeperCount = 0) {
   const hasWounds = wounds.length > 0;
   const hasInfection = !!player.infection_type;
   const needsHealer = hasWounds || hasInfection;
+  const visits = mem ? (mem.visit_count || 0) : 0;
+
+  let innGreeting;
+  if (visits >= 15) {
+    innGreeting = `${c.white}  The innkeeper looks up and waves you in. "Practically family at this point, ${player.handle}."`;
+  } else if (visits >= 5) {
+    innGreeting = `${c.white}  The innkeeper smiles. "Ah, ${player.handle}. Your usual room's free if you want it."`;
+  } else if (visits >= 1) {
+    innGreeting = `${c.white}  The innkeeper nods in recognition. "Good to see you again, ${player.handle}."`;
+  } else {
+    innGreeting = `${c.white}  The innkeeper smiles warmly. "Welcome, traveller!"`;
+  }
 
   const lines = [
     ...renderBanner('inn'),
-    `${c.white}  The innkeeper smiles warmly. "Welcome, traveller!"`,
+    innGreeting,
     '',
     `${c.gray}  Your HP:     ${hpColor(player.hit_points, player.hit_max)}${fmt(player.hit_points)}${c.gray}/${c.white}${fmt(player.hit_max)}`,
     `${c.gray}  Gold:        ${c.yellow}${fmt(player.gold)}`,
@@ -1573,14 +1620,29 @@ function getInnHealerScreen(player, wounds, woundCost, infectionCost) {
   return buildScreen("The Healer's Corner", lines, choices);
 }
 
-function getHerbalistScreen(player, wounds, treatableWounds, infectionTreatable, herbWoundCost, herbInfCost) {
+function getHerbalistScreen(player, wounds, treatableWounds, infectionTreatable, herbWoundCost, herbInfCost, mem = null) {
   const { woundLabel, infectionLabel } = require('./wounds');
   const hasInfection = !!player.infection_type;
   const treatmentsLeft = 3 - (player.herbalist_today || 0);
+  const visits = mem ? (mem.visit_count || 0) : 0;
+  const everInjured = mem && mem.notes && mem.notes.ever_injured;
+
+  let miraGreeting;
+  if (visits >= 10 && (wounds.length > 0 || hasInfection)) {
+    miraGreeting = `${c.green}  Mira looks up and sighs — not unkindly. "You again. Come in."`;
+  } else if (visits >= 10) {
+    miraGreeting = `${c.green}  Mira looks up. "You're actually healthy today. I'm almost disappointed."`;
+  } else if (visits >= 5 && (wounds.length > 0 || hasInfection)) {
+    miraGreeting = `${c.green}  Mira recognises you before you speak. "Back already? The forest isn't kind to you, ${player.handle}."`;
+  } else if (visits >= 1 && everInjured) {
+    miraGreeting = `${c.green}  "Ah." Mira sets down her mortar. "My most reliable patient. What is it this time?"`;
+  } else {
+    miraGreeting = `${c.green}  Mira the Herbalist looks up from her pestle and mortar.`;
+  }
 
   const lines = [
     ...renderBanner('town'),
-    `${c.green}  Mira the Herbalist looks up from her pestle and mortar.`,
+    miraGreeting,
     `${c.gray}  "I can treat common ailments — festering wounds, fever-sickness."`,
     `${c.gray}  "For curses and the deep dark, you'll want the inn's healer."`,
     '',
@@ -1705,18 +1767,32 @@ function getBankScreen(player) {
   ]);
 }
 
-function getMasterScreen(player) {
+function getMasterScreen(player, mem = null) {
   const nextExp = expForNextLevel(player.level);
   const cls = CLASS_NAMES[player.class];
   const canLevelUp = nextExp !== null && player.exp >= nextExp;
   const trainCost = player.level * 75;
+  const visits = mem ? (mem.visit_count || 0) : 0;
 
-  const greeting = [
-    `"Ah, ${player.handle}. A ${cls}, I see. You have potential."`,
-    `"Greetings, ${player.handle}. The ${cls} path is a noble one."`,
-    `"${player.handle}! Come to test your mettle? Good."`,
-    `"Welcome, ${cls}. I am Aldric. Let me see what you\'re made of."`,
-  ][player.id % 4];
+  let greeting;
+  if (player.level >= 12 && visits >= 5) {
+    greeting = `"${player.handle}. Champion level. I won't pretend I teach you anything now — you come back out of habit. I respect that."`;
+  } else if (visits >= 20) {
+    greeting = `"I've trained hundreds of ${cls}s, ${player.handle}. Not many keep coming back this long. That says something."`;
+  } else if (visits >= 10) {
+    greeting = `"${player.handle}. Still at it." He nods with something like approval. "The ${cls} path rewards persistence."`;
+  } else if (visits >= 5) {
+    greeting = `"Back again, ${player.handle}. ${cls} dedication is something I respect."`;
+  } else if (visits >= 1) {
+    greeting = [
+      `"Ah, ${player.handle}. A ${cls}, I see. You have potential."`,
+      `"Greetings, ${player.handle}. The ${cls} path is a noble one."`,
+      `"${player.handle}! Come to test your mettle? Good."`,
+      `"Welcome back, ${cls}. Let's see what you've got today."`,
+    ][player.id % 4];
+  } else {
+    greeting = `"Welcome, ${cls}. I am Aldric. Let me see what you\'re made of."`;
+  }
 
   const lines = [
     ...renderBanner('master'),
@@ -1889,66 +1965,150 @@ function getTavernDrinkScreen(player) {
   ]);
 }
 
-function getGardenScreen(player) {
+function getGardenScreen(player, mem = null, worldCtx = null) {
   const isFemale = player.sex === 5;
+  const rel      = mem ? (mem.relationship_level || 0) : 0;
+  const visits   = mem ? (mem.visit_count || 0) : 0;
 
-  // Intro text varies slightly based on visit history
-  const introLines = player.flirted_today
-    ? [
-        `${c.green}  The garden gate is familiar now. You push it open.`,
-        `${c.green}  The scent of roses follows you in.`,
-        '',
-        `${c.magenta}  Lysa glances up. A small smile — almost involuntary.`,
-        `${c.white}  "You again." She doesn't sound displeased.`,
-        '',
-      ]
-    : [
-        `${c.green}  You push open a hidden gate and step into a walled garden.`,
-        `${c.green}  Roses and herbs crowd every bed. The city noise disappears.`,
-        '',
-        `${c.magenta}  A woman with auburn hair and ink-stained fingers looks up from her work.`,
-        `${c.white}  "Oh. A visitor." A pause. "I don't get many of those."`,
-        '',
-      ];
-
-  const lines = [...renderBanner('garden'), ...introLines];
-
-  const choices = [
-    { key: 'T', label: 'Talk to her',  action: 'garden_talk' },
-    { key: 'L', label: 'Leave',        action: 'town' },
-  ];
-
-  if (!player.flirted_today) {
-    if (!isFemale) {
-      choices.unshift(
-        { key: 'F', label: 'Pick her a flower', action: 'garden_flower' },
-        { key: 'C', label: 'Compliment her',    action: 'garden_compliment' },
-        { key: 'K', label: 'Steal a kiss',      action: 'garden_kiss' },
-      );
-    } else {
-      choices.unshift({ key: 'X', label: 'Accept rose', action: 'garden_female' });
-    }
+  let introLines;
+  if (rel >= 4) {
+    introLines = [
+      `${c.green}  Lysa hears the gate and doesn't look up. She knows your footsteps by now.`,
+      '',
+      `${c.magenta}  "I wondered when you'd be back." She doesn't say it as a complaint.`,
+      `${c.green}  The garden smells of something she's been drying — sage, maybe.`,
+      '',
+    ];
+  } else if (rel >= 3) {
+    introLines = [
+      `${c.green}  The garden gate opens before you've fully decided you're going in.`,
+      `${c.green}  You know the path between the roses without thinking about it.`,
+      '',
+      `${c.magenta}  Lysa glances up. There's something like relief in her expression.`,
+      `${c.white}  "You're back." Simply stated.`,
+      '',
+    ];
+  } else if (rel >= 2) {
+    introLines = [
+      `${c.green}  You know the gate now. The latch sticks unless you lift it slightly.`,
+      `${c.green}  The city noise disappears the moment you step inside.`,
+      '',
+      `${c.magenta}  Lysa looks up from her work.`,
+      `${c.white}  "Oh, it's you." She almost sounds pleased. Almost.`,
+      '',
+    ];
+  } else if (visits > 0) {
+    introLines = [
+      `${c.green}  The garden gate is familiar now. You push it open.`,
+      `${c.green}  The scent of roses follows you in.`,
+      '',
+      `${c.magenta}  Lysa glances up. A small smile — almost involuntary.`,
+      `${c.white}  "You again." She doesn't sound displeased.`,
+      '',
+    ];
   } else {
-    lines.push(`${c.dgray}  (You have already visited Lysa today — charm actions unavailable.)`);
+    introLines = [
+      `${c.green}  You push open a hidden gate and step into a walled garden.`,
+      `${c.green}  Roses and herbs crowd every bed. The city noise disappears.`,
+      '',
+      `${c.magenta}  A woman with auburn hair and ink-stained fingers looks up from her work.`,
+      `${c.white}  "Oh. A visitor." A pause. "I don't get many of those."`,
+      '',
+    ];
+  }
+
+  const pending = mem && mem.notes && mem.notes.pending_question;
+  const lines = [...renderBanner('garden'), ...introLines];
+  let choices;
+
+  if (pending && pending.choices && pending.choices.length > 0) {
+    // Waiting for player response — show response choices only
+    lines.push(`${c.dgray}  She waits. What do you say?`);
     lines.push('');
+    choices = pending.choices.map(ch => ({
+      key: ch.key, label: ch.label, action: 'garden_respond', param: ch.key,
+    }));
+  } else {
+    choices = [
+      { key: 'T', label: 'Talk to her', action: 'garden_talk' },
+      { key: 'L', label: 'Leave',       action: 'town' },
+    ];
+    if (!player.flirted_today) {
+      if (!isFemale) {
+        choices.unshift(
+          { key: 'F', label: 'Pick her a flower', action: 'garden_flower' },
+          { key: 'C', label: 'Compliment her',    action: 'garden_compliment' },
+          { key: 'K', label: 'Steal a kiss',      action: 'garden_kiss' },
+        );
+      } else {
+        choices.unshift({ key: 'X', label: 'Accept rose', action: 'garden_female' });
+      }
+    } else {
+      lines.push(`${c.dgray}  (You have already visited Lysa today — charm actions unavailable.)`);
+      lines.push('');
+    }
   }
 
   return buildScreen("Lysa's Garden", lines, choices);
 }
 
-function getBardScreen(hallOfKings) {
-  const songs = [
-    'The dragon sleeps beneath the mountain, dreaming of old gold...',
-    'A warrior came from the east, they say, with fire in their eyes...',
-    'When the Red Dragon wakes, the world shall tremble anew...',
-    'Many have tried; few have returned. The forest keeps its secrets...',
-    'The inn was full that night when the stranger walked in...',
+function getBardSong(hallOfKings, worldCtx, player) {
+  const candidates = [];
+
+  if (worldCtx) {
+    // Songs about named enemies
+    for (const e of worldCtx.namedEnemies || []) {
+      if (e.kills >= 3) {
+        candidates.push(`${e.given_name}${e.title ? ' ' + e.title : ''} — ${e.kills} have fallen to it. I keep asking travellers to prove me wrong. None have yet.`);
+        candidates.push(`I started a ballad about ${e.given_name}. Three verses in, I stopped. Some things aren't meant to be made beautiful.`);
+      } else if (e.kills >= 1) {
+        candidates.push(`There's a ${e.template_name.toLowerCase()} they're calling ${e.given_name}. It's killed. More will follow, if no one stops it.`);
+        candidates.push(`The wilderness has a name now. ${e.given_name}. I heard it at two different inns this week.`);
+      } else {
+        candidates.push(`Something stirs in the wilderness near ${e.template_name.toLowerCase()}. No title yet. Those come after the first kill.`);
+      }
+    }
+    // Songs about dragon slayers
+    for (const s of worldCtx.recentSlayers || []) {
+      if (s.handle !== (player && player.handle)) {
+        candidates.push(`The bards of three towns now sing of ${s.handle}, who looked the Red Dragon in its burning eye and did not look away. I was told this second-hand. I make no apologies for that.`);
+        candidates.push(`${s.handle}. Dragonslayer. They walk these streets now like anyone else. That's always the strange part.`);
+      } else {
+        candidates.push(`I've been working on something. For you, actually. I'm not done. These things take longer when the subject is standing right there.`);
+      }
+    }
+    // Song about the top player
+    const tp = worldCtx.topPlayer;
+    if (tp && tp.handle !== (player && player.handle) && (tp.active_title || tp.level >= 10)) {
+      const titlePart = tp.active_title ? `, the ${tp.active_title}` : '';
+      candidates.push(`You've heard of ${tp.handle}${titlePart}? I've been composing something. It's not ready. These things take time to get honest.`);
+    }
+  }
+
+  // Atmospheric fallbacks — always better than what we had
+  const fallbacks = [
+    "I sang for a Duke once. He threw me out for knowing too many true things.",
+    "The road between Ironhold and Dawnmark is darker than it used to be. A traveller told me so last week. Then they left and I haven't seen them since.",
+    "Every hero I've ever sung about had the same look in their eyes before they left. You've probably got it too.",
+    "The inn was full the night the Dragonslayer was born. Everyone has a different memory of it. Including the people who weren't there.",
+    "There's a song I know the end of, but not the middle. That's the most honest description of everything I've ever written.",
+    "They asked me what the realm's great story was. I said it's still being written. They didn't find that helpful.",
+    "I've been in every town worth naming. The people are different. The loneliness is identical.",
+    "A warrior came from the east, they say, with fire in their eyes and no intention of explaining themselves.",
+    "The forest keeps its own records. We just write down the parts we survived.",
+    "Many have tried; few have returned. That's not a warning. It's the whole song.",
   ];
-  const song = songs[Math.floor(Math.random() * songs.length)];
+
+  const pool = candidates.length > 0 ? [...candidates, ...fallbacks.slice(0, 3)] : fallbacks;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+function getBardScreen(hallOfKings, worldCtx = null, player = null) {
+  const song = getBardSong(hallOfKings, worldCtx, player);
 
   const lines = [
     ...renderBanner('bard'),
-    `${c.brown}  An old bard strums a lute and sings softly:`,
+    `${c.brown}  An old bard strums a lute and speaks without quite singing:`,
     '',
     `${c.yellow}  "${song}"`,
     '',

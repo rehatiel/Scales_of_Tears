@@ -1,18 +1,8 @@
--- 022_game_data.sql
--- Moves static game data (weapons, armours, monsters, constants) to PostgreSQL.
--- Safe to apply on existing installs — ON CONFLICT DO NOTHING prevents duplicate seeds.
+-- 002_seed.sql
+-- All static game data for Scales of Tears.
+-- Safe to re-apply — every INSERT uses ON CONFLICT DO NOTHING.
 
 -- ── Weapons ───────────────────────────────────────────────────────────────────
-
-CREATE TABLE IF NOT EXISTS weapons (
-  num        INTEGER PRIMARY KEY,
-  name       TEXT    NOT NULL,
-  price      BIGINT  NOT NULL,
-  strength   INTEGER NOT NULL,
-  tier       INTEGER NOT NULL,
-  bonus      TEXT,
-  bonus_desc TEXT
-);
 
 INSERT INTO weapons (num, name, price, strength, tier, bonus, bonus_desc) VALUES
   (1,  'Stick',          200,        5,    1, NULL, NULL),
@@ -36,17 +26,7 @@ INSERT INTO weapons (num, name, price, strength, tier, bonus, bonus_desc) VALUES
   (19, 'Twin Daggers',   95000,      55,   6, 'double_strike', '20% chance to strike twice')
 ON CONFLICT (num) DO NOTHING;
 
--- ── Armours ───────────────────────────────────────────────────────────────────
-
-CREATE TABLE IF NOT EXISTS armors (
-  num        INTEGER PRIMARY KEY,
-  name       TEXT    NOT NULL,
-  price      BIGINT  NOT NULL,
-  defense    INTEGER NOT NULL,
-  tier       INTEGER NOT NULL,
-  bonus      TEXT,
-  bonus_desc TEXT
-);
+-- ── Armors ────────────────────────────────────────────────────────────────────
 
 INSERT INTO armors (num, name, price, defense, tier, bonus, bonus_desc) VALUES
   (1,  'Coat',             200,        1,    1, NULL, NULL),
@@ -71,22 +51,6 @@ INSERT INTO armors (num, name, price, defense, tier, bonus, bonus_desc) VALUES
 ON CONFLICT (num) DO NOTHING;
 
 -- ── Monsters ──────────────────────────────────────────────────────────────────
-
-CREATE TABLE IF NOT EXISTS monsters (
-  id         SERIAL       PRIMARY KEY,
-  level      INTEGER      NOT NULL,  -- 1–11
-  sort_order INTEGER      NOT NULL,  -- 0–10
-  name       TEXT         NOT NULL,
-  weapon     TEXT         NOT NULL,
-  str_mult   NUMERIC(4,2) NOT NULL,
-  hp_mult    NUMERIC(4,2) NOT NULL,
-  gold_mult  NUMERIC(4,2) NOT NULL,
-  exp_mult   NUMERIC(4,2) NOT NULL,
-  behavior   TEXT,                   -- NULL | fleeing | aggressive | defensive | venomous
-  meet_text  TEXT         NOT NULL,
-  death_text TEXT         NOT NULL,
-  UNIQUE (level, sort_order)
-);
 
 INSERT INTO monsters (level, sort_order, name, weapon, str_mult, hp_mult, gold_mult, exp_mult, behavior, meet_text, death_text) VALUES
 -- Level 1
@@ -225,12 +189,6 @@ ON CONFLICT (level, sort_order) DO NOTHING;
 
 -- ── Game constants ────────────────────────────────────────────────────────────
 
-CREATE TABLE IF NOT EXISTS game_constants (
-  key         TEXT PRIMARY KEY,
-  value       TEXT NOT NULL,
-  description TEXT
-);
-
 INSERT INTO game_constants (key, value, description) VALUES
   ('daily_forest_fights',    '10',      'Forest fights allowed per day'),
   ('daily_pvp_fights',       '5',       'PvP fights allowed per day'),
@@ -259,3 +217,224 @@ INSERT INTO game_constants (key, value, description) VALUES
   ('exp_l10',                '300000',  'Exp required to reach level 10'),
   ('exp_l11',                '600000',  'Exp required to reach level 11')
 ON CONFLICT (key) DO NOTHING;
+
+-- ── Quests ────────────────────────────────────────────────────────────────────
+
+INSERT INTO quests (id, name, description, min_level, repeatable, active, trigger_type, trigger_ref) VALUES
+  ('widow_revenge',
+   'The Widow''s Revenge',
+   'A grieving widow begs you to avenge her husband.',
+   1, FALSE, TRUE, 'tavern_encounter', 'crying_widow'),
+
+  ('missing_merchant',
+   'The Missing Merchant',
+   'A merchant vanished on the road. Find out what happened.',
+   1, FALSE, TRUE, 'tavern_encounter', 'missing_merchant_rumour'),
+
+  ('cursed_blade_bearer',
+   'The Cursed Blade',
+   'A dark blade has bonded to your will. Its power is real. So is its cost.',
+   3, FALSE, TRUE, 'event', 'cursed_blade'),
+
+  ('wardens_fall',
+   'The Warden''s Fall',
+   'You slew the dragon — but it was the last Warden, keeping something sealed. Now it is free.',
+   12, FALSE, TRUE, 'auto', 'dragon_first_kill')
+
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO quest_steps (quest_id, step_order, type, params, effects, display_text) VALUES
+
+  -- Widow's Revenge
+  ('widow_revenge', 1, 'kill_named', '{}',
+   '{"exp_level_mult":400,"gold_level_mult":300,"charm_delta":3,"rep_changes":{"knights":3,"merchants":2}}',
+   'Slay a legendary named enemy in the forest.'),
+
+  -- Missing Merchant
+  ('missing_merchant', 1, 'travel',
+   '{"town_id":"$targetTown"}',
+   '{}',
+   'Travel to [town] and search for the missing merchant.'),
+
+  ('missing_merchant', 2, 'choice',
+   '{"prompt":"The merchant lies wounded in the road. His attackers fled, leaving his purse behind.","options":[{"key":"H","label":"Help him back to town","outcome_text":"You help the wounded merchant to safety. He grips your hand with tears in his eyes.","effects":{"exp_level_mult":500,"alignment_delta":15,"charm_delta":3,"rep_changes":{"knights":3,"merchants":2}}},{"key":"T","label":"Take his gold and leave","outcome_text":"You pocket the coin and walk away. The merchant watches you go with hollow eyes.","effects":{"gold_level_mult":300,"alignment_delta":-20,"rep_changes":{"merchants":-3}}}]}',
+   '{}',
+   'You have found the scene. Make your choice.'),
+
+  -- Cursed Blade
+  ('cursed_blade_bearer', 1, 'event_trigger',
+   '{"event_id":"cursed_blade"}',
+   '{}',
+   'Bear the curse — or seek a druid to cleanse it (Thornreach, 5,000 gold).'),
+
+  -- Warden's Fall
+  ('wardens_fall', 1, 'npc_talk',
+   '{"npc_id":"scholar_voss","town_id":"dawnmark"}',
+   '{}',
+   'Return to Dawnmark. Scholar Voss has urgent news.'),
+
+  ('wardens_fall', 2, 'npc_talk',
+   '{"npc_id":"captain_ralen","town_id":"ironhold"}',
+   '{}',
+   'Travel to Ironhold — the shadow armies have already reached the military front.'),
+
+  ('wardens_fall', 3, 'npc_talk',
+   '{"npc_id":"archivist_thessaly","town_id":"stormwatch"}',
+   '{}',
+   'Travel to Stormwatch — the Archivist holds records of what was sealed.'),
+
+  ('wardens_fall', 4, 'kill_boss',
+   '{"boss_id":"pale_captain","town_id":"graveport"}',
+   '{}',
+   'Travel to Graveport — the last Warden''s journal is aboard a ghost ship.'),
+
+  ('wardens_fall', 5, 'npc_talk',
+   '{"npc_id":"ancient_forge","town_id":"ashenfall"}',
+   '{}',
+   'Travel to Ashenfall — forge the Warden''s Seal at the Ancient Forge.'),
+
+  ('wardens_fall', 6, 'kill_boss',
+   '{"boss_id":"veilborn","town_id":"dawnmark"}',
+   '{}',
+   'Return to Dawnmark — the Veilborn has arrived. Make your stand.')
+
+ON CONFLICT (quest_id, step_order) DO NOTHING;
+
+-- ── Factions ──────────────────────────────────────────────────────────────────
+
+INSERT INTO factions (id, name, short_name, home_town, house_name, house_keeper, rep_column,
+  welcome_positive, welcome_neutral, welcome_negative,
+  assassin_name, assassin_weapon, sort_order)
+VALUES
+  ('knights', 'Knights of Silverkeep', 'Knights', 'silverkeep',
+   'The Knight''s Bastion', 'Commander Aldric Vale', 'rep_knights',
+   '"The realm needs warriors of honour. You have proven yourself."',
+   '"Stand tall. Show us your worth and Silverkeep''s gates open wider."',
+   '"Your reputation precedes you. Not favourably."',
+   'Silverkeep Inquisitor', 'a blessed longsword', 1),
+  ('guild', 'Thieves'' Guild', 'Thieves'' Guild', 'duskveil',
+   'The Shadowhouse', 'The Underboss', 'rep_guild',
+   '"You''ve earned the Guild''s trust. Don''t waste it."',
+   '"Prove your worth and we''ll have work for you."',
+   '"You''ve made enemies here. Tread carefully."',
+   'Guild Silencer', 'a poisoned blade', 2),
+  ('druids', 'Druid Circle', 'Druid Circle', 'thornreach',
+   'The Sacred Circle', 'Elder Mosswhisper', 'rep_druids',
+   '"The forest speaks well of you, traveller."',
+   '"Walk gently. The Circle watches all who pass through."',
+   '"You have wounded the forest. The Circle does not forget."',
+   'Thornreach Avenger', 'a twisted thornwood staff', 3),
+  ('necromancers', 'Necromancers'' Conclave', 'Conclave', 'graveport',
+   'The Conclave Vault', 'Archmagus Dreveth', 'rep_necromancers',
+   '"Death is merely a doorway. You understand this."',
+   '"We deal in secrets. Come back when you have something to offer."',
+   '"You have made an enemy of death itself. Unwise."',
+   'Conclave Shade', 'a soul-draining dagger', 4),
+  ('merchants', 'Merchants'' League', 'Merchants'' League', 'velmora',
+   'The League Hall', 'Guildmaster Tessara', 'rep_merchants',
+   '"Profit and partnership. You understand the League''s way."',
+   '"Gold opens doors. Bring us enough and we''ll open ours."',
+   '"You''ve cost us money. That is unforgivable."',
+   'League Enforcer', 'a weighted cudgel', 5)
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO faction_class_rep (faction_id, class_num, rep_delta) VALUES
+  ('necromancers', 1,  10),
+  ('knights',      1,  -5),
+  ('knights',      2,  10),
+  ('guild',        3,  10),
+  ('merchants',    3,  -5),
+  ('necromancers', 4,   5),
+  ('druids',       4,   5),
+  ('druids',       5,  10),
+  ('knights',      6,  15),
+  ('necromancers', 6, -10),
+  ('druids',       7,  15),
+  ('necromancers', 8,  15),
+  ('knights',      8, -10),
+  ('necromancers', 9,   5)
+ON CONFLICT (faction_id, class_num) DO NOTHING;
+
+-- ── Towns ─────────────────────────────────────────────────────────────────────
+
+INSERT INTO towns (id, name, tagline, min_level, shop_max_tier, connections, sort_order) VALUES
+  ('dawnmark',      'Town of Dawnmark',   'The frontier holds no promises — only opportunities.',    1, 7,  ARRAY['thornreach','silverkeep','bracken_hollow'], 1),
+  ('stormwatch',    'Stormwatch',         'Reality bends here. The wise tread carefully.',            4, 11, ARRAY['frostmere','thornreach','ironhold'],         2),
+  ('ironhold',      'Ironhold Bastion',   'Strength is the only currency that matters.',             3, 12, ARRAY['stormwatch','silverkeep','velmora','old_karth'], 3),
+  ('old_karth',     'Old Karth',          'What was buried here should have stayed buried.',         5, 10, ARRAY['ironhold','ashenfall'],                      4),
+  ('thornreach',    'Thornreach',         'The forest does not forgive those who ignore it.',         1, 7,  ARRAY['stormwatch','dawnmark','silverkeep'],        5),
+  ('silverkeep',    'Silverkeep',         'Justice is absolute. So is its price.',                   1, 9,  ARRAY['thornreach','dawnmark','ironhold','velmora','duskveil'], 6),
+  ('velmora',       'Velmora',            'Everything has a price. Most things have several.',        2, 13, ARRAY['ironhold','silverkeep','graveport'],         7),
+  ('bracken_hollow','Bracken Hollow',     'Small town, big problems.',                               1, 3,  ARRAY['dawnmark'],                                 8),
+  ('duskveil',      'Duskveil',           'In the perpetual twilight, secrets thrive.',              5, 10, ARRAY['silverkeep','graveport','mirefen'],           9),
+  ('graveport',     'Graveport',          'The dead make good sailors. They never complain.',        3, 8,  ARRAY['velmora','duskveil','mirefen'],              10),
+  ('mirefen',       'Mirefen',            'The swamp takes what it wants. And it keeps it.',         4, 6,  ARRAY['duskveil','graveport','ashenfall'],          11),
+  ('ashenfall',     'Ashenfall',          'Everything here has already burned once.',                7, 15, ARRAY['mirefen','old_karth'],                      12),
+  ('frostmere',     'Frostmere',          'Isolation is the oldest survival strategy.',              2, 5,  ARRAY['stormwatch'],                               13)
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO town_social_spaces (town_id, name, action) VALUES
+  ('dawnmark',      'Lysa''s Garden',      'garden'),
+  ('velmora',       'The Silken Chamber',  'social_velmora'),
+  ('ironhold',      'The Fighting Pit',    'social_ironhold'),
+  ('silverkeep',    'Temple of Valor',     'social_silverkeep'),
+  ('thornreach',    'The Ancient Grove',   'social_thornreach'),
+  ('duskveil',      'The Shadow Market',   'social_duskveil'),
+  ('graveport',     'The Drowned Man',     'social_graveport'),
+  ('stormwatch',    'The Arcane Library',  'social_stormwatch'),
+  ('old_karth',     'The Crypts',          'social_old_karth'),
+  ('ashenfall',     'The Forge of Ruin',   'social_ashenfall'),
+  ('bracken_hollow','The Village Well',    'social_bracken_hollow'),
+  ('mirefen',       'The Bog Witch''s Hut','social_mirefen'),
+  ('frostmere',     'The Hearthfire Inn',  'social_frostmere')
+ON CONFLICT (town_id) DO NOTHING;
+
+INSERT INTO town_shop_owners
+  (town_id, name, title, quote, weapon_mult, armor_mult, sell_mult, tier_cap, faction,
+   charm_bonus, daily_discount, poison_gear_discount, flee_discount, forge_upgrade, stocks_bonus)
+VALUES
+  ('dawnmark',      'Silas',      'the Old Soldier',     '"Fought for thirty years. Sells for fifty."',            0.90, 1.00, 0.40, 5,    null,          false, false, false, false, false, false),
+  ('silverkeep',    'Lady Maren', 'the Noble''s Factor', '"Quality at a fair price. No haggling."',                1.00, 1.00, 0.40, null, 'knights',     true,  false, false, false, false, false),
+  ('velmora',       'Kess',       'the Sharp Merchant',  '"I buy high. Unusual, I know."',                         1.00, 1.00, 0.55, null, 'merchants',   false, false, false, false, false, false),
+  ('ironhold',      'Brennar',    'the Armorer',         '"Armor first. Weapons are for showing off."',            1.05, 0.90, 0.40, null, null,          false, false, false, false, false, false),
+  ('thornreach',    'Aldric',     'the Woodsman',        '"Practical gear for practical work."',                   0.92, 0.92, 0.40, 7,    'druids',      false, false, false, false, false, false),
+  ('stormwatch',    'Zathis',     'the Arcane Merchant', '"My stock is... eclectic."',                             1.00, 1.00, 0.40, null, null,          false, false, false, false, false, true),
+  ('duskveil',      'No Name',    'ask no questions',    '"One item. One day. Discounted. That''s the deal."',     1.00, 1.00, 0.40, null, 'guild',       false, true,  false, false, false, false),
+  ('graveport',     'Marek',      'the Smuggler',        '"Fell off a ship. No questions."',                       0.88, 1.00, 0.40, null, 'necromancers',false, false, false, false, false, false),
+  ('mirefen',       'Old Petra',  'the Swamp Trader',    '"I smell gold on you. Good."',                           1.00, 1.00, 0.40, null, null,          false, false, true,  false, false, false),
+  ('old_karth',     'the Dealer', 'of relics',           '"These have outlived their owners. Maybe you won''t."',  1.15, 1.15, 0.60, null, null,          false, false, false, false, false, false),
+  ('ashenfall',     'Vorn',       'the Master Forger',   '"I built the weapons that broke the last king."',        1.00, 1.00, 0.40, null, null,          false, false, false, false, false, false),
+  ('bracken_hollow','Marta',      'the Farmer''s Wife',  '"It''s not fancy. But it''ll hold."',                   0.80, 0.80, 0.40, 3,    null,          false, false, false, false, false, false),
+  ('frostmere',     'Bjarne',     'the Hunter',          '"Built for the cold. Built to last."',                   1.00, 1.00, 0.40, null, null,          false, false, false, true,  false, false)
+ON CONFLICT (town_id) DO NOTHING;
+
+-- ── NPC dialogue ──────────────────────────────────────────────────────────────
+
+INSERT INTO npc_dialogue (npc_id, topic_key, answer_key, question_hint, responses) VALUES
+
+('lysa', 'asks_why_fight', 'why_fight', 'Lysa asks: "Why do you keep fighting? Not the surface answer — the real one."',
+$$[
+  {"key":"A","label":"It is all I know","answer_value":"all_i_know","reaction":["`#\"The honest answer.\" She nods slowly.","`%\"Most people dress it up. I appreciate that you don't.\"","`#\"That's either peace or a very old habit. Sometimes both.\""]},
+  {"key":"B","label":"Someone has to","answer_value":"someone_has_to","reaction":["`#\"Someone has to.\" She repeats it quietly.","`%\"That's either nobility or a wound so old you've mistaken it for a reason.\"","`8\"Maybe both. I'm not sure it matters which.\""]},
+  {"key":"C","label":"For the gold, honestly","answer_value":"the_gold","reaction":["`#She smiles — genuinely.","`%\"The gold answer. I like that.\"","`#\"Most people who say that act otherwise. I'll be watching to see which kind you are.\""]},
+  {"key":"D","label":"I have not figured that out yet","answer_value":"not_sure","reaction":["`#\"Not sure.\" She says it back without judgment.","`%\"That's the most honest answer I've heard in a while.\"","`#\"Most people who don't know invent a reason on the spot.\"","`8\"The fact that you didn't says something.\""]},
+  {"key":"E","label":"I would rather not say","answer_value":"private","reaction":["`#She holds eye contact for a moment.","`8\"Fair enough.\"","`%She returns to her work. No disappointment. Just patience.","`#\"You don't owe me an answer. I asked because I was curious.\"","`%\"I still am.\""]}
+]$$::jsonb),
+
+('lysa', 'the_road', 'why_travel', 'Lysa asks: "Do you know why you keep going? Or is it just what you do now?"',
+$$[
+  {"key":"A","label":"I am looking for something","answer_value":"looking","reaction":["`#\"Looking for something.\" She considers this.","`%\"Most people are. The ones who know what it is are rarer than they think.\"","`8\"I hope you find it. Or realise you already have.\""]},
+  {"key":"B","label":"Running from something","answer_value":"running","reaction":["`#\"Running.\" She does not say it as a judgment.","`%\"Running and looking are not that different, in my experience.\"","`#\"The road treats them the same.\"","`8\"The difference is in what you do when you stop.\""]},
+  {"key":"C","label":"It is just what I do now","answer_value":"habit","reaction":["`#\"Just what you do now.\" A pause.","`%\"That is either peace or surrender.\"","`#She clips a stem.","`8\"Sometimes both. I have made peace with not knowing which.\""]},
+  {"key":"D","label":"I enjoy it","answer_value":"enjoy","reaction":["`#That stops her.","`%\"Enjoy it.\" She says it like she is testing the word.","`#\"I believe you. That's unusual enough to be interesting.\"","`%\"Most people justify it. You're not justifying anything.\"","`8\"I find that interesting.\""]}
+]$$::jsonb),
+
+('lysa', 'opinion_fighters', 'fighter_opinion', 'Lysa asks: "What actually drives the fighters — the ones who keep going?"',
+$$[
+  {"key":"A","label":"Purpose. They need to matter","answer_value":"purpose","reaction":["`#\"Purpose.\" She nods slowly.","`%\"The need to matter. Yes. I've seen that.\"","`#\"The dangerous ones are the people whose purpose has run out but they haven't stopped yet.\"","`8\"I wonder sometimes if you've thought about what happens when you're done.\""]},
+  {"key":"B","label":"Fear. They do not know what else to do","answer_value":"fear","reaction":["`#\"Fear.\" A long pause.","`%\"I think you might be right. Or partly right.\"","`#\"Fear of stopping. Fear of what's left when the fighting stops.\"","`%She looks at her roses.","`8\"It is a very old engine.\""]},
+  {"key":"C","label":"They like it","answer_value":"they_like_it","reaction":["`#\"They like it.\" She considers this without flinching.","`%\"Probably true for some. More than people admit.\"","`#\"There is something honest about acknowledging that.\"","`8\"I am not sure what to do with it. But I believe it.\""]},
+  {"key":"D","label":"I am not sure. I am one of them","answer_value":"unsure_myself","reaction":["`#She looks at you for a moment.","`%\"You're one of them and you still don't know.\"","`#\"I think that's the most interesting answer you could have given me.\"","`8She turns back to her plants. Something lighter in her expression.","`%\"Come back when you figure it out.\""]}
+]$$::jsonb)
+
+ON CONFLICT (npc_id, topic_key) DO NOTHING;

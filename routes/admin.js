@@ -1,7 +1,7 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
-const { pool, getAllPlayers, getRecentNews, addNews, updatePlayer, TODAY, getBannerOverride, setBanner, deleteBanner, getAllBanners, loadBanners, getWorldState, setWorldState, getAllWeapons, updateWeapon, getAllArmors, updateArmor, getAllMonsters, updateMonster, getAllGameConstants, setGameConstant, loadGameDataFromDb, loadQuestsFromDb, getAllQuests, getQuestWithSteps, createQuest, updateQuest, deleteQuest, createQuestStep, updateQuestStep, deleteQuestStep, getPlayersOnQuest, loadFactionsFromDb, getAllFactions, updateFaction, getFactionClassReps, setFactionClassRep, loadTownsFromDb, getAllTowns, updateTown, updateTownSocial, updateTownShop } = require('../db');
+const { pool, getAllPlayers, getRecentNews, addNews, updatePlayer, TODAY, getBannerOverride, setBanner, deleteBanner, getAllBanners, loadBanners, getWorldState, setWorldState, getAllWeapons, updateWeapon, getAllArmors, updateArmor, getAllMonsters, updateMonster, getAllGameConstants, setGameConstant, loadGameDataFromDb, loadQuestsFromDb, getAllQuests, getQuestWithSteps, createQuest, updateQuest, deleteQuest, createQuestStep, updateQuestStep, deleteQuestStep, getPlayersOnQuest, loadFactionsFromDb, getAllFactions, updateFaction, getFactionClassReps, setFactionClassRep, loadTownsFromDb, getAllTowns, updateTown, updateTownSocial, updateTownShop, getAllNpcDialogue, upsertNpcDialogue, deleteNpcDialogue, clearNpcDialogueCache } = require('../db');
 const { loadGameData, loadTownsData } = require('../game/data');
 const { loadQuestsData } = require('../game/quests');
 const { loadFactionsData } = require('../game/factions');
@@ -678,6 +678,36 @@ router.put('/town-shop/:id', ar(async (req, res) => {
   await updateTownShop(req.params.id, fields);
   await reloadTownsData();
   console.log(`[ADMIN] PUT /town-shop/${req.params.id}`);
+  res.json({ ok: true });
+}));
+
+// ── NPC Dialogue ──────────────────────────────────────────────────────────────
+
+// GET /api/admin/npc-dialogue
+router.get('/npc-dialogue', ar(async (req, res) => {
+  res.json(await getAllNpcDialogue());
+}));
+
+// POST /api/admin/npc-dialogue — create new entry
+router.post('/npc-dialogue', ar(async (req, res) => {
+  const { npc_id, topic_key, answer_key, question_hint, responses } = req.body;
+  if (!npc_id || !topic_key || !answer_key) return res.status(400).json({ error: 'npc_id, topic_key, answer_key required' });
+  const id = await upsertNpcDialogue('new', { npc_id, topic_key, answer_key, question_hint, responses: responses || [], active: true });
+  console.log(`[ADMIN] POST /npc-dialogue ${npc_id}/${topic_key}`);
+  res.json({ ok: true, id });
+}));
+
+// PUT /api/admin/npc-dialogue/:id — update entry
+router.put('/npc-dialogue/:id', ar(async (req, res) => {
+  await upsertNpcDialogue(req.params.id, req.body);
+  console.log(`[ADMIN] PUT /npc-dialogue/${req.params.id}`);
+  res.json({ ok: true });
+}));
+
+// DELETE /api/admin/npc-dialogue/:id
+router.delete('/npc-dialogue/:id', ar(async (req, res) => {
+  await deleteNpcDialogue(req.params.id);
+  console.log(`[ADMIN] DELETE /npc-dialogue/${req.params.id}`);
   res.json({ ok: true });
 }));
 

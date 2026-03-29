@@ -1,4 +1,5 @@
-const { getPlayer, updatePlayer, addNews, getHallOfKings, getRecentNews, getRetiredPlayersInTown, getActiveWorldEvent, getActiveHunts, getAllPlayers } = require('../../db');
+const { getPlayer, updatePlayer, addNews, getHallOfKings, getRecentNews, getRetiredPlayersInTown, getActiveWorldEvent, getActiveHunts, getAllPlayers, getNpcMemory, saveNpcMemory, getNpcWorldContext, getNpcDialogueCache } = require('../../db');
+const { recordVisit, pickTopic, updateNotes } = require('../npc');
 const { WEAPONS, ARMORS, TOWNS, SHOP_OWNERS, getWeaponByNum, getArmorByNum, PERKS, getPerksForClass, hasPerk, SPECIALIZATIONS, getSpecsForClass } = require('../data');
 const { checkLevelUp } = require('../newday');
 const { getEventDef } = require('../world_events');
@@ -20,8 +21,14 @@ const { executeQuestChoice } = require('../quest_runner');
 // ── INN ───────────────────────────────────────────────────────────────────────
 
 async function inn({ player, req, res, pendingMessages }) {
-  const sleeperCount = await getRetiredPlayersInTown(player.current_town || 'dawnmark');
-  return res.json({ ...getInnScreen(player, sleeperCount), pendingMessages });
+  const townId = player.current_town || 'dawnmark';
+  const [sleeperCount, mem] = await Promise.all([
+    getRetiredPlayersInTown(townId),
+    getNpcMemory(`innkeeper_${townId}`, player.id),
+  ]);
+  const updatedMem = recordVisit(mem);
+  await saveNpcMemory(`innkeeper_${townId}`, player.id, updatedMem);
+  return res.json({ ...getInnScreen(player, sleeperCount, updatedMem), pendingMessages });
 }
 
 async function inn_rest({ player, req, res, pendingMessages }) {
@@ -243,7 +250,10 @@ async function bank_withdraw({ player, param, req, res, pendingMessages }) {
 // ── MASTER ────────────────────────────────────────────────────────────────────
 
 async function master({ player, req, res, pendingMessages }) {
-  return res.json({ ...getMasterScreen(player), pendingMessages });
+  let mem = await getNpcMemory('master_aldric', player.id);
+  mem = recordVisit(mem);
+  await saveNpcMemory('master_aldric', player.id, mem);
+  return res.json({ ...getMasterScreen(player, mem), pendingMessages });
 }
 
 async function master_train({ player, param, req, res, pendingMessages }) {
@@ -319,7 +329,11 @@ async function training_action({ action, player, req, res, pendingMessages }) {
 // ── SHOPS ─────────────────────────────────────────────────────────────────────
 
 async function weapon_shop({ player, req, res, pendingMessages }) {
-  return res.json({ ...getWeaponShopScreen(player), pendingMessages });
+  const townId = player.current_town || 'dawnmark';
+  let mem = await getNpcMemory(`weapon_shop_${townId}`, player.id);
+  mem = recordVisit(mem);
+  await saveNpcMemory(`weapon_shop_${townId}`, player.id, mem);
+  return res.json({ ...getWeaponShopScreen(player, mem), pendingMessages });
 }
 
 async function buy_weapon({ player, param, req, res, pendingMessages }) {
@@ -380,7 +394,11 @@ async function buy_weapon({ player, param, req, res, pendingMessages }) {
 }
 
 async function armor_shop({ player, req, res, pendingMessages }) {
-  return res.json({ ...getArmorShopScreen(player), pendingMessages });
+  const townId = player.current_town || 'dawnmark';
+  let mem = await getNpcMemory(`armor_shop_${townId}`, player.id);
+  mem = recordVisit(mem);
+  await saveNpcMemory(`armor_shop_${townId}`, player.id, mem);
+  return res.json({ ...getArmorShopScreen(player, mem), pendingMessages });
 }
 
 async function buy_armor({ player, param, req, res, pendingMessages }) {
@@ -487,7 +505,11 @@ async function shop_steal({ action, player, req, res, pendingMessages }) {
 // ── GARDEN ────────────────────────────────────────────────────────────────────
 
 async function garden({ player, req, res, pendingMessages }) {
-  return res.json({ ...getGardenScreen(player), pendingMessages });
+  let mem = await getNpcMemory('lysa', player.id);
+  mem = recordVisit(mem);
+  await saveNpcMemory('lysa', player.id, mem);
+  const worldCtx = await getNpcWorldContext();
+  return res.json({ ...getGardenScreen(player, mem, worldCtx), pendingMessages });
 }
 
 async function garden_female({ player, req, res, pendingMessages }) {
@@ -535,21 +557,363 @@ async function garden_kiss({ player, req, res, pendingMessages }) {
 // ── GARDEN — Talk ─────────────────────────────────────────────────────────────
 
 async function garden_talk({ player, req, res, pendingMessages }) {
-  const { getGardenScreen } = require('../engine');
-  const lines = lysaDialogue(player);
-  return res.json({ ...getGardenScreen(player), pendingMessages: lines });
+  let mem = await getNpcMemory('lysa', player.id);
+  const [worldCtx, dialogueCache] = await Promise.all([getNpcWorldContext(), getNpcDialogueCache()]);
+  const { lines, mem: updatedMem } = getLysaDialogue(player, mem, worldCtx, dialogueCache);
+  await saveNpcMemory('lysa', player.id, updatedMem);
+  return res.json({ ...getGardenScreen(player, updatedMem, worldCtx), pendingMessages: lines });
 }
 
-function lysaDialogue(player) {
-  const title = player.active_title || '';
-  const align = player.alignment || 0;
-  const level = player.level || 1;
-  const questId = player.quest_id || '';
+async function garden_respond({ player, param, req, res, pendingMessages }) {
+  let mem = await getNpcMemory('lysa', player.id);
+  const pending = mem.notes && mem.notes.pending_question;
+  if (!pending) return res.json({ ...getGardenScreen(player, mem), pendingMessages });
 
-  // ── Warden's Champion — she felt it when the Veilborn fell
-  if (title === 'wardens_champion') {
+  const { topic_key, answer_key } = pending;
+  const dialogueCache = await getNpcDialogueCache();
+  const entry = dialogueCache['lysa'] && dialogueCache['lysa'][topic_key];
+
+  if (!entry) {
+    mem = updateNotes(mem, { pending_question: null });
+    await saveNpcMemory('lysa', player.id, mem);
+    return res.json({ ...getGardenScreen(player, mem), pendingMessages });
+  }
+
+  const chosen = (entry.responses || []).find(r => r.key === param);
+  if (!chosen) return res.json({ ...getGardenScreen(player, mem), pendingMessages });
+
+  const { storeAnswer } = require('../npc');
+  mem = storeAnswer(mem, answer_key, chosen.answer_value);
+  mem = updateNotes(mem, { pending_question: null });
+  await saveNpcMemory('lysa', player.id, mem);
+
+  const worldCtx = await getNpcWorldContext();
+  return res.json({ ...getGardenScreen(player, mem, worldCtx), pendingMessages: chosen.reaction || [] });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Lysa dialogue system
+// Priority: story overrides → topic pool (by relationship level)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Topic registry — each entry is a function(player, mem, worldCtx) → lines[]
+// Organized by minimum relationship level required.
+const LYSA_TOPICS = {
+  // rel=0 (stranger)
+  first_look: (p) => [
+    '`#"I don\'t believe I\'ve seen you before."',
+    '`%She eyes you briefly — not unkindly — then returns to her work.',
+    '`#"The garden is open to anyone who doesn\'t trample things."',
+    '`8A pause.',
+    '`#"Most people just want the charm bonus. I can tell the difference."',
+  ],
+  the_garden: (p) => [
+    '`#"I planted most of this myself." She gestures at the beds.',
+    '`%"It took three years for the roses to take. The soil here is stubborn."',
+    '`#"People assume it\'s decorative. But half of this is medicinal."',
+    '`%She holds up a sprig of something pale and sharp-smelling.',
+    '`#"You\'d be surprised what a garden can tell you about a place."',
+  ],
+  what_brings_you: (p) => [
+    '`#She studies you with more attention than she lets on.',
+    '`%"Most adventurers who come through here are on their way somewhere."',
+    '`#"You have that look." A pause. "The one where you\'ve decided something."',
+    '`%She snips a dead branch.',
+    '`#"I won\'t ask where. But I notice things."',
+  ],
+
+  // rel=1 (acquaintance)
+  noticed_you: (p) => [
+    '`#"You\'ve been back." Not a question. "I notice who comes and goes."',
+    '`%"Most adventurers pass through once and you never see them again."',
+    '`#She tilts her head slightly.',
+    '`8"I find myself wondering what keeps bringing you here."',
+    '`%"That\'s unusual for me."',
+  ],
+  class_remark: (p) => {
+    const lines = {
+      1:  ['`#"Dread Knight. I can always tell — the way you carry tension in your shoulders."', '`%"The class isn\'t the person. But it leaves marks."', '`#"You look like someone who\'s made decisions they live with."'],
+      2:  ['`#"There\'s something quiet about real warriors."', '`%"They\'ve made peace with what they do. Or they\'re trying to."', '`8"Which are you, I wonder."'],
+      3:  ['`#"A Rogue." A small smile. "The careful ones always check the exits first."', '`%"You did that when you came in. I noticed."', '`#"It\'s not a criticism. It\'s just a way of moving through the world."'],
+      4:  ['`#"Mage." She says it thoughtfully. "The practical ones are my favourites."', '`%"The theatrical ones..." A small gesture. "Less so."', '`#"You seem like one of the practical ones."'],
+      5:  ['`#"Rangers tend to look at the sky when they think no one\'s watching."', '`%She glances up deliberately.', '`#"You\'ve been doing it since you walked in."'],
+      6:  ['`#"A Paladin. You have the look — measuring everything against a standard."', '`%"I respect it. Even when the standard is wrong."', '`8"Especially then, maybe."'],
+      7:  ['`#"Druids and gardens." A genuine smile. "You\'re not the first to linger here."', '`%"There\'s something about people who pay attention to growing things."', '`#"I think it\'s the patience."'],
+      8:  ['`#"Necromancer." She considers this without flinching.', '`%"People assume that\'s a dark thing. But death and life aren\'t opposites."', '`#"Gardeners know that better than most."'],
+      9:  ['`#"Elementalist." She glances at your hands. "You\'re good at holding still."', '`%"Most people who work with raw force can\'t."', '`#"That takes practice. Or very good teachers."'],
+      10: ['`#"A Monk." A moment of consideration. "You\'re harder to read than most."', '`%"I appreciate that. Easy-to-read people usually aren\'t paying attention."', '`#"You\'re paying attention."'],
+    };
+    return lines[p.class] || lines[1];
+  },
+  the_road: (p) => [
+    '`#"You\'ve been travelling." She says it with certainty.',
+    '`%"There\'s a tiredness that only the road gives you."',
+    '`#"Not unpleasant, exactly. But it accumulates."',
+    '`%She pauses.',
+    '`#"Do you know why you keep going? Or is it just what you do now?"',
+    '`8She means it as a real question. She doesn\'t need an answer.',
+  ],
+  garden_meaning_hint: (p) => [
+    '`#"People assume the garden is my job." She snips carefully at a stem.',
+    '`%"It\'s not. Or it is — but that\'s not why I do it."',
+    '`#"This place was..." She trails off. Starts again.',
+    '`8"There was a reason I chose here. I don\'t talk about it with most people."',
+    '`#"Maybe another time."',
+  ],
+  world_question: (p, m, w) => {
+    const enemy = w && w.namedEnemies && w.namedEnemies.length > 0 ? w.namedEnemies[0] : null;
+    if (enemy) return [
+      `\`#"I\'ve been hearing things." She doesn\'t look up. "About something in the wilderness."`,
+      `\`%"${enemy.given_name}${enemy.title ? ', ' + enemy.title : ''}. That\'s the name I\'ve heard."`,
+      `\`#"Two travellers last week mentioned it. The crier as well."`,
+      `\`%She clips a dead head from a rose with more force than necessary.`,
+      `\`8"Is it as bad as they say?"`,
+    ];
     return [
-      '`#Lysa looks up slowly when you enter. Something is different in her eyes.',
+      '`#"What\'s it like out there right now?" She asks it without ceremony.',
+      '`%"I hear things. But always through other people."',
+      '`#"The news is always someone\'s version of events."',
+      '`%A pause.',
+      '`#"What\'s your version?"',
+    ];
+  },
+
+  // rel=2 (regular)
+  opinion_fighters: (p) => [
+    '`#"Can I ask you something?" She sets down her shears.',
+    '`%"What actually drives fighters — the ones who keep going?"',
+    '`#"I\'ve had years to watch them come through here. I still don\'t have a clean answer."',
+    '`%She looks at you directly.',
+    '`#"Some are running from something. Some are looking for it."',
+    '`8"You don\'t have to tell me which you are."',
+  ],
+  cross_player_ref: (p, m, w) => {
+    const slayer = w && w.recentSlayers && w.recentSlayers.find(s => s.handle !== p.handle);
+    const top = w && w.topPlayer && w.topPlayer.handle !== p.handle ? w.topPlayer : null;
+    const enemy = w && w.namedEnemies && w.namedEnemies.find(e => e.kills >= 2 && e.given_name !== p.handle);
+    if (slayer) return [
+      `\`#"${slayer.handle} came through here after the dragon." She says it quietly.`,
+      `\`%"Didn\'t stay long. They had the look of someone who\'d just finished something."`,
+      `\`#"And now didn\'t know what to do with the quiet."`,
+      `\`%She works in silence a moment.`,
+      `\`8"I recognised it. I\'ve had that look."`,
+    ];
+    if (enemy) return [
+      `\`#"${enemy.given_name}." She says the name carefully.`,
+      `\`%"That\'s killed ${enemy.kills} people now. The forest keeps score even when we don\'t."`,
+      `\`#"I lit a candle last week. Old habit." A pause.`,
+      `\`8"I don\'t know who they were. But someone does."`,
+    ];
+    if (top) return [
+      `\`#"${top.handle}." She tries the name. "People keep mentioning them."`,
+      `\`%"Strength they can point at. Proof the struggle means something."`,
+      `\`#"I find myself more interested in what they\'re like when no one\'s watching."`,
+    ];
+    return [
+      '`#"More adventurers passing through lately." She looks pensive.',
+      '`%"Something\'s drawing them. Or pushing them."',
+      '`8"I can\'t always tell which."',
+    ];
+  },
+  named_enemy_concern: (p, m, w) => {
+    const enemy = w && w.namedEnemies && w.namedEnemies.find(e => e.kills > 0);
+    if (enemy) return [
+      `\`#"${enemy.given_name}." She says it quietly. "I keep hearing that name."`,
+      `\`%"${enemy.kills} ${enemy.kills === 1 ? 'person' : 'people'} now, if the news is right."`,
+      `\`#"The forest always had its horrors. But this one feels different."`,
+      `\`%She looks at her roses with a strange expression.`,
+      `\`8"Gardens grow over graves. That\'s the whole thing, really."`,
+    ];
+    return [
+      '`#"The forest has been strange lately. I can tell by who comes back through here."',
+      '`%"There\'s a quiet that falls on someone after a bad fight."',
+      '`#"I used to ask about it. Now I just..." She gestures at the garden.',
+      '`8"Make tea. Tend things."',
+    ];
+  },
+  asks_why_fight: (p) => [
+    '`#"I want to ask you something. You don\'t have to answer."',
+    '`%She sets down her shears. Direct eye contact — unusual for her.',
+    '`#"Why do you keep fighting? Not the surface answer."',
+    '`%"Not \'for gold\' or \'it\'s what I do.\' The real one."',
+    '`#"The one you think about in the quiet."',
+    '`8She lets the question sit there. Returns to her plants.',
+  ],
+  she_used_to_travel: (p) => [
+    '`#"I used to travel." She says it simply.',
+    '`%"Years ago. Before I found this place."',
+    '`#"I was good at it. The resilience, the adaptation."',
+    '`%A small pause.',
+    '`#"I wasn\'t good at the loneliness."',
+    '`8"So I stopped." She clips a stem.',
+    '`%"Not everyone has to keep going. That took me a while to understand."',
+  ],
+  on_alignment: (p) => {
+    if ((p.alignment || 0) <= -20) return [
+      '`#She doesn\'t say anything for a moment when you walk in.',
+      '`%Then, carefully: "You\'ve made some choices lately."',
+      '`#"I\'m not judging. I stopped judging." She clips a stem.',
+      '`%"But choices have shapes. They leave traces."',
+      '`8"Yours have been getting darker. I notice. I won\'t say it twice."',
+    ];
+    if ((p.alignment || 0) >= 30) return [
+      '`#"You\'ve been doing good work." She says it without fanfare.',
+      '`%"I hear things. The news, the people who come through here."',
+      '`#"What you\'ve been doing — it\'s not going unnoticed."',
+      '`8"Even when it feels like it is."',
+    ];
+    return [
+      '`#"You\'re careful." She says it thoughtfully. "Not cruel. Not righteous, exactly."',
+      '`%"Just careful."',
+      '`#"That\'s rarer than people think."',
+      '`8"Most fall one way or the other, eventually."',
+    ];
+  },
+  faction_observation: (p) => {
+    if ((p.rep_knights || 0) >= 50) return [
+      '`#"I see Silverkeep in you." Not a compliment or a criticism.',
+      '`%"The Knights leave a mark. Posture. The way you watch the door."',
+      '`#"There are worse things to be. Just..." She pauses.',
+      '`#"Don\'t let them make you rigid. The realm needs people who can still bend."',
+    ];
+    if ((p.rep_druids || 0) >= 50) return [
+      '`#"Thornreach has left its mark on you." She sounds approving.',
+      '`%"You move differently. Quieter. Like you\'ve learned to listen."',
+      '`#"The Circle doesn\'t give that to just anyone."',
+      '`8"I used to go to the Grove. Before I found this place."',
+    ];
+    if ((p.rep_necromancers || 0) >= 50) return [
+      '`#She looks at you a long moment before speaking.',
+      '`8"I\'ve noticed you and the Conclave."',
+      '`#"I won\'t pretend I understand it. Death magic has always unsettled me."',
+      '`%"But you\'re here, talking to flowers." A slight smile.',
+      '`#"Maybe that\'s the point. Everyone contains more than one thing."',
+    ];
+    if ((p.rep_guild || 0) >= 50) return [
+      '`#"Careful with those friends." She says it lightly, but means it.',
+      '`7"The Guild remembers debts longer than kindnesses."',
+      '`#"Know what you owe, and to whom."',
+      '`8"That\'s the only way to stay ahead of them."',
+    ];
+    return [
+      '`#"Every faction in this realm thinks it\'s the important one." She clips a stem.',
+      '`%"I\'ve met people from all of them. The true believers and the mercenaries."',
+      '`#"The ones I respect are the ones who know which they are."',
+    ];
+  },
+
+  // rel=3 (trusted)
+  garden_origin: (p) => [
+    '`#"Can I tell you something?" She sits on the low wall — unusual for her.',
+    '`%"I came here because of a specific thing. Not just wandering."',
+    '`#"There was a woman who had this garden before me. She died here."',
+    '`%A pause.',
+    '`#"She left notes in the shed. Recipes. A name carved into the door frame."',
+    '`8"I didn\'t know her. But I felt like I owed it to her to keep it alive."',
+    '`%"That was nine years ago." She looks at the roses.',
+    '`#"I\'m still not sure what that says about me."',
+  ],
+  druid_past: (p) => [
+    '`#"I spent two years with the Circle in Thornreach." She says it quietly.',
+    '`%"It wasn\'t what I expected."',
+    '`#"They don\'t talk about themselves the way other orders do."',
+    '`%"No glory. No hierarchy." A pause.',
+    '`#"Just attention. To small things. To what\'s actually there."',
+    '`8"I brought that back with me." She gestures at the garden.',
+    '`#"That\'s what this is, really. Sustained attention."',
+  ],
+  veilborn_knowledge: (p) => [
+    '`#"I have a confession." She doesn\'t look up.',
+    '`%"I\'ve been researching the old texts. The ones about what was sealed here."',
+    '`#"Most people think the Dragon was just a monster."',
+    '`%She finally meets your eyes.',
+    '`8"It wasn\'t. Or it was — but that\'s not what it was *for*."',
+    '`#"Something needed to stay down. The Dragon was keeping it there."',
+    '`%She sets down her shears.',
+    '`#"I don\'t know how much you know. I just think you should know someone else does."',
+  ],
+  what_she_wants: (p) => [
+    '`#She works in silence for a while before speaking.',
+    '`%"Do you know what I actually want? Not what I\'ve settled for."',
+    '`#"I want to write something. Not a garden journal."',
+    '`%"Something true. About this place. About what passes through here."',
+    '`#"The people. The things they carry."',
+    '`8A long pause.',
+    '`#"I haven\'t started yet." She clips a stem.',
+    '`%"I keep waiting until I have something worth saying."',
+    '`8"I think that\'s the wrong approach, honestly."',
+  ],
+  the_quiet: (p) => [
+    '`8She looks at you — a longer look than usual.',
+    '`#"Can I say something strange?"',
+    '`%"When you\'re not here... the garden feels emptier than it used to."',
+    '`#"I\'ve had regulars before. But you actually listen."',
+    '`%A pause.',
+    '`8"That\'s rarer than you\'d think."',
+    '`#"I wanted you to know that." She turns back to her work.',
+    '`%"You don\'t have to do anything about it."',
+  ],
+
+  // rel=4 (confidant)
+  full_honesty: (p) => [
+    '`#"I\'m going to be honest with you." She sets down her shears.',
+    '`%"I\'ve been thinking about what this place actually is."',
+    '`#"I tell people it\'s a garden. That\'s true. But it\'s also a refuge."',
+    '`%"For people who need somewhere quiet for a minute."',
+    '`#"Including me." A pause.',
+    '`8"Especially me."',
+    '`%"I built it to be that. I just didn\'t know that was what I was doing."',
+    '`#"Until people like you started coming back."',
+  ],
+  the_thing_she_fears: (p) => [
+    '`#"I have a fear." She says it plainly. "Not of combat or death."',
+    '`%"I fear being forgotten. Not dramatically. Just gradually."',
+    '`#"The garden will outlast me. That\'s fine. That\'s good."',
+    '`%"But the garden won\'t remember anything."',
+    '`8A pause. She clips a bloom.',
+    '`#"That\'s why I write things down. Even the small things."',
+    '`%"You wonder why I asked you that question, months ago?"',
+    '`#"That was me writing something down."',
+  ],
+  she_asks_after_you: (p) => [
+    '`#"I was wondering if you\'d come back." She says it quietly.',
+    '`%"You were gone a while."',
+    '`#"I don\'t ask about the fighting. I\'ve learned it doesn\'t help."',
+    '`%"But I wondered."',
+    '`8She hands you a small bundle of dried herbs tied with twine.',
+    '`#"For whatever\'s next." A pause.',
+    '`%"Come back when you can."',
+  ],
+  the_question_back: (p, m) => [
+    '`#She looks at you for a long moment.',
+    '`%"You\'ve never actually told me why you keep at it."',
+    '`#"I\'ve asked, in my way. You\'ve deflected, in your way."',
+    '`%"I don\'t mind. But I notice."',
+    '`8A pause.',
+    '`#"One day, maybe, you\'ll tell me."',
+    '`%She returns to her roses. Not disappointed. Just patient.',
+  ],
+};
+
+// Topic pool per minimum relationship level
+const LYSA_TOPIC_POOLS = [
+  { minRel: 0, topics: ['first_look', 'the_garden', 'what_brings_you'] },
+  { minRel: 1, topics: ['noticed_you', 'class_remark', 'the_road', 'garden_meaning_hint', 'world_question'] },
+  { minRel: 2, topics: ['opinion_fighters', 'cross_player_ref', 'named_enemy_concern', 'asks_why_fight', 'she_used_to_travel', 'on_alignment', 'faction_observation'] },
+  { minRel: 3, topics: ['garden_origin', 'druid_past', 'veilborn_knowledge', 'what_she_wants', 'the_quiet'] },
+  { minRel: 4, topics: ['full_honesty', 'the_thing_she_fears', 'she_asks_after_you', 'the_question_back'] },
+];
+
+function getLysaDialogue(player, mem, worldCtx, dialogueCache = null) {
+  const title   = player.active_title || '';
+  const align   = player.alignment   || 0;
+  const questId = player.quest_id    || '';
+  const rel     = mem.relationship_level || 0;
+
+  // ── Story overrides (don't consume a topic) ──────────────────────────────
+  if (title === 'wardens_champion') {
+    return { lines: [
+      '`#Lysa looks up slowly when you enter. Something different in her eyes.',
       '`#"I felt something shift. Three nights ago." She sets down her shears.',
       '`#"Like a held breath finally released."',
       '`%"The Veilborn is gone, isn\'t it."',
@@ -558,124 +922,77 @@ function lysaDialogue(player) {
       '`#"I spent years trying to find them. Couldn\'t understand why I cared so much."',
       '`%A long silence. She looks at you steadily.',
       '`#"Thank you. I don\'t think you fully understand what you\'ve actually done."',
-    ];
+    ], mem };
   }
 
-  // ── Dragonslayer — she's read things she doesn't say aloud
-  if (title === 'dragonslayer' && questId !== 'warden_fall') {
-    return [
+  if (title === 'dragonslayer' && questId !== 'warden_fall' && rel < 3) {
+    return { lines: [
       '`#"I know who you are." She doesn\'t look up from her pruning.',
       '`#"The Dragonslayer. Everyone\'s saying it in the market."',
       '`%She clips a stem with more force than necessary.',
-      '`#"I\'ve read about the Dragon. The old texts — what survived of them."',
+      '`#"I\'ve read about the Dragon. The old texts — what survived."',
       '`%She finally looks at you. Her expression is careful.',
       '`#"It wasn\'t just a monster, was it."',
       '`8Again, not a question.',
-      '`#"Something is going to come through. Now that the seal is broken."',
-      '`#"I hope you\'re as capable as they say."',
-    ];
+      '`#"Something is going to come through now. I hope you\'re as capable as they say."',
+    ], mem };
   }
 
-  // ── Deep in the Warden's Fall questline — she has a fragment
   if (questId === 'warden_fall' && (player.quest_step || 0) >= 3) {
-    return [
+    return { lines: [
       '`#"You look like someone carrying weight they can\'t set down."',
       '`%She wraps a small bundle of dried herbs and holds it out.',
       '`#"For clarity of mind. Old druid recipe. Don\'t ask how I know it."',
       '`%You take it. She hesitates.',
-      '`#"The thing you\'re chasing... I\'ve read fragments. Incomplete ones."',
       '`#"The Seal wasn\'t just a prison. It was also a warning."',
       '`%She turns back to her work.',
       '`8"Be careful what you\'re opening."',
-    ];
+    ], mem };
   }
 
-  // ── Very dark alignment — she notices, doesn't flinch
   if (align <= -40) {
-    return [
+    return { lines: [
       '`#She looks up when you enter. Something in her expression closes — not fear.',
       '`%Watchfulness.',
       '`#"The garden is open to all. That\'s the rule."',
       '`%She returns to her work. A long pause.',
       '`8"You have interesting eyes, for someone who\'s done what you\'ve done."',
-      '`#"I\'m not judging. I\'ve read enough history to know good and evil aren\'t that tidy."',
+      '`#"I\'m not judging. Good and evil aren\'t that tidy."',
       '`%"Just... try not to break anything in here."',
-    ];
+    ], mem };
   }
 
-  // ── High alignment — she opens up
-  if (align >= 60) {
-    return [
-      '`#"Oh. You again." She says it like she doesn\'t mind.',
-      '`%She brushes dirt from her hands and sits on the garden wall.',
-      '`#"Can I ask you something? You don\'t have to answer."',
-      '`#"Why do you keep at it? The fighting, the travelling, all of it."',
-      '`%She watches you, genuinely curious.',
-      '`#"Most people who reach your level either stop... or stop being themselves."',
-      '`8"You seem like you\'re still you."',
-      '`#"I find that interesting."',
-    ];
-  }
+  // ── Topic pool system ─────────────────────────────────────────────────────
+  // Build the available pool for this relationship level
+  const available = LYSA_TOPIC_POOLS
+    .filter(p => p.minRel <= rel)
+    .flatMap(p => p.topics);
 
-  // ── Faction allegiances — she notices who you run with
-  if ((player.rep_knights || 0) >= 50) {
-    return [
-      '`#"I see Silverkeep in you." She doesn\'t say it as a compliment or a criticism.',
-      '`%"The Knights tend to leave a mark. Posture. The way you watch the door."',
-      '`#"There are worse things to be. Just..." She pauses.',
-      '`#"Don\'t let them make you rigid. The realm needs people who can still bend."',
-    ];
-  }
-  if ((player.rep_druids || 0) >= 50) {
-    return [
-      '`#"Thornreach has left its mark on you." She sounds approving.',
-      '`2"You move differently. Quieter. Like you\'ve learned to listen."',
-      '`#"The Circle doesn\'t give that to just anyone."',
-      '`%She turns back to her plants, adding quietly:',
-      '`#"I used to go to the Grove. Before I found this place."',
-    ];
-  }
-  if ((player.rep_necromancers || 0) >= 50) {
-    return [
-      '`#She looks at you for a long moment before speaking.',
-      '`8"I\'ve noticed you and the Conclave."',
-      '`#"I won\'t pretend I understand it. Death magic has always unsettled me."',
-      '`%"But you\'re here, talking to flowers and roses, so." A slight smile.',
-      '`#"Maybe that\'s the point. Everyone contains more than one thing."',
-    ];
-  }
-  if ((player.rep_guild || 0) >= 50) {
-    return [
-      '`#"Careful with those friends." She says it lightly, but means it.',
-      '`7"The Guild remembers debts longer than kindnesses."',
-      '`#"I\'m not telling you to walk away. Just..." She snips a stem.',
-      '`#"Know what you owe, and to whom."',
-      '`8"That\'s the only way to stay ahead of them."',
-    ];
-  }
-
-  // ── Experienced traveller — she respects the road's mark on you
-  if (level >= 8) {
-    return [
-      '`#"You\'ve come a long way since someone started calling this corner of the world home."',
-      '`%She glances at the garden gate — the road beyond it.',
-      '`#"I used to travel. Before I found this place." A small pause.',
-      '`#"The road gives you things. But it takes things too."',
-      '`%She studies you.',
-      '`#"You look like it\'s given you more than it\'s taken. That\'s rarer than you think."',
-    ];
-  }
-
-  // ── Default — she turns the question back
-  return [
+  const { topic, mem: memAfterPick } = pickTopic(mem, available);
+  const fn = topic && LYSA_TOPICS[topic];
+  const lines = fn ? fn(player, memAfterPick, worldCtx) : [
     '`#She looks up from the flower bed and studies you for a moment.',
     '`#"You know, most people who come through here want something specific."',
-    '`%"A charm bonus. A good story to tell later."',
-    '`#"Someone to look at them like they matter."',
+    '`%"Someone to look at them like they matter."',
     '`%She tilts her head.',
     '`8"What is it you actually want?"',
     '`%She doesn\'t wait for an answer. Returns to her work. Smiling slightly.',
   ];
+
+  // Check if this topic has interactive responses in the DB
+  let finalMem = memAfterPick;
+  if (topic && dialogueCache) {
+    const entry = dialogueCache['lysa'] && dialogueCache['lysa'][topic];
+    if (entry && entry.responses && entry.responses.length > 0) {
+      // Store pending question — choices (key+label only) baked in so screen stays sync
+      const choices = entry.responses.map(r => ({ key: r.key, label: r.label }));
+      finalMem = updateNotes(memAfterPick, {
+        pending_question: { topic_key: topic, answer_key: entry.answer_key, choices },
+      });
+    }
+  }
+
+  return { lines, mem: finalMem };
 }
 
 // ── PLAYERS LIST ─────────────────────────────────────────────────────────────
@@ -706,7 +1023,8 @@ async function players({ player, req, res, pendingMessages }) {
 // ── BARD / NEWS / CHARACTER / CRIER ───────────────────────────────────────────
 
 async function bard({ player, req, res, pendingMessages }) {
-  return res.json({ ...getBardScreen(await getHallOfKings()), pendingMessages });
+  const [hallOfKings, worldCtx] = await Promise.all([getHallOfKings(), getNpcWorldContext()]);
+  return res.json({ ...getBardScreen(hallOfKings, worldCtx, player), pendingMessages });
 }
 
 async function news({ player, req, res, pendingMessages }) {
@@ -753,13 +1071,22 @@ async function post_crier({ player, param, req, res, pendingMessages }) {
 // ── HERBALIST ─────────────────────────────────────────────────────────────────
 
 async function herbalist({ player, req, res, pendingMessages }) {
+  const townId = player.current_town || 'dawnmark';
   const wounds = parseWounds(player);
   const treatableWounds = wounds.filter(herbalistCanTreatWound).sort((a, b) => b.severity - a.severity);
   const worstTreatable   = treatableWounds[0] || null;
   const woundCost        = worstTreatable ? herbalistWoundCost(worstTreatable, player.level) : 0;
   const infTreatable     = herbalistCanTreatInfection(player.infection_type, player.infection_stage || 0);
   const infCost          = infTreatable ? herbalistInfectionCost(player.infection_type, player.infection_stage || 0, player.level) : 0;
-  return res.json({ ...getHerbalistScreen(player, wounds, treatableWounds, infTreatable, woundCost, infCost), pendingMessages });
+  let mem = await getNpcMemory(`herbalist_${townId}`, player.id);
+  // track total wounds treated over lifetime (for dialogue)
+  const hadWoundsThisVisit = wounds.length > 0 || !!player.infection_type;
+  if (hadWoundsThisVisit) {
+    mem = updateNotes(mem, { ever_injured: true });
+  }
+  mem = recordVisit(mem);
+  await saveNpcMemory(`herbalist_${townId}`, player.id, mem);
+  return res.json({ ...getHerbalistScreen(player, wounds, treatableWounds, infTreatable, woundCost, infCost, mem), pendingMessages });
 }
 
 async function herbalist_wound({ player, req, res, pendingMessages }) {
@@ -1038,7 +1365,7 @@ module.exports = {
   shop_steal_weapon: shop_steal,
   armor_shop, buy_armor,
   shop_steal_armor: shop_steal,
-  garden, garden_female, garden_flower, garden_compliment, garden_kiss, garden_talk,
+  garden, garden_female, garden_flower, garden_compliment, garden_kiss, garden_talk, garden_respond,
   players,
   bard, news, character, character_gear, character_records, character_factions, crier, post_crier,
   herbalist,

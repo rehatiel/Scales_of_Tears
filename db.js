@@ -972,6 +972,130 @@ async function setFactionClassRep(factionId, classNum, delta) {
   );
 }
 
+// ── NPC Memory ────────────────────────────────────────────────────────────────
+
+async function getNpcMemory(npcId, playerId) {
+  const { rows } = await pool.query(
+    'SELECT * FROM npc_memory WHERE npc_id = $1 AND player_id = $2',
+    [npcId, playerId]
+  );
+  if (!rows[0]) return {
+    npc_id: npcId, player_id: playerId,
+    visit_count: 0, last_visit: 0, relationship_level: 0,
+    topics_seen: [], player_answers: {}, notes: {},
+  };
+  const r = rows[0];
+  return {
+    ...r,
+    topics_seen:    Array.isArray(r.topics_seen)    ? r.topics_seen    : (r.topics_seen    ? JSON.parse(r.topics_seen)    : []),
+    player_answers: typeof r.player_answers === 'object' && !Array.isArray(r.player_answers) ? r.player_answers : (r.player_answers ? JSON.parse(r.player_answers) : {}),
+    notes:          typeof r.notes          === 'object' && !Array.isArray(r.notes)          ? r.notes          : (r.notes          ? JSON.parse(r.notes)          : {}),
+  };
+}
+
+async function saveNpcMemory(npcId, playerId, mem) {
+  await pool.query(`
+    INSERT INTO npc_memory (npc_id, player_id, visit_count, last_visit, relationship_level, topics_seen, player_answers, notes)
+    VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb)
+    ON CONFLICT (npc_id, player_id) DO UPDATE SET
+      visit_count        = $3,
+      last_visit         = $4,
+      relationship_level = $5,
+      topics_seen        = $6::jsonb,
+      player_answers     = $7::jsonb,
+      notes              = $8::jsonb
+  `, [
+    npcId, playerId,
+    mem.visit_count, mem.last_visit, mem.relationship_level,
+    JSON.stringify(mem.topics_seen    || []),
+    JSON.stringify(mem.player_answers || {}),
+    JSON.stringify(mem.notes          || {}),
+  ]);
+}
+
+// World context cache — refreshed every 5 minutes; used by NPCs for cross-player awareness
+let _npcWorldCtxCache = null;
+let _npcWorldCtxTime  = 0;
+
+async function getNpcWorldContext() {
+  const now = Date.now();
+  if (_npcWorldCtxCache && now - _npcWorldCtxTime < 5 * 60 * 1000) return _npcWorldCtxCache;
+  const [enemies, news, kings, topRow] = await Promise.all([
+    pool.query('SELECT * FROM named_enemies WHERE defeated = 0 ORDER BY kills DESC LIMIT 3'),
+    pool.query('SELECT message FROM news ORDER BY id DESC LIMIT 5'),
+    pool.query('SELECT * FROM hall_of_kings ORDER BY id DESC LIMIT 3'),
+    pool.query(`SELECT handle, level, active_title, class FROM players
+                WHERE setup_complete = 1 AND dead = 0
+                ORDER BY level DESC, exp DESC LIMIT 1`),
+  ]);
+  _npcWorldCtxCache = {
+    namedEnemies:  enemies.rows,
+    recentNews:    news.rows.map(r => r.message),
+    recentSlayers: kings.rows,
+    topPlayer:     topRow.rows[0] || null,
+  };
+  _npcWorldCtxTime = now;
+  return _npcWorldCtxCache;
+}
+
+// ── NPC Dialogue ──────────────────────────────────────────────────────────────
+
+let _npcDialogueCache     = null;
+let _npcDialogueCacheTime = 0;
+
+async function getNpcDialogueCache() {
+  const now = Date.now();
+  if (_npcDialogueCache && now - _npcDialogueCacheTime < 60 * 1000) return _npcDialogueCache;
+  const { rows } = await pool.query(
+    'SELECT * FROM npc_dialogue WHERE active = TRUE ORDER BY npc_id, topic_key'
+  );
+  _npcDialogueCache = {};
+  for (const row of rows) {
+    if (!_npcDialogueCache[row.npc_id]) _npcDialogueCache[row.npc_id] = {};
+    const r = { ...row, responses: Array.isArray(row.responses) ? row.responses : (row.responses ? JSON.parse(row.responses) : []) };
+    _npcDialogueCache[row.npc_id][row.topic_key] = r;
+  }
+  _npcDialogueCacheTime = now;
+  return _npcDialogueCache;
+}
+
+function clearNpcDialogueCache() {
+  _npcDialogueCache    = null;
+  _npcDialogueCacheTime = 0;
+}
+
+async function getAllNpcDialogue() {
+  const { rows } = await pool.query('SELECT * FROM npc_dialogue ORDER BY npc_id, topic_key');
+  return rows.map(r => ({
+    ...r,
+    responses: Array.isArray(r.responses) ? r.responses : (r.responses ? JSON.parse(r.responses) : []),
+  }));
+}
+
+async function upsertNpcDialogue(id, fields) {
+  const { question_hint, responses, active } = fields;
+  if (id === 'new') {
+    const { npc_id, topic_key, answer_key } = fields;
+    const { rows } = await pool.query(
+      `INSERT INTO npc_dialogue (npc_id, topic_key, answer_key, question_hint, responses, active)
+       VALUES ($1, $2, $3, $4, $5::jsonb, $6) RETURNING id`,
+      [npc_id, topic_key, answer_key, question_hint || '', JSON.stringify(responses || []), active !== false]
+    );
+    clearNpcDialogueCache();
+    return rows[0].id;
+  }
+  await pool.query(
+    `UPDATE npc_dialogue SET question_hint=$1, responses=$2::jsonb, active=$3 WHERE id=$4`,
+    [question_hint, JSON.stringify(responses || []), active !== false, id]
+  );
+  clearNpcDialogueCache();
+}
+
+async function deleteNpcDialogue(id) {
+  await pool.query('DELETE FROM npc_dialogue WHERE id = $1', [id]);
+  clearNpcDialogueCache();
+}
+
 // ── Player secrets ─────────────────────────────────────────────────────────────
 
 async function getSeenSecrets(playerId) {
@@ -986,10 +1110,167 @@ async function recordSecret(playerId, secretId) {
   );
 }
 
+// ── Party helpers ─────────────────────────────────────────────────────────────
+
+async function createParty(leaderId, townId) {
+  const { rows } = await pool.query(
+    `INSERT INTO parties (leader_id, town_id) VALUES ($1, $2) RETURNING id`,
+    [leaderId, townId]
+  );
+  const partyId = rows[0].id;
+  await pool.query(`UPDATE players SET party_id = $1 WHERE id = $2`, [partyId, leaderId]);
+  return partyId;
+}
+
+async function getParty(partyId) {
+  const { rows: parties } = await pool.query(`SELECT * FROM parties WHERE id = $1`, [partyId]);
+  if (!parties[0]) return null;
+  const { rows: members } = await pool.query(
+    `SELECT id, handle, level, class, hit_points, hit_max, current_town, last_seen FROM players WHERE party_id = $1`,
+    [partyId]
+  );
+  return { ...parties[0], members };
+}
+
+async function getPlayerParty(playerId) {
+  const { rows } = await pool.query(
+    `SELECT party_id FROM players WHERE id = $1`, [playerId]
+  );
+  const partyId = rows[0]?.party_id;
+  if (!partyId) return null;
+  return getParty(partyId);
+}
+
+async function disbandParty(partyId) {
+  await pool.query(`UPDATE players SET party_id = NULL WHERE party_id = $1`, [partyId]);
+  await pool.query(`UPDATE parties SET status = 'disbanded', updated_at = NOW() WHERE id = $1`, [partyId]);
+  await pool.query(`UPDATE party_invites SET status = 'declined' WHERE party_id = $1 AND status = 'pending'`, [partyId]);
+}
+
+async function removeFromParty(playerId) {
+  const { rows } = await pool.query(`SELECT party_id FROM players WHERE id = $1`, [playerId]);
+  const partyId = rows[0]?.party_id;
+  if (!partyId) return;
+
+  await pool.query(`UPDATE players SET party_id = NULL WHERE id = $1`, [playerId]);
+
+  const { rows: remaining } = await pool.query(
+    `SELECT id FROM players WHERE party_id = $1`, [partyId]
+  );
+  if (remaining.length === 0) {
+    await disbandParty(partyId);
+    return;
+  }
+
+  // Promote a new leader if the leader left
+  const { rows: partyRows } = await pool.query(`SELECT leader_id FROM parties WHERE id = $1`, [partyId]);
+  if (partyRows[0]?.leader_id === playerId) {
+    await pool.query(
+      `UPDATE parties SET leader_id = $1, updated_at = NOW() WHERE id = $2`,
+      [remaining[0].id, partyId]
+    );
+  }
+
+  const newStatus = remaining.length >= 3 ? 'full' : 'open';
+  await pool.query(`UPDATE parties SET status = $1, updated_at = NOW() WHERE id = $2`, [newStatus, partyId]);
+}
+
+async function createPartyInvite(partyId, inviterId, inviteeId) {
+  try {
+    const { rows } = await pool.query(
+      `INSERT INTO party_invites (party_id, inviter_id, invitee_id)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (party_id, invitee_id) DO UPDATE SET status = 'pending', created_at = NOW()
+       RETURNING id`,
+      [partyId, inviterId, inviteeId]
+    );
+    return rows[0].id;
+  } catch {
+    return null;
+  }
+}
+
+async function getPendingInvitesForPlayer(playerId) {
+  const { rows } = await pool.query(
+    `SELECT pi.id, pi.party_id, pi.created_at,
+            par.town_id, par.max_size,
+            inv.handle AS inviter_handle, inv.level AS inviter_level, inv.class AS inviter_class
+     FROM party_invites pi
+     JOIN parties par ON par.id = pi.party_id AND par.status != 'disbanded'
+     JOIN players inv ON inv.id = pi.inviter_id
+     WHERE pi.invitee_id = $1 AND pi.status = 'pending'
+     ORDER BY pi.created_at DESC`,
+    [playerId]
+  );
+  return rows;
+}
+
+async function respondPartyInvite(inviteId, inviteeId, accept) {
+  const { rows } = await pool.query(
+    `SELECT pi.*, par.max_size, par.status AS party_status, par.leader_id
+     FROM party_invites pi
+     JOIN parties par ON par.id = pi.party_id
+     WHERE pi.id = $1 AND pi.invitee_id = $2 AND pi.status = 'pending'`,
+    [inviteId, inviteeId]
+  );
+  const invite = rows[0];
+  if (!invite) return { ok: false, reason: 'Invite not found or already resolved.' };
+
+  if (!accept) {
+    await pool.query(`UPDATE party_invites SET status = 'declined' WHERE id = $1`, [inviteId]);
+    return { ok: true };
+  }
+
+  if (invite.party_status !== 'open') {
+    await pool.query(`UPDATE party_invites SET status = 'declined' WHERE id = $1`, [inviteId]);
+    return { ok: false, reason: 'That party is no longer available.' };
+  }
+
+  const { rows: countRows } = await pool.query(
+    `SELECT COUNT(*) AS c FROM players WHERE party_id = $1`, [invite.party_id]
+  );
+  if (parseInt(countRows[0].c) >= invite.max_size) {
+    await pool.query(`UPDATE party_invites SET status = 'declined' WHERE id = $1`, [inviteId]);
+    return { ok: false, reason: 'That party is full.' };
+  }
+
+  await pool.query(`UPDATE players SET party_id = $1 WHERE id = $2`, [invite.party_id, inviteeId]);
+  await pool.query(`UPDATE party_invites SET status = 'accepted' WHERE id = $1`, [inviteId]);
+
+  const { rows: newCount } = await pool.query(
+    `SELECT COUNT(*) AS c FROM players WHERE party_id = $1`, [invite.party_id]
+  );
+  if (parseInt(newCount[0].c) >= invite.max_size) {
+    await pool.query(`UPDATE parties SET status = 'full', updated_at = NOW() WHERE id = $1`, [invite.party_id]);
+  }
+
+  return { ok: true, partyId: invite.party_id };
+}
+
+// Players eligible to invite: online recently, in same town, not in a party
+async function getInvitablePlayers(townId, excludePlayerId) {
+  const cutoff = new Date(Date.now() - 15 * 60 * 1000);
+  const { rows } = await pool.query(
+    `SELECT id, handle, level, class FROM players
+     WHERE current_town = $1
+       AND id != $2
+       AND party_id IS NULL
+       AND last_seen > $3
+       AND dead = 0
+       AND captive = 0
+       AND setup_complete = 1
+     ORDER BY last_seen DESC`,
+    [townId, excludePlayerId, cutoff]
+  );
+  return rows;
+}
+
 module.exports = { pool, initDb, getPlayer, getPlayerByUsername, updatePlayer, claimNewDay, createPlayer, getAllPlayers, getPlayersInTown, getJailedPlayersInTown, getRetiredPlayersInTown, getNearDeathPlayers, getCaptivePlayers, getRecentNews, addNews, getHallOfKings, addToHallOfKings, TODAY, getBannerOverride, setBanner, deleteBanner, getAllBanners, loadBanners, getActiveNamedEnemiesForLevel, createNamedEnemy, updateNamedEnemy, getNamedEnemy, getAllUndefeatedNamedEnemies, getUndefeatedNamedEnemiesWithKills, getInvadingEnemies, getActiveWorldEvent, triggerWorldEvent, expireWorldEvents, getWorldState, setWorldState, getActiveHunts, generateWeeklyHunts, incrementHuntKill, getWeeklyHuntLeaderboard, sendMail, getInboxMail, getSentMail, markMailRead, getUnreadMailCount, getOnlinePlayers, postBounty, getBountiesOnTarget, getAllActiveBounties, collectBounties, createArenaChallenge, getPendingChallengesForPlayer, getArenaChallenge, updateArenaChallenge, placeBet, getArenaSpectators, resolveArenaBets, getOpenArenaChallenge, createPvpSession, getPvpSession, getActivePvpSessionForPlayer, updatePvpSession, completePvpSession, getSeenSecrets, recordSecret,
   getAccountByUsername, getAccountById, createAccount, getCharactersForAccount, createCharacterForAccount, setBanAccount,
   loadGameDataFromDb, getAllWeapons, updateWeapon, getAllArmors, updateArmor, getAllMonsters, updateMonster, getAllGameConstants, setGameConstant,
   loadQuestsFromDb, getAllQuests, getQuestWithSteps, createQuest, updateQuest, deleteQuest,
   createQuestStep, updateQuestStep, deleteQuestStep, getPlayersOnQuest,
   loadFactionsFromDb, getAllFactions, updateFaction, getFactionClassReps, setFactionClassRep,
-  loadTownsFromDb, getAllTowns, updateTown, updateTownSocial, updateTownShop };
+  loadTownsFromDb, getAllTowns, updateTown, updateTownSocial, updateTownShop,
+  getNpcMemory, saveNpcMemory, getNpcWorldContext,
+  getNpcDialogueCache, clearNpcDialogueCache, getAllNpcDialogue, upsertNpcDialogue, deleteNpcDialogue };
